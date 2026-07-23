@@ -35,8 +35,17 @@ the REST API reports for permissions. The fix:
 GITHUB_TOKEN= GH_TOKEN= gh auth login     # the empty vars are the load-bearing part
 ```
 
-Web browser → HTTPS → yes to authenticating git. A repo-local credential helper is already
-pinned in `.git/config` to route pushes through that stored token.
+Web browser → HTTPS → yes to authenticating git. A repo-local credential helper is already pinned
+in `.git/config` to route pushes through that stored token. If it ever needs rebuilding, note
+that **the empty entry must come first** — git treats `credential.helper` as a list and appends,
+so adding one without resetting leaves the Codespaces helper ahead of it and the 403 persists:
+
+```bash
+git config --local --unset-all credential.helper
+git config --local --add credential.helper ""          # resets the chain — load-bearing
+git config --local --add credential.helper \
+  '!f(){ echo username=holybunnie; echo "password=$(GITHUB_TOKEN= GH_TOKEN= gh auth token)"; };f'
+```
 
 - **All commits authored by `holybunnie`** (`122739099+holybunnie@users.noreply.github.com`).
 - **No AI attribution anywhere** — no `Co-Authored-By`, no "generated with" footer, no tool credit
