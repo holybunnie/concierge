@@ -208,8 +208,15 @@ $ curl -X POST https://testrpc.xlayer.tech ... eth_chainId
 > Finance Copilot ($7.5K), Software Utility ($7.5K), Lifestyle Companion ($7.5K), Artistic
 > Excellence ($7.5K), Social Buzz ($10K × 10 winners). CONCIERGE targets **Revenue Rocket** and
 > **Best Product**, with **Lifestyle Companion** reachable via the spa/real-estate verticals.
-> Also note the spec's "$1M revenue (OKX OPC)" framing is not a hackathon prize — max individual
-> prize is 10,000 USDT. Flagged so the operator is not optimising for a track that does not exist.
+> Note on prize sizes: max individual hackathon prize is 10,000 USDT.
+
+> **CORRECTION TO MY OWN EARLIER NOTE (2026-07-23).** The previous version of this row read the
+> spec's "$1M revenue (OKX OPC)" as a claim about *prize* money and flagged it as inflated. That
+> was a misreading. It is a **revenue target for the product**; the hackathon is a launch channel
+> for a commercial ASP, not the outcome being optimised for. The distinction is not academic — it
+> is why receipts anchor on **mainnet**, why settlement must be real USDT/USDG, and why "cheap
+> enough for a demo" is never a valid argument on this project. Recorded rather than quietly
+> edited: a misread requirement that shapes architecture is exactly what this ledger exists to catch.
 
 ---
 
@@ -254,6 +261,43 @@ rather than trusted. Full output: `python3 verify.py --phase 1`.
 > `WHERE tenant_id = ?` would satisfy a casual reading and is what most multi-tenant systems do —
 > and it fails the moment one query author forgets. RLS moves the guarantee below the application,
 > so `store.py` contains **no tenant predicates at all** and still cannot leak.
+
+---
+
+## 9. X Layer MAINNET gas economics — measured, not estimated
+
+| Field | Value |
+|---|---|
+| Needed for | Phase 6 (receipt anchoring), Phase 7 (settlement) |
+| Verified where | Live `eth_gasPrice` on `https://rpc.xlayer.tech`, chain 196, block 66,000,249 |
+| Date | 2026-07-23 |
+| OKB price | $82.42 — live `OKX /api/v5/market/ticker?instId=OKB-USDT`, same timestamp |
+
+```
+eth_chainId   -> 196
+eth_gasPrice  -> 20,000,001 wei = 0.020000001 gwei
+```
+
+| Operation | Gas | OKB | USD |
+|---|---|---|---|
+| Anchor one receipt (event + storage write) | 55,000 | 0.0000011 | $0.000091 |
+| Anchor a batch of 50 (merkle root) | 90,000 | 0.0000018 | $0.00015 |
+| Deploy the anchoring contract (one-off) | 900,000 | 0.000018 | $0.0015 |
+| **1 OKB** | — | 1.0 | **~909,000 receipt anchors** |
+
+The gas *price* and the OKB price are live readings. The gas *amounts* are conservative estimates
+of our own contract's cost and must be re-measured at GATE 6 against the deployed contract's real
+receipts — an estimate is not a verified fact and is not treated as one here.
+
+> **DECISION RECORDED — SUPERSEDES THE PHASE 0 PLAN.** Phase 0 proposed proving Phase 6 against
+> X Layer **testnet 1952** because it "needs no real funds." These numbers kill that reasoning: the
+> entire mainnet cost of proving Phase 6 is **under one cent**. Testnet was never buying cost
+> savings — only a weaker proof. And here the proof *is* the product. A receipt anchored on a
+> testnet is worth nothing to a customer disputing a quote, nothing to an arbitrator ruling on an
+> escrow, and nothing to a judge assessing the submission.
+>
+> **CONCIERGE anchors on chain 196 from Phase 6 onward.** Testnet 1952 stays in the Phase 0 harness
+> as a liveness check only, and may never be the source of evidence for a gate.
 
 ---
 

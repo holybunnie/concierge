@@ -15,7 +15,7 @@ blocked.**
 | 3 | Postmark server API token (inbound + outbound) | ❌ MISSING | P4 | SendGrid Inbound Parse is a documented alternative — **say the word and I'll switch.** |
 | 4 | Cal.com account + API key (`cal_...`) + event type ID | ❌ MISSING | P5 | Public slot reads work without it (proven); real bookings do not. Calendly is an alternative — **ask me.** |
 | 5 | OKX Agentic Wallet + creation email; `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE` | ❌ MISSING | P7 | Also blocks verifying the escrow API shape at all (ledger U3). |
-| 6 | Funded OKB on X Layer (chain 196) | ❌ MISSING | P6 mainnet, P7 | P6 will be built and proven on **testnet 1952** first, which needs no real funds. |
+| 6 | Funded OKB on X Layer **mainnet (196)** | ❌ MISSING | **P6**, P7 | ~1 OKB (~$82) covers ~909,000 receipt anchors. Mainnet only — a testnet receipt proves nothing to a customer or an arbitrator. |
 | 7 | LLM API key | ❌ MISSING | P2, P3 drafting | Understanding / drafting / vertical classification **only**. Never a price (§2). |
 | 8 | Web-search / retrieval API key | ❌ MISSING | P2 enrichment | **Optional.** Without it, onboarding uses built-in vertical templates and says so out loud. |
 
@@ -31,9 +31,12 @@ Real work, no fabrication, no credentials needed:
   testable without an LLM; only the free-text classification step needs item 7.
 - **Phase 3** — the state machine and deterministic guardrails, driven by fixture inquiries. This is
   the **decisive** gate (every price provably from the profile) and it needs **nothing from you**.
-- **Phase 6** — receipt signing + anchoring against X Layer **testnet 1952**, which is live and free.
+- **Phase 6** — the receipt contract, signing, hashing and tamper detection can all be written and
+  unit-tested now. **Deployment and real anchoring wait for item 6** (funded mainnet signer). I will
+  not anchor to a testnet and present it as proof.
 
-So: Phases 1, 2, 3, 6 can proceed now. **4, 5, 7, 8 cannot start.**
+So: Phases 1, 2, 3 can proceed now, and Phase 6 can be built but not proven. **4, 5, 7, 8 cannot
+start.**
 
 ---
 
@@ -183,19 +186,40 @@ API shape.
 
 → `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE` in `.env` — once U3 is resolved.
 
-## 7. OKB for gas — free on testnet, defer mainnet
+## 7. OKB for gas — MAINNET, chain 196. Buy ~1 OKB (~$82)
 
-**You do not need to buy anything yet.** Phase 6 (receipt anchoring) is built and proven on X Layer
-**testnet 1952**, funded free:
+**This is a mainnet product. Receipts anchor on X Layer mainnet (196) from Phase 6 onward.**
 
-- [web3.okx.com/xlayer/faucet](https://web3.okx.com/xlayer/faucet) → "Get OKB from X Layer testnet",
-  paste your EVM address. 0.2 test OKB per day, which anchors thousands of receipts.
+A receipt anchored on a testnet proves nothing — not to a customer disputing a quote, not to an
+arbitrator ruling on an escrow, not to a judge assessing the submission. The receipt *is* the trust
+claim. Anchoring it somewhere with no economic weight would make the central claim of this product
+theatre, and that is worse than not making the claim at all.
 
-For **mainnet** (chain 196), only needed at Phase 7: buy OKB on OKX and withdraw choosing the
-**X Layer** network. $5–10 is plenty. Withdrawing on the wrong network loses the funds, so send me
-the address and let me confirm the chain before you press send.
+Cost is not a reason to do otherwise. Measured live on chain 196 at block 66,000,249:
 
-→ `XLAYER_PRIVATE_KEY` in `.env`. Keep testnet and mainnet keys separate.
+| | Gas | OKB | USD @ $82.42 |
+|---|---|---|---|
+| Anchor one receipt | 55,000 | 0.0000011 | **$0.0001** |
+| Anchor a batch of 50 | 90,000 | 0.0000018 | $0.00015 |
+| Deploy the anchoring contract (once) | 900,000 | 0.000018 | $0.0015 |
+| **1 OKB buys** | | | **~909,000 receipt anchors** |
+
+X Layer's gas price is 0.02 gwei. At a receipt per inquiry, **1 OKB covers more inbound than this
+product will handle in years.** Testnet would have saved roughly a dollar and cost the entire
+credibility of the proof.
+
+**How to get it:** buy OKB on OKX, then withdraw choosing the **X Layer** network (not ERC-20, not
+BSC). ~1 OKB is plenty; 2 if you want headroom.
+
+⚠️ Withdrawing on the wrong network destroys the funds. Send me the receiving address and let me
+confirm the chain before you press send — this is the one step in the whole list that is not
+reversible.
+
+→ `XLAYER_PRIVATE_KEY` and `XLAYER_RPC=https://rpc.xlayer.tech`, `XLAYER_CHAIN_ID=196` in `.env`.
+
+**On the signer key:** this key spends real funds and signs the receipts the product's credibility
+rests on. It should be a fresh wallet holding only gas — never a key that also holds meaningful
+assets. Blast radius of a VPS compromise should be ~1 OKB, not your treasury.
 
 ## 8. Web-search key — skip it
 
@@ -212,11 +236,13 @@ loud** rather than pretending to have looked anything up. Not worth a signup wit
 | **Today** | 2. Postmark + **request approval** | Manual review; the weekend is the risk |
 | Today/Fri | 3. VPS | Needed before the inbound webhook has anywhere to point |
 | Friday | 4. Cal.com, 5. LLM key | Quick, no review queue |
-| Friday | 6. OKX wallet, 7. testnet faucet | Free, no waiting |
-| Later | Mainnet OKB | Phase 7 only |
+| Friday | 6. OKX wallet | Free, no waiting |
+| Friday | 7. **Buy ~1 OKB, withdraw over X Layer** | Blocks Phase 6 — mainnet anchoring |
 | — | 8. Search key | Skip |
 
-Total cost to get everything moving: **~$15 up front** (domain + LLM credit) plus the VPS monthly.
+Total to get everything moving: **~$100 up front** (domain $10 + LLM credit $5 + ~1 OKB at $82)
+plus the VPS monthly. The OKB is a working balance, not a fee — it is spent a hundredth of a cent
+at a time and 1 OKB covers ~909,000 receipts.
 
 ---
 

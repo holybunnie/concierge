@@ -116,7 +116,8 @@ OPERATOR_ITEMS = [
     ("POSTMARK_SERVER_TOKEN", "3. Postmark server API token", "Phase 4 email"),
     ("CAL_API_KEY", "4. Cal.com API key", "Phase 5 real bookings"),
     ("OKX_API_KEY", "5. OKX Agentic Wallet credentials", "Phase 7 escrow + settlement"),
-    ("XLAYER_PRIVATE_KEY", "6. Funded OKB signer on X Layer", "Phase 6 mainnet anchoring"),
+    ("XLAYER_PRIVATE_KEY", "6. Funded OKB signer on X Layer MAINNET (196)",
+     "Phase 6 receipt anchoring, Phase 7 settlement"),
     ("LLM_API_KEY", "7. LLM API key", "Phase 2 classification, Phase 3 drafting"),
     ("SEARCH_API_KEY", "8. Web-search key (OPTIONAL)", "Phase 2 vertical enrichment"),
 ]
@@ -198,8 +199,13 @@ def phase0() -> int:
                 f"X Layer {label} is live and is chain {expected}",
                 got_int == expected,
                 f"Asked the X Layer {label} node what chain it is. It answered {got} = "
-                f"{got_int}, and we required {expected}. This is where receipts get anchored, so "
-                f"anchoring to the wrong chain would make every proof worthless.",
+                f"{got_int}, and we required {expected}. "
+                + ("MAINNET IS WHERE RECEIPTS ARE ANCHORED — anchoring to the wrong chain would "
+                   "make every proof worthless, so the chain id is asserted, never assumed."
+                   if label == "mainnet" else
+                   "Testnet is checked for liveness only. It is NEVER a source of evidence for a "
+                   "gate: a receipt anchored on a testnet proves nothing to a customer or an "
+                   "arbitrator. See ledger §9."),
                 f"POST {url}  eth_chainId\nHTTP {status}\n{clip(text)}",
             )
         except Exception as e:
@@ -217,6 +223,34 @@ def phase0() -> int:
         )
     except Exception as e:
         r.check("X Layer mainnet producing blocks", False, f"Block height query failed: {e}")
+
+    # --- Mainnet is affordable. Measured, so that "we anchor for real" is never argued on cost.
+    try:
+        _, gtext = rpc(XLAYER_MAINNET_RPC, "eth_gasPrice")
+        gas_price = int(json.loads(gtext)["result"], 16)
+        _, ptext = http("GET", "https://www.okx.com/api/v5/market/ticker?instId=OKB-USDT")
+        okb_usd = float(json.loads(ptext)["data"][0]["last"])
+        per_receipt_okb = gas_price * 55_000 / 1e18
+        per_receipt_usd = per_receipt_okb * okb_usd
+        anchors_per_okb = 1 / per_receipt_okb
+        r.check(
+            "Anchoring on MAINNET is affordable — so cost is never a reason to fake it on testnet",
+            per_receipt_usd < 0.01,
+            f"X Layer mainnet gas price is {gas_price / 1e9:.4f} gwei and OKB is ${okb_usd:,.2f}. "
+            f"A receipt anchor (~55,000 gas) therefore costs about ${per_receipt_usd:.6f} — roughly "
+            f"one hundredth of a cent. One OKB buys about {anchors_per_okb:,.0f} anchors.\n"
+            f"This check exists to close off an argument, not to open one: there is no cost case "
+            f"for proving receipts on a testnet. A receipt anchored on a testnet is worth nothing "
+            f"to a customer disputing a quote or an arbitrator ruling on an escrow, and the receipt "
+            f"IS the product's trust claim. CONCIERGE anchors on chain 196. See ledger §9.",
+            f"eth_gasPrice → {gas_price:,} wei ({gas_price / 1e9:.9f} gwei)\n"
+            f"OKB-USDT last → ${okb_usd:,.2f}\n"
+            f"55,000 gas = {per_receipt_okb:.8f} OKB = ${per_receipt_usd:.6f}\n"
+            f"1 OKB = {anchors_per_okb:,.0f} receipt anchors",
+        )
+    except Exception as e:
+        r.check("Mainnet anchoring cost measured", False,
+                f"Could not measure live gas/OKB price: {e}")
 
     # --- Docs that must exist and be non-trivial.
     for path, label in (
@@ -244,7 +278,9 @@ def phase0() -> int:
             "Operator credentials still missing",
             "None of these are faked or stubbed anywhere in the codebase. The phases they gate "
             "are simply not started:\n" + "\n".join(f"  - {m}" for m in missing) +
-            "\nPhases 1, 2, 3 and 6 (on X Layer testnet) need none of them and can proceed now.",
+            "\nPhases 1, 2 and 3 need none of them and can proceed now. Phase 6 can be written but "
+            "not proven:\nreceipts anchor on X Layer MAINNET (196), which needs item 6. We do not "
+            "anchor to a testnet and\ncall it evidence — see ledger §9.",
         )
 
     # --- The deadline, stated plainly every run.
