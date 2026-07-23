@@ -59,8 +59,185 @@ it should be re-examined. Say if you want a different track and I'll re-aim the 
 
 ---
 
+# HOW TO GET EACH KEY
+
+Signup paths verified live 2026-07-23. Where a menu path was ambiguous in the vendor's own docs,
+both possibilities are given rather than one guess. Nothing below is from memory.
+
+## ⚠️ Read this first: Postmark is the long pole, and the weekend is in the way
+
+**Postmark manually reviews every new account before it will send to addresses outside domains you
+own.** Their stated turnaround is *"less than 24 hours on weekdays and a little longer on the
+weekends."*
+
+It is **Thursday 2026-07-23, 01:07 UTC**. The deadline is **Monday 2026-07-27, 22:59 UTC.**
+
+- Sign up **today (Thursday)** → approval lands Friday, with the whole weekend to build. Fine.
+- Sign up **Friday evening** → the review falls across the weekend, on their slower path. That is
+  a coin flip against the deadline.
+- Sign up **Saturday** → you may simply not be approved in time.
+
+So: **step 1 and step 2 below, today.** Everything else can wait a day without hurting.
+
+Useful mitigation if approval is slow: while pending, you *can* already set up inbound processing,
+use the API, and send to any domain you've added and verified. So Phase 4 can be built and even
+demoed end-to-end, provided the test "prospect" address is on your own domain. It is only sending
+to a stranger's inbox that waits for approval.
+
+---
+
+## 1. Domain — do this first, ~10 minutes, ~$10/year
+
+Everything email depends on this, so it blocks step 2.
+
+1. Buy a domain at [Namecheap](https://www.namecheap.com), [Porkbun](https://porkbun.com) or
+   [Cloudflare Registrar](https://www.cloudflare.com/products/registrar/). Any is fine. Short and
+   plausible-looking helps deliverability — `getconcierge.io`, not `xk3-test-99.xyz`.
+2. **Use the registrar's own DNS.** Don't move nameservers to a third party; it's one more thing to
+   go wrong and buys you nothing here. You need a control panel where you can add **MX**, **TXT**
+   and **CNAME** records — all three registrars have one.
+3. Send me the domain name. I'll tell you the exact records to paste; Postmark generates the real
+   values and I will not invent them.
+
+→ `CONCIERGE_DOMAIN` in `.env`.
+
+## 2. Postmark — do this today, free tier, ~15 minutes
+
+1. Sign up at [postmarkapp.com](https://postmarkapp.com). Free tier is 100 emails/month, which is
+   ample for a demo.
+2. **Immediately request account approval** (Account Owner only). It asks how many emails/month and
+   what for. Answer honestly: *transactional replies to inbound business inquiries, low volume,
+   under 100/month.* Postmark's whole business is transactional email — this is exactly their use
+   case and it approves cleanly. **This starts the clock, so do it before anything else.**
+3. Add your domain under **Sender Signatures / Domains** and verify it. Postmark shows you the
+   exact DKIM `TXT` and Return-Path `CNAME` values — send me a screenshot or paste them, and I'll
+   tell you where each goes.
+4. **Inbound:** create a Server, open its **Inbound** stream, and set the Inbound Domain to
+   `inbox.yourdomain.com`. Then add this DNS record at your registrar:
+
+   | Type | Name | Value | Priority |
+   |---|---|---|---|
+   | MX | `inbox` | `inbound.postmarkapp.com` | 10 |
+
+   Use the `inbox` subdomain, not the root — Postmark recommends it, and it keeps inbound parsing
+   from interfering with normal mail on your domain.
+5. **Server API Token:** Servers → your server → **API Tokens** tab. One token covers both inbound
+   and outbound.
+
+→ `POSTMARK_SERVER_TOKEN` in `.env`. The webhook URL needs the VPS (step 3), so we set that last.
+
+## 3. VPS — ~10 minutes, $5–24/month
+
+Spec minimum is 2 vCPU / 4 GB / 40 GB, Ubuntu 24.04.
+
+- **[DigitalOcean](https://www.digitalocean.com)** — $24/mo for 2 vCPU / 4 GB. Instant with a card.
+- **[Vultr](https://www.vultr.com)** — similar, also instant.
+- **[Hetzner](https://www.hetzner.com/cloud)** CX22 — ~€4.50/mo for the same specs, by far the best
+  value, **but new accounts are sometimes held for ID verification.** With four days left, that
+  risk may not be worth €20. Your call.
+
+Create the droplet/instance with **Ubuntu 24.04**, add an SSH key if the panel offers it, and send
+me the **IP address** plus how to log in. Then point a DNS `A` record — `app.yourdomain.com` → that
+IP — so Postmark's webhook has a stable HTTPS hostname to POST to.
+
+→ `VPS_HOST` in `.env`.
+
+## 4. Cal.com — free, ~5 minutes
+
+1. Sign up at [cal.com](https://cal.com).
+2. Create an **Event Type** — e.g. "Discovery call, 30 min". Open it; its numeric ID is in the
+   browser URL (`.../event-types/<number>`). I need that number.
+3. API key: go to **[app.cal.com/settings/developer/api-keys](https://app.cal.com/settings/developer/api-keys)**.
+   Cal.com's own docs currently say *Settings → Security*; the developer path above is the one that
+   has worked. Try the direct link first, and if it 404s, look under Settings → Security.
+   Keys start with `cal_` (test) or `cal_live_` (live).
+4. Set your **timezone** correctly in Cal.com settings. Phase 5 asks the prospect their timezone
+   explicitly and never infers it, but your own availability windows are read from this setting.
+
+→ `CAL_API_KEY` + the event type ID in `.env`.
+
+## 5. LLM API key — ~5 minutes, $5 minimum
+
+[console.anthropic.com](https://console.anthropic.com) → **API Keys** → Create Key. You must load
+credit first (Billing, $5 minimum); a key without credit fails on the first call.
+
+$5 is far more than this project will consume — the LLM only reads inquiries, drafts prose, and
+classifies verticals. **It never produces a price** (§2), so its usage is small and its blast radius
+is bounded by design.
+
+→ `LLM_API_KEY` in `.env`.
+
+## 6. OKX Agentic Wallet — free, ~5 minutes
+
+1. From this repo, run: `npx skills add okx/onchainos-skills` (needs Node.js 18+).
+2. Log in with **email**, Google or Apple. The wallet is created automatically on first login —
+   **no seed phrase to write down.** Keys live in a TEE; the agent can transact but cannot extract
+   them.
+3. It produces EVM and Solana addresses. Send me the **EVM** address.
+
+⚠️ **Honest gap:** the OnchainOS docs describe the wallet install clearly but do **not** document
+where the API key / secret / passphrase for the escrow and settlement calls come from — they likely
+come from the OKX developer portal, but I have not confirmed that live. This is ledger item **U3**
+and it is unresolved. I'll pin it down at GATE 7 and will not write escrow code against a guessed
+API shape.
+
+→ `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE` in `.env` — once U3 is resolved.
+
+## 7. OKB for gas — free on testnet, defer mainnet
+
+**You do not need to buy anything yet.** Phase 6 (receipt anchoring) is built and proven on X Layer
+**testnet 1952**, funded free:
+
+- [web3.okx.com/xlayer/faucet](https://web3.okx.com/xlayer/faucet) → "Get OKB from X Layer testnet",
+  paste your EVM address. 0.2 test OKB per day, which anchors thousands of receipts.
+
+For **mainnet** (chain 196), only needed at Phase 7: buy OKB on OKX and withdraw choosing the
+**X Layer** network. $5–10 is plenty. Withdrawing on the wrong network loses the funds, so send me
+the address and let me confirm the chain before you press send.
+
+→ `XLAYER_PRIVATE_KEY` in `.env`. Keep testnet and mainnet keys separate.
+
+## 8. Web-search key — skip it
+
+Genuinely optional. Without it, onboarding uses the built-in vertical templates and **says so out
+loud** rather than pretending to have looked anything up. Not worth a signup with four days left.
+
+---
+
+## Do-this-now order
+
+| When | Item | Why this slot |
+|---|---|---|
+| **Today** | 1. Domain | Blocks Postmark |
+| **Today** | 2. Postmark + **request approval** | Manual review; the weekend is the risk |
+| Today/Fri | 3. VPS | Needed before the inbound webhook has anywhere to point |
+| Friday | 4. Cal.com, 5. LLM key | Quick, no review queue |
+| Friday | 6. OKX wallet, 7. testnet faucet | Free, no waiting |
+| Later | Mainnet OKB | Phase 7 only |
+| — | 8. Search key | Skip |
+
+Total cost to get everything moving: **~$15 up front** (domain + LLM credit) plus the VPS monthly.
+
+---
+
 ## How to hand credentials over
 
 Copy `.env.example` to `.env` and fill what you have. `.env` is gitignored and never logged.
 Partial is fine — send what exists, I'll build around the gaps and keep flagging them. I will not
 invent a placeholder key to make a test go green.
+
+**Never paste a key into the chat.** Put it in `.env` on the machine. If you have already pasted one
+somewhere it shouldn't be, say so and rotate it — every service above can regenerate a key in one
+click, and it is much cheaper to rotate now than to explain a leak later.
+
+---
+
+### Sources for the above (all fetched 2026-07-23)
+
+- [Postmark — how does the account approval process work?](https://postmarkapp.com/support/article/1084-how-does-the-account-approval-process-work)
+- [Postmark — inbound domain forwarding](https://postmarkapp.com/developer/user-guide/inbound/inbound-domain-forwarding)
+- [Postmark — configure an inbound server](https://postmarkapp.com/developer/user-guide/inbound/configure-an-inbound-server)
+- [Cal.com — API v2 introduction](https://cal.com/docs/api-reference/v2/introduction)
+- [OKX — install your Agentic Wallet](https://web3.okx.com/onchainos/dev-docs/home/install-your-agentic-wallet)
+- [OKX — onchainos-skills repo](https://github.com/okx/onchainos-skills)
+- [X Layer — get testnet OKB from faucet](https://web3.okx.com/xlayer/docs/developer/bridge/get-testnet-okb-from-faucet)
