@@ -27,8 +27,9 @@ Anyone can say their agent "quotes intelligently." The interesting question is w
 
 ## Status
 
-**Phases 0–1 complete. GATE 0 and GATE 1 passed.** Foundations, external verification, and the
-tenant model with structural isolation. The deal engine itself is not built yet.
+**Phases 0–2 complete. GATE 0, 1 and 2 passed.** Foundations, external verification, the tenant
+model with structural isolation, and vertical-aware onboarding. The deal engine itself (Phase 3)
+is next.
 
 ```bash
 pip install -r requirements.txt
@@ -36,6 +37,7 @@ docker compose up -d postgres        # GATE 1 needs a real Postgres; SQLite cann
 
 python3 verify.py --phase 0          # live calls to Cal.com and X Layer, raw evidence printed
 python3 verify.py --phase 1          # 11 checks, 9 of which are attacks on tenant isolation
+python3 verify.py --phase 2          # 11 checks on real estate / barrister / spa onboarding
 ```
 
 Neither harness contains a mock or a fixture response. Phase 0 makes real network calls and
@@ -59,6 +61,31 @@ setting. The application connects as a role that owns no tables and has `NOBYPAS
 The single deliberate crossing point is address→tenant resolution, which must run before a scope
 exists. It is two `SECURITY DEFINER` functions that return an opaque uuid and nothing else — and
 the harness proves that holding that uuid still reads no rows.
+
+### Onboarding, and the price that must never be invented (GATE 2)
+
+Onboarding classifies the tenant's vertical and briefs them the way you'd brief a new sales hire:
+the right questions for their trade, a worked example beside each one, and every gap named with
+what it will cost them ("no cancellation policy — clients will ask, and I'll escalate every one").
+
+The failure this phase exists to prevent is a business quoting £85 because the template's
+*fictional example* said £85. So:
+
+- **`build_profile()` cannot see `Field.example`.** A tenant who answers nothing gets an empty
+  profile — no services, no pricing rules — and a profile with no prices cannot quote. The harness
+  runs exactly that case and greps the result for the example's values.
+- **Numbers scraped from the tenant's own description are candidates, not facts.** A regex cannot
+  tell your price from a competitor's price quoted in passing, so each is shown with its
+  surrounding words and must be confirmed before it enters the profile.
+- **The read-back is rendered from the built profile**, not from the answers — so what the tenant
+  confirms is literally the object the engine will quote from.
+- **Ambiguity is refused.** "Property matters and litigation for landlords" scores 5 vs 4, too
+  close to call, so onboarding asks instead of guessing. The vertical decides which questions get
+  asked; a wrong guess collects the wrong profile entirely.
+
+Classification is a weighted lexicon that returns the exact terms behind its decision — no LLM.
+That is partly auditability and partly that the LLM key hasn't arrived, and a classifier that
+needs a credential we don't have is a classifier that doesn't exist.
 
 ## Reproduce every claim
 

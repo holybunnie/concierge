@@ -331,7 +331,34 @@ def phase1() -> int:
     return r.render()
 
 
-PHASES = {0: phase0, 1: phase1}
+# ---------------------------------------------------------------- phase 2
+
+def phase2() -> int:
+    r = Report(
+        2,
+        "Vertical-aware onboarding",
+        preamble=(
+            "\nGATE 2 runs three real business descriptions — an estate agency, a barrister and a\n"
+            "spa — through onboarding. Checks 1-7 are the gate's own requirements. Checks 8-11 are\n"
+            "the attacks, and they are the ones worth reading: the expensive failure in this phase\n"
+            "is not a wrong template, it is a template's EXAMPLE price silently becoming a real\n"
+            "business's real price.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase2
+        verify_phase2.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 2 harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
+PHASES = {0: phase0, 1: phase1, 2: phase2}
 
 
 def main() -> int:

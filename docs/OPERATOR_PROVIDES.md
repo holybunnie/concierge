@@ -27,8 +27,14 @@ Real work, no fabrication, no credentials needed:
 
 - ~~**Phase 1** — tenant model + isolation, on local Postgres. Fully provable.~~ **DONE, GATE 1
   passed 2026-07-23.** 11 checks, 9 of them attacks. `python3 verify.py --phase 1`.
-- **Phase 2** — vertical-aware onboarding. Template/gap/read-back logic is deterministic code and is
-  testable without an LLM; only the free-text classification step needs item 7.
+- ~~**Phase 2** — vertical-aware onboarding.~~ **DONE, GATE 2 passed 2026-07-23.** Classification
+  turned out not to need item 7 at all: it is a weighted lexicon that reports the exact terms
+  behind each decision, works with no key, and abstains rather than guessing when two verticals
+  score too close. An LLM may still be added later to catch descriptions the lexicon misses.
+  One consequence you should know about: **onboarding returns an inbound address on
+  `PENDING-DOMAIN.invalid`** until item 2 arrives. The local part is real and reserved; the domain
+  half is a TLD reserved by RFC 2606 so it can never resolve. Nobody can email a tenant until you
+  provide the domain.
 - **Phase 3** — the state machine and deterministic guardrails, driven by fixture inquiries. This is
   the **decisive** gate (every price provably from the profile) and it needs **nothing from you**.
 - **Phase 6** — the receipt contract, signing, hashing and tamper detection can all be written and
