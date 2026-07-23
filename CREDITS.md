@@ -22,4 +22,4 @@
 
 ## Built with
 
-Python 3.11+, FastAPI, PostgreSQL, Docker. Built with Claude Code.
+Python 3.11+, FastAPI, PostgreSQL, Docker.
