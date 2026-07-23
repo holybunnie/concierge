@@ -327,7 +327,7 @@ def allocate_inbound_address(business_name: str, domain: str | None = None) -> s
     disagree. It is also enforced a second time by a UNIQUE constraint on the column, which is
     what actually wins a race between two simultaneous onboardings.
     """
-    domain = domain or db.config.get("CONCIERGE_DOMAIN") or PENDING_DOMAIN
+    domain = domain or db.config.inbound_domain() or PENDING_DOMAIN
     base = slugify(business_name)
     for n in range(1, 100):
         local = base if n == 1 else f"{base}-{n}"

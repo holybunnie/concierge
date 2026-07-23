@@ -301,12 +301,32 @@ receipts — an estimate is not a verified fact and is not treated as one here.
 
 ---
 
+## PHASE 4 — Postmark email connector (built 2026-07-23)
+
+- **Postmark inbound authenticity has no HMAC signature.** The build spec said "verify
+  signature"; that applies to Postmark's *outbound/bounce* webhooks, not inbound parse. Inbound
+  authenticity is established by **HTTP Basic Auth carried in the webhook URL**
+  (`https://user:pass@host/path`), optionally combined with IP allow-listing. CONCIERGE therefore
+  verifies the Basic credential in constant time (`mail.check_webhook_auth`) and does not pretend
+  to check a signature the provider never sends. This **resolves U2**.
+  Source: Postmark inbound configuration docs, read 2026-07-23.
+- **The sending domain is the inbox subdomain, not the apex.** Tenant addresses are
+  `<slug>@inbox.<domain>` and replies come FROM that address, so `inbox.quietdesks.com` is the
+  domain that must carry DKIM + Return-Path in Postmark, alongside the inbound MX. Apex and inbox
+  hold different record types (MX vs DKIM TXT at a selector vs Return-Path CNAME) and coexist.
+- **Domain provided:** `quietdesks.com` (Cloudflare Registrar). Item 2 satisfied.
+- Live delivery (a reply landing in a real inbox, not spam) remains unproven pending Postmark
+  approval + the DNS above + the VPS webhook. GATE 4 passes 8/0/3 on everything not gated on those;
+  it reports the live step as pending, never as a pass.
+
+---
+
 ## OPEN / UNVERIFIED — nothing here may be built on until proven
 
 | # | Fact | Blocks | Resolve at |
 |---|---|---|---|
 | U1 | Cal.com slots rate limit (spec claims 60/min/key) | slot-client tuning | GATE 5 |
-| U2 | Postmark inbound auth mechanism (signature vs Basic vs IP) | inbound endpoint security | GATE 4 |
+| U2 | ~~Postmark inbound auth mechanism~~ **RESOLVED at GATE 4** — Basic Auth in URL, no HMAC | — | done |
 | U3 | OKX a2a-pay escrow call signatures + settlement currencies | all of Phase 7 | GATE 7 |
 | U4 | Whether the progress monitor can run headless on a VPS | "never offline" claim | GATE 7 |
 | U5 | okx.ai ASP listing steps (site returned 403 to fetch) | submission | GATE 7 |

@@ -65,3 +65,31 @@ def app_database_url() -> str:
 
 def owner_database_url() -> str:
     return get("DATABASE_URL") or OWNER_DATABASE_URL
+
+
+# ---------------------------------------------------------------- email (Phase 4)
+#
+# Inbound mail lands on a dedicated subdomain — inbox.<domain> — so parsing incoming mail can
+# never interfere with normal mail on the apex, and so the MX that points at Postmark's inbound
+# server sits on a host of its own (§0, verified). Tenant addresses are therefore
+# <slug>@inbox.<domain>. Until the operator provides the domain (item 2), this returns None and
+# onboarding falls back to PENDING-DOMAIN.invalid, which can never resolve.
+
+def inbound_domain() -> str | None:
+    base = get("CONCIERGE_DOMAIN")
+    return f"inbox.{base}" if base else None
+
+
+def postmark_token() -> str | None:
+    """The server API token; one token covers inbound parse and outbound send."""
+    return get("POSTMARK_SERVER_TOKEN")
+
+
+def inbound_webhook_secret() -> str | None:
+    """Shared secret the inbound webhook authenticates with.
+
+    Postmark authenticates inbound webhooks with HTTP Basic Auth carried in the webhook URL
+    (there is no HMAC signature on inbound — see docs/VERIFICATION_LEDGER.md). This is the
+    password half. Absent → the webhook fails closed and accepts nothing.
+    """
+    return get("POSTMARK_INBOUND_WEBHOOK_SECRET")

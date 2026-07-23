@@ -386,7 +386,36 @@ def phase3() -> int:
     return r.render()
 
 
-PHASES = {0: phase0, 1: phase1, 2: phase2, 3: phase3}
+def phase4() -> int:
+    r = Report(
+        4,
+        "Email connector (Postmark)",
+        preamble=(
+            "\nGATE 4 turns a real email into a state-machine step and a reply. Checks 1-2 are the\n"
+            "gate's own path: a real Postmark inbound document is parsed, routed to the one tenant\n"
+            "that owns the address, quoted from that tenant's profile, and answered FROM the\n"
+            "tenant's own inbox. Checks 3-8 are the attacks — an orphan recipient, a +tag leak\n"
+            "attempt, an unauthenticated webhook, and the threading that keeps a conversation\n"
+            "together.\n"
+            "One stand-in is used — a recording mailer — declared as a fixture in every check that\n"
+            "touches it, exactly as GATE 3 declared its calendar. Live inbox delivery needs\n"
+            "operator items 1-3 and is reported honestly as pending, never as a pass.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase4
+        verify_phase4.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 4 harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
+PHASES = {0: phase0, 1: phase1, 2: phase2, 3: phase3, 4: phase4}
 
 
 def main() -> int:

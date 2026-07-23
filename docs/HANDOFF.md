@@ -16,6 +16,7 @@ python3 verify.py --phase 0        # expect 9 pass / 0 fail / 2 info
 python3 verify.py --phase 1        # expect 11 pass / 0 fail
 python3 verify.py --phase 2        # expect 11 pass / 0 fail / 1 info
 python3 verify.py --phase 3        # expect 16 pass / 0 fail / 3 info
+python3 verify.py --phase 4        # expect 8 pass / 0 fail / 3 info
 ```
 
 All four must be green before writing new code. They make real network calls and run real SQL —
@@ -66,6 +67,44 @@ git config --local --add credential.helper \
 | 1 Tenant model + isolation | **11 pass**, 9 of them attacks | Postgres RLS, not app predicates |
 | 2 Vertical-aware onboarding | **11 pass / 1 info** | real estate, legal, spa + generic |
 | 3 State machine + guardrails | **16 pass / 3 info** | 10 of them attacks |
+| 4 Email connector (Postmark) | **8 pass / 3 info** | code complete; live inbox delivery pending items 1-3 |
+
+### What Phase 4 added
+
+`postmark.py` (parse a real inbound document; send via the Postmark API on stdlib only),
+`mail.py` (route by recipient → run the engine tenant-scoped → dispatch reply + owner alert;
+webhook auth), `app.py` (the FastAPI inbound webhook systemd keeps alive on the VPS),
+`verify_phase4.py`. Config gained `inbound_domain()` = `inbox.<CONCIERGE_DOMAIN>`, and
+`onboarding.allocate_inbound_address` now uses it.
+
+What the gate proves now, against real Postgres and Postmark's real payload schema: an inbound
+email is parsed, routed to the one tenant that owns the address, quoted from that tenant's
+profile, and answered FROM the tenant's own inbox with the disclosure on line one — plus attacks
+(orphan recipient refused, +tag/case leak attempts, unauthenticated webhook, email threading).
+The **one** stand-in is a recording mailer, declared a fixture exactly as GATE 3's calendar;
+production sends through `postmark.PostmarkMailer`, which refuses to run without a real token.
+
+**What is NOT yet proven** and is the remaining GATE 4 requirement: a real reply landing in a
+real inbox, not spam. That needs the Postmark token (item 3, account still in approval), the
+DKIM/Return-Path/MX DNS on `inbox.quietdesks.com` (item 2, domain now bought), and the webhook
+deployed on the VPS (item 1). See the Phase 4 go-live checklist below.
+
+### Phase 4 go-live checklist (operator + deploy)
+
+1. Postmark account **approval** (submitted; "still reviewing" as of last check).
+2. In Postmark, add and verify the **sending domain `inbox.quietdesks.com`** → paste its DKIM
+   TXT + Return-Path CNAME into Cloudflare DNS. (Replies are FROM `<slug>@inbox.quietdesks.com`,
+   so the *inbox* subdomain is the sending domain, not the apex.)
+3. DNS at Cloudflare: **MX** on `inbox.quietdesks.com` → `inbound.postmarkapp.com` (pri 10);
+   a **DMARC** TXT; the DKIM/Return-Path from step 2; and **A** `app.quietdesks.com` → the VPS.
+4. Deploy the webhook on the VPS: own dir + own user, `uvicorn concierge.app:app` under systemd,
+   nginx vhost `app.quietdesks.com` → 127.0.0.1:8000 with TLS. (Shared box — see repo notes; a
+   free port is 8000; do not reuse another project's Postgres.)
+5. `.env` on the VPS: `CONCIERGE_DOMAIN=quietdesks.com`, `POSTMARK_SERVER_TOKEN=…`,
+   `POSTMARK_INBOUND_WEBHOOK_SECRET=…`, `APP_DATABASE_URL`/`DATABASE_URL` for CONCIERGE's own PG.
+6. Point Postmark's inbound webhook at
+   `https://<user>:<secret>@app.quietdesks.com/inbound/postmark`.
+7. Live test: onboard a tenant, email its address, confirm the reply lands and is not in spam.
 
 ### What Phase 3 added
 
@@ -88,10 +127,15 @@ than inventing times — check 12.
 
 ## What is left
 
-### Phase 4 — email connector (Postmark) · BLOCKED on operator items 1, 2, 3
-Inbound webhook + signature verification, tenant resolution from the recipient address, outbound
-send with AI disclosure as the first line, SPF/DKIM/DMARC. **Until item 2 (domain) lands, every
-tenant's inbound address is `<slug>@PENDING-DOMAIN.invalid` and nobody can email them at all.**
+### Phase 4 — email connector (Postmark) · CODE COMPLETE, live delivery pending items 1, 2, 3
+Built and passing GATE 4 (8/0/3): inbound parse, tenant resolution from the recipient address,
+outbound send with the AI disclosure as the first line, webhook authenticity, email threading.
+Two reality corrections from the build spec, both in the ledger: **Postmark inbound has no HMAC
+signature** — authenticity is HTTP Basic Auth carried in the webhook URL, which `mail.check_webhook_auth`
+verifies; and the sending domain is **`inbox.quietdesks.com`** (replies come FROM the inbox
+subdomain), so that is the domain to verify in Postmark, not the apex. Remaining to go live:
+items 1-3 and the go-live checklist above. Domain (item 2) is bought (quietdesks.com); Postmark
+(item 3) is in approval.
 
 ### Phase 5 — booking (Cal.com) · BLOCKED on operator item 4
 Ask the prospect's timezone explicitly (never infer), fetch slots in their timezone, apply the

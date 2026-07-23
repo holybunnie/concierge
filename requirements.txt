@@ -1,3 +1,9 @@
 # Phase 0-1. Kept minimal on purpose: every dependency is a supply-chain surface, and this
 # system signs commitments. Added only when a phase actually needs it.
 psycopg[binary]>=3.2
+
+# Phase 4. The always-on inbound webhook (§12). Outbound send and inbound parsing stay on the
+# standard library (see concierge/postmark.py) — these two are only the HTTP server that must be
+# reachable 24/7 on the VPS. uvicorn is the ASGI runner systemd supervises.
+fastapi>=0.110
+uvicorn[standard]>=0.29

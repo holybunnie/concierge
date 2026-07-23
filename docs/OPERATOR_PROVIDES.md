@@ -3,7 +3,11 @@
 What CONCIERGE needs from you, what each thing unblocks, and what stays broken until it arrives.
 Nothing here is faked, stubbed, or simulated. A missing credential is reported as missing.
 
-**Status as of 2026-07-23 02:13 UTC: 0 of 8 provided.** Everything below is MISSING.
+**Status as of 2026-07-23: 1 of 8 provided; 1 in progress.**
+- Item 2 (domain): **PROVIDED** — `quietdesks.com`, registered at Cloudflare, DNS there.
+- Item 3 (Postmark): **IN APPROVAL** — account created, approval requested, "still reviewing".
+  Sending domain to verify is `inbox.quietdesks.com` (replies are FROM the inbox subdomain).
+- Everything else below is still MISSING.
 
 **Deadline 2026-07-27 22:59 UTC — 4 days 20 hours remain.**
 
