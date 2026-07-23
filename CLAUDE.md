@@ -35,7 +35,7 @@ current. Summary:
 | 0 Foundations + live verification | done | 9 pass / 2 info |
 | 1 Tenant model + isolation | done | 11 pass, 9 of them attacks |
 | 2 Vertical-aware onboarding | done | 11 pass / 1 info |
-| 3 State machine + guardrails | **next** | decisive; needs no credentials |
+| 3 State machine + guardrails | done | 16 pass / 3 info, 10 of them attacks |
 | 4 Email (Postmark) | blocked | operator items 1-3 |
 | 5 Booking (Cal.com) | blocked | operator item 4 |
 | 6 Receipts on X Layer **mainnet** | blocked | operator item 6 |
@@ -50,6 +50,16 @@ section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real cred
 
 - **No price from a language model.** Prices, floors and commitments derive from the tenant's
   stored profile through code. Not in the profile → escalate, never invent.
+- **The engine is trade-neutral; the words are the tenant's.** Two halves, both load-bearing.
+  (a) `pricing.py` / `guardrails.py` / `engine.py` read a canonical vocabulary —
+  `pricing_rules.headline` / `floor` / `max_discount` — never a trade-specific key like
+  `listing_fee_pct`. A vertical template's job is to ask its trade's question and point
+  `Field.maps_to` at one of those three. (b) Every noun in an outbound message comes from the
+  profile: `{service}` from `services`, `{engagement}` / `{client}` from `profile.lexicon`.
+  `engine.PROSE` is the complete set of words CONCIERGE can say and GATE 3 check 3 greps it
+  against `engine.TRADE_NOUNS`. Do **not** "fix" bland replies by putting a domain word in
+  `PROSE` — a dentist should say "consultation" because their profile says so. GATE 3 check 2
+  proves the point with a veterinary practice, a trade that has no template at all.
 - **No template example may become tenant data.** `onboarding.build_profile()` reads
   `self.answers` and must never reach `Field.example`. GATE 2 check 9 greps for this.
 - **Isolation is Postgres RLS, not application predicates.** `store.py` deliberately contains no

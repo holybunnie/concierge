@@ -21,7 +21,7 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-from . import db, store
+from . import db, lexicon, pricing, store
 from .classify import Classification, classify
 from .verticals import Field, VerticalTemplate, template_for
 
@@ -113,22 +113,46 @@ class OnboardingSession:
         self.answers[key] = value
 
     def gaps(self) -> list[Gap]:
-        """Required fields the tenant has not answered, and what each one costs them."""
+        """Required fields left empty — the ones that stop CONCIERGE answering at all.
+
+        Kept strictly to blocking gaps. A list that mixes "you have set no prices" with "you
+        haven't told me whether to say viewing or appointment" is a list tenants learn to skim,
+        and then they skim past the one that matters. Cosmetic gaps go to `advisories()`.
+        """
+        return self._unanswered(self.template.required_fields())
+
+    def advisories(self) -> list[Gap]:
+        """Optional fields left empty — CONCIERGE still works, but less like this tenant."""
+        optional = tuple(f for f in self.template.fields if not f.required)
+        return self._unanswered(optional)
+
+    def _unanswered(self, fields: tuple[Field, ...]) -> list[Gap]:
         out = []
-        for f in self.template.required_fields():
+        for f in fields:
             v = self.answers.get(f.key)
             if v is None or (isinstance(v, (str, list, dict)) and len(v) == 0):
                 out.append(Gap(f.key, f.label, f.question, f.gap_consequence))
         return out
 
     def gap_report(self) -> str:
-        gaps = self.gaps()
-        if not gaps:
-            return "Nothing missing. Every required field is answered."
-        lines = [f"{len(gaps)} thing(s) still missing, and what each one will cost you:", ""]
-        for g in gaps:
-            lines += [f"  {g.label} — {g.question}", f"    If you leave it: {g.consequence}", ""]
-        return "\n".join(lines)
+        gaps, advisories = self.gaps(), self.advisories()
+        lines: list[str] = []
+
+        if gaps:
+            lines += [f"{len(gaps)} thing(s) still missing, and what each one will cost you:", ""]
+            for g in gaps:
+                lines += [f"  {g.label} — {g.question}",
+                          f"    If you leave it: {g.consequence}", ""]
+        else:
+            lines += ["Nothing blocking. Every required field is answered.", ""]
+
+        if advisories:
+            lines += [f"{len(advisories)} optional thing(s) — I'll work without these, but "
+                      f"replies will sound less like you:", ""]
+            for g in advisories:
+                lines += [f"  {g.label} — {g.question}",
+                          f"    If you leave it: {g.consequence}", ""]
+        return "\n".join(lines).rstrip()
 
     # ---- step 4: the profile, built only from answers
 
@@ -146,6 +170,13 @@ class OnboardingSession:
             value = self.answers[f.key]
             if f.key == "artifact_sample":
                 value = [{"kind": "reply_sample", "text": value}]
+            elif f.maps_to.startswith("pricing_rules."):
+                # Money and percent answers become canonical rules here, and this is the only
+                # place that happens. How an answer is read is decided by the question that was
+                # asked (`f.kind`), never by the trade — which is what lets the engine quote for
+                # a business no template has ever seen.
+                value = pricing.as_rule(
+                    field_kind=f.kind, value=value, basis=f.basis, label=f.label)
             _set_path(profile, f.maps_to, value)
 
         profile["_meta"] = {
@@ -155,6 +186,7 @@ class OnboardingSession:
             "hard_escalations": list(self.template.hard_escalations),
             "answered": sorted(self.answers),
             "unanswered_required": [g.field_key for g in self.gaps()],
+            "advisory_gaps": [g.field_key for g in self.advisories()],
             "provenance": "every value supplied by the tenant; no value from a template example "
                           "or a language model",
         }
@@ -206,6 +238,14 @@ class OnboardingSession:
             lines.append("I stop and hand over to you when:")
             lines += [f"  · {t}" for t in triggers]
             lines.append("")
+
+        words = lexicon.words(p)
+        lines.append(f"Wording: I'll call a booking a “{words.engagement}” and the people you "
+                     f"serve “{words.client}”"
+                     + ("." if words.all_supplied else
+                        " — your words where you gave them, otherwise a neutral fallback:"))
+        lines += [f"  · {g}" for g in words.gaps]
+        lines.append("")
 
         unanswered = p["_meta"]["unanswered_required"]
         if unanswered:
@@ -358,22 +398,37 @@ def _symbol(currency: str | None) -> str:
     return {"GBP": "£", "USD": "$", "EUR": "€"}.get(currency or "", "")
 
 
-def _rule_english(key: str, value: Any) -> str:
-    """Render a stored rule the way the engine will apply it — no softening."""
-    match key:
-        case "listing_fee_pct":
-            return f"I quote {value}% commission."
-        case "floor_pct":
-            return (f"I will never go below {value}%. A prospect who pushes past it gets handed "
-                    f"to you, not a lower number.")
-        case "floor_price":
-            return (f"I will never go below {_symbol('GBP')}{value}. Past that, I stop and "
-                    f"escalate to you.")
-        case "max_discount_pct":
-            return f"The most I may take off without asking you is {value}%."
-        case "consultation_fee":
-            return f"I quote {value} for an initial consultation."
-        case "floor_consultation_fee":
-            return f"Floor on that fee: {value}."
-        case _:
-            return f"{key}: {value}"
+def _rule_english(name: str, rule: Any) -> str:
+    """Render a stored rule the way the engine will apply it — no softening.
+
+    Written against the canonical rule names, so a plumber's call-out fee and a barrister's
+    consultation fee read back through the same three sentences. There is no per-trade wording
+    to fall out of step with what the engine actually enforces.
+    """
+    if not isinstance(rule, dict):
+        return f"{name}: {rule}"
+
+    shown = pricing.render_rule(rule)
+    basis = f" {rule['basis']}" if rule.get("basis") else ""
+    unset = rule.get("value") is None
+
+    if name == pricing.RULE_HEADLINE:
+        if unset:
+            return (f"I quote your terms exactly as you wrote them: “{rule.get('raw')}”. They "
+                    f"don't reduce to a single number, so I repeat them rather than interpret "
+                    f"them — and I cannot negotiate on them.")
+        return f"I quote {shown}{basis}."
+
+    if name == pricing.RULE_FLOOR:
+        if unset:
+            return (f"You gave no numeric floor (“{rule.get('raw')}”), so I treat your price as "
+                    f"fixed: every discount request goes to you rather than getting an answer.")
+        return (f"I will never go below {shown}{basis}. A prospect who pushes past it gets "
+                f"handed to you, not a lower number.")
+
+    if name == pricing.RULE_MAX_DISCOUNT:
+        if unset:
+            return "No discount cap set, so the floor is the only thing bounding a negotiation."
+        return f"The most I may take off without asking you is {shown}."
+
+    return f"{name}: {shown}"

@@ -35,6 +35,10 @@ class Field:
     required: bool
     example: object        # ILLUSTRATIVE ONLY. Never reaches a profile.
     gap_consequence: str   # what CONCIERGE will do if this is left empty
+    # For money/percent fields only: the tenant's own words for what the figure is charged
+    # against ("of the sale price", "per treatment"). Quoted alongside the figure so a rate is
+    # never stated bare. Carries no meaning to the engine — it is text, not a branch.
+    basis: str = ""
 
 
 @dataclass(frozen=True)
@@ -90,6 +94,35 @@ def _sample(example: str) -> Field:
     )
 
 
+def _engagement_noun(example: str) -> Field:
+    return Field(
+        key="engagement_noun", label="What you call a booking",
+        question="When someone books time with you, what do you call it? "
+                 "(a viewing, a consultation, an appointment, a call-out, a session…)",
+        why="This word appears in every message I send about booking. Using your trade's word "
+            "instead of a generic one is the difference between sounding like your business and "
+            "sounding like a web form.",
+        # Advisory, not required: `lexicon.words()` falls back to a bland noun rather than
+        # refusing to reply, so this degrades wording and does not block answering. Marking it
+        # required would put it in the same list as "you have no prices", which would be a lie
+        # about its severity — and the tenant would learn to skim that list.
+        maps_to="lexicon.engagement_noun", kind="text", required=False, example=example,
+        gap_consequence="Replies fall back to the word “appointment”. Nothing breaks, but if "
+                        "your clients say something else, mine will sound off to them.",
+    )
+
+
+def _client_noun(example: str) -> Field:
+    return Field(
+        key="client_noun", label="What you call the people you serve",
+        question="What do you call the people you serve? (clients, patients, guests, buyers…)",
+        why="Used wherever a message refers to them. Getting this wrong is a small thing that "
+            "reads as carelessness.",
+        maps_to="lexicon.client_noun", kind="text", required=False, example=example,
+        gap_consequence="Replies use the word “client”.",
+    )
+
+
 def _timezone() -> Field:
     return Field(
         key="timezone", label="Your timezone",
@@ -141,14 +174,16 @@ REAL_ESTATE = VerticalTemplate(
         Field("listing_fee_pct", "Your fee",
               "What is your commission, as a percentage of sale price?",
               "This is the number I quote. It comes from here and nowhere else.",
-              "pricing_rules.listing_fee_pct", "percent", True, 1.5,
-              "I cannot quote a fee at all. Every fee question escalates to you."),
+              "pricing_rules.headline", "percent", True, 1.5,
+              "I cannot quote a fee at all. Every fee question escalates to you.",
+              basis="of the sale price"),
         Field("floor_pct", "Your absolute floor",
               "What is the lowest commission you will ever accept?",
               "A hard floor. If a negotiation would cross it, I stop and escalate to you — I "
               "cannot be talked below this by a persistent prospect.",
-              "pricing_rules.floor_pct", "percent", True, 1.2,
-              "I will not negotiate at all. Any request for a discount escalates."),
+              "pricing_rules.floor", "percent", True, 1.2,
+              "I will not negotiate at all. Any request for a discount escalates.",
+              basis="of the sale price"),
         Field("viewing_availability", "Viewing windows",
               "When can viewings be booked? (days, hours, how much notice you need)",
               "Slots are only ever offered inside this window.",
@@ -156,6 +191,8 @@ REAL_ESTATE = VerticalTemplate(
               "Tue–Sat 10:00–18:00, minimum 24 hours notice",
               "I cannot offer a viewing slot. Booking is blocked."),
         _timezone(),
+        _engagement_noun("viewing"),
+        _client_noun("buyer"),
         _icp("Buyers and landlords in Zone 2 with financing already arranged"),
         _escalation(["Any offer on a property", "Anything about an existing chain",
                      "Complaints about a previous viewing"]),
@@ -200,14 +237,16 @@ LEGAL = VerticalTemplate(
         Field("consultation_fee", "Consultation fee",
               "What do you charge for an initial consultation, and how is it structured?",
               "The only fee figure I will ever state.",
-              "pricing_rules.consultation_fee", "money", True,
+              "pricing_rules.headline", "money", True,
               "£250 + VAT for the first hour, fixed",
-              "I cannot state a fee. Every fee question escalates to you."),
+              "I cannot state a fee. Every fee question escalates to you.",
+              basis="for an initial consultation"),
         Field("fee_negotiable", "Is that fee negotiable?",
               "Will you reduce the consultation fee, and if so, what is your floor?",
               "If you say no, I will not negotiate and will say so plainly.",
-              "pricing_rules.floor_consultation_fee", "money", True, "Not negotiable",
-              "I treat the fee as fixed and decline all discount requests."),
+              "pricing_rules.floor", "money", True, "Not negotiable",
+              "I treat the fee as fixed and decline all discount requests.",
+              basis="for an initial consultation"),
         Field("conflict_check_rules", "Conflict checks",
               "What do you need to know before you can accept a matter? (opposing party, etc.)",
               "I collect these before booking anything, so you never take a call you must decline.",
@@ -230,6 +269,8 @@ LEGAL = VerticalTemplate(
               "Mon–Thu 09:00–17:00, minimum 48 hours notice",
               "I cannot offer a consultation slot. Booking is blocked."),
         _timezone(),
+        _engagement_noun("consultation"),
+        _client_noun("client"),
         _icp("Employees and SMEs with a live employment matter, in England & Wales"),
         _escalation(["Anything urgent or with a deadline", "Any existing client",
                      "Any matter involving a current or former client of chambers"]),
@@ -273,12 +314,13 @@ SPA_BEAUTY = VerticalTemplate(
         Field("floor_price", "Your floor",
               "What is the lowest you will go on a treatment, in cash terms?",
               "A hard floor. A negotiation that would cross it stops and escalates to you.",
-              "pricing_rules.floor_price", "money", True, 70,
-              "I will not discount at all. Every haggle escalates."),
+              "pricing_rules.floor", "money", True, 70,
+              "I will not discount at all. Every haggle escalates.",
+              basis="per treatment"),
         Field("max_discount_pct", "Maximum discount",
               "What is the biggest discount I may offer without asking you?",
               "Bounds negotiation from the other side — belt and braces with the floor.",
-              "pricing_rules.max_discount_pct", "percent", True, 15,
+              "pricing_rules.max_discount", "percent", True, 15,
               "I hold list price and escalate any discount request."),
         Field("booking_lead_time", "Booking notice",
               "How much notice do you need for a booking?",
@@ -295,6 +337,8 @@ SPA_BEAUTY = VerticalTemplate(
               "four most common questions a spa gets. It also means no-shows arrive with nothing "
               "agreed in writing."),
         _timezone(),
+        _engagement_noun("appointment"),
+        _client_noun("client"),
         _icp("Local clients within a few miles, repeat bookings preferred"),
         _escalation(["Anything about pregnancy, allergies or medical conditions",
                      "Group bookings over 4 people", "Complaints about a treatment"]),
@@ -324,8 +368,13 @@ GENERIC = VerticalTemplate(
         Field("floor_price", "Your floor",
               "What is the lowest you will accept?",
               "A hard floor. Crossing it forces an escalation instead of a reply.",
-              "pricing_rules.floor_price", "money", True, 1800,
+              "pricing_rules.floor", "money", True, 1800,
               "I will not negotiate. Every discount request escalates."),
+        Field("max_discount_pct", "Maximum discount",
+              "What is the biggest discount I may offer without asking you? (Leave blank for none.)",
+              "Bounds negotiation from the other side — belt and braces with the floor.",
+              "pricing_rules.max_discount", "percent", False, 10,
+              "I hold list price and escalate any discount request."),
         Field("availability", "When you're available",
               "When can meetings be booked? (days, hours, notice)",
               "Slots are only offered inside this window.",
@@ -333,6 +382,10 @@ GENERIC = VerticalTemplate(
               "Tue–Thu 09:00–17:00, 48 hours notice",
               "Booking is blocked."),
         _timezone(),
+        # The generic template carries no trade to borrow a word from, so it asks outright and
+        # shows several possibilities rather than one — the tenant picks their own.
+        _engagement_noun("call — or viewing, consultation, session, call-out, fitting…"),
+        _client_noun("client — or patient, guest, customer, buyer…"),
         _icp("Companies of 20–200 people with a named budget holder"),
         _escalation(["Anything involving a contract or SOW", "Any existing client"]),
         _sample("Hi Tom — thanks for reaching out. A strategy day is £2,400 and runs 9–5 at your "

@@ -9,18 +9,21 @@ Resume point for a session starting cold. **Current as of 2026-07-23 02:13 UTC.*
 ## Start here after a break
 
 ```bash
-cd /workspaces/codespaces-blank
-docker start concierge-pg          # or: docker compose up -d postgres
+cd /workspaces/concierge
+docker compose up -d postgres      # the container does not survive a codespace rebuild
 pip install -r requirements.txt    # if the container was rebuilt
 python3 verify.py --phase 0        # expect 9 pass / 0 fail / 2 info
 python3 verify.py --phase 1        # expect 11 pass / 0 fail
 python3 verify.py --phase 2        # expect 11 pass / 0 fail / 1 info
+python3 verify.py --phase 3        # expect 16 pass / 0 fail / 3 info
 ```
 
-All three must be green before writing new code. They make real network calls and run real SQL —
-no fixtures, no mocks. A network failure reports FAIL rather than passing from cache.
+All four must be green before writing new code. They make real network calls and run real SQL —
+no fixtures, no mocks, with one declared exception: GATE 3's calendar, which is a fixture living
+in the harness rather than the package, named as such in every check that uses it. A network
+failure reports FAIL rather than passing from cache.
 
-**Then: start Phase 3.** It is the decisive gate and needs nothing from the operator.
+**Then: Phase 4 or 5 the moment credentials land.** Everything unblocked has been built.
 
 ## Git — already configured, but fragile across codespace rebuilds
 
@@ -62,22 +65,28 @@ git config --local --add credential.helper \
 | 0 Foundations + live verification | **9 pass / 2 info** | 4 build-spec corrections found; see ledger |
 | 1 Tenant model + isolation | **11 pass**, 9 of them attacks | Postgres RLS, not app predicates |
 | 2 Vertical-aware onboarding | **11 pass / 1 info** | real estate, legal, spa + generic |
+| 3 State machine + guardrails | **16 pass / 3 info** | 10 of them attacks |
+
+### What Phase 3 added
+
+`pricing.py` (quote derivation), `guardrails.py` (negotiation bounds), `lexicon.py` (the
+tenant's own nouns), `receipts.py` (hashing + tamper detection), `engine.py` (the state
+machine), `verify_phase3.py`.
+
+The design decision worth knowing before touching any of it: **the engine is trade-neutral, and
+the words are the tenant's.** Pricing reads a canonical vocabulary — `pricing_rules.headline` /
+`floor` / `max_discount` — that vertical templates map onto via `Field.maps_to`, so a trade with
+no template quotes exactly as well as one with. And every noun in an outbound message comes from
+the profile rather than from a string literal, so a dentist says "consultation" and an estate
+agent says "viewing" without either word appearing in the code. GATE 3 check 2 proves it with a
+veterinary practice; check 3 greps `engine.PROSE` against `engine.TRADE_NOUNS` to stop the
+regression. See CLAUDE.md for the rule in full.
+
+Booking is real state machine work against a **declared fixture calendar** that lives in the
+harness, not the package. The production default is `engine.NoCalendar`, which refuses rather
+than inventing times — check 12.
 
 ## What is left
-
-### Phase 3 — state machine + deterministic guardrails · NEXT · unblocked
-The decisive gate. Needs no credentials, no network, no operator input.
-- Thread state machine (§9): NEW → ENGAGED → AWAITING_REPLY → NEGOTIATING → BOOKED, plus
-  ESCALATED / IGNORED / DEAD.
-- Quote derivation: every figure computed from `profile.services` + `profile.pricing_rules` by
-  code, with the derivation recorded so it can be shown, not asserted.
-- Negotiation guardrail: counter-offers bounded by `floor_price` / `floor_pct` /
-  `max_discount_pct`. A breach forces ESCALATE — it cannot be talked past.
-- Unknown-service handling: not in profile → ESCALATE, never invent.
-- Driven by fixture inquiries; no channel yet (email is Phase 4).
-- **GATE 3 must prove:** a full NEW→BOOKED run; a floor-breach forced to ESCALATE; an
-  unknown-service query escalated rather than answered; and that no price came from an LLM,
-  shown by derivation.
 
 ### Phase 4 — email connector (Postmark) · BLOCKED on operator items 1, 2, 3
 Inbound webhook + signature verification, tenant resolution from the recipient address, outbound
@@ -138,6 +147,14 @@ Each has a harness check that fails loudly if broken.
 4. **Receipts anchor on X Layer mainnet (196), never a testnet.**
 5. **No fabricated credential, and no placeholder that looks live.**
 6. **AI disclosure in the first line of every outbound message**, with a route to a human.
+   Asking for a human is checked before qualification, pricing and all state logic, so it works
+   from any state (GATE 3 checks 13 and 14).
+7. **No trade vocabulary in `engine.PROSE`.** Domain nouns come from `profile.lexicon` and
+   `profile.services`, never from a string literal. GATE 3 check 3 greps for the regression.
+8. **A floor breach never receives a counter-offer.** Countering at the floor publishes the
+   tenant's reservation price; the breach escalates and no figure is sent (GATE 3 check 7).
+9. **Nothing is claimed as booked without the calendar API confirming it**, and with no calendar
+   connected the engine escalates rather than inventing an appointment (GATE 3 check 12).
 
 ## Open questions for the operator
 
@@ -148,8 +165,17 @@ Each has a harness check that fails loudly if broken.
 
 ## Known gaps, stated plainly
 
-- The vertical lexicon knows three trades. A dentist or plumber falls to the generic template.
-  This is where an LLM would earn its keep once operator item 7 lands.
+- The vertical lexicon knows three trades. A dentist or plumber falls to the generic template —
+  which Phase 3 proved is a first-class path, not a degraded one: a veterinary practice runs the
+  full journey and enforces its floor correctly. What the generic path loses is the *sharpness*
+  of the questions, not the ability to quote. Once operator item 7 lands, an LLM should propose
+  a template for an unseen trade — the questions only, never the values.
+- **Free-text ICP is not machine-evaluated.** Qualification currently means "is this in the
+  catalogue, and does it trip an escalation trigger" — it does not read the ICP prose. Honest
+  work for an LLM under §2 (understanding only, never pricing).
+- Service matching and escalation-trigger matching are word-overlap heuristics. Both fail
+  towards the owner's inbox rather than towards a wrong answer, which is the correct direction,
+  but they will sometimes escalate something answerable.
 - No concurrency test on `SET LOCAL` scoping under a connection pool. The mechanism is proven;
   the concurrent case is not.
 - The app role's password is literal in `schema.sql`. Fine for a local container, **wrong for the

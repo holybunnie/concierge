@@ -358,7 +358,35 @@ def phase2() -> int:
     return r.render()
 
 
-PHASES = {0: phase0, 1: phase1, 2: phase2}
+# ---------------------------------------------------------------- phase 3
+
+def phase3() -> int:
+    r = Report(
+        3,
+        "State machine & deterministic guardrails",
+        preamble=(
+            "\nGATE 3 is the decisive one, and it needs no credentials and no network. A real\n"
+            "conversation runs end to end against a real PostgreSQL database: quoted from the\n"
+            "profile, negotiated against the floor, booked. Checks 1-5 are the gate's own\n"
+            "requirements; 6-16 are the attacks.\n"
+            "One fixture is used — the calendar — and it is declared as such in every check that\n"
+            "touches it. The production default refuses to book at all, which check 12 proves.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase3
+        verify_phase3.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 3 harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
+PHASES = {0: phase0, 1: phase1, 2: phase2, 3: phase3}
 
 
 def main() -> int:
