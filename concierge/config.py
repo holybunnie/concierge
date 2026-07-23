@@ -93,3 +93,17 @@ def inbound_webhook_secret() -> str | None:
     password half. Absent → the webhook fails closed and accepts nothing.
     """
     return get("POSTMARK_INBOUND_WEBHOOK_SECRET")
+
+
+# ---------------------------------------------------------------- calendar (Phase 5)
+#
+# In the data model each tenant carries its own Cal.com in profile.calendar_ref{cal_api_key,
+# event_type_id, ...}. These env fallbacks let the single-operator demo run without persisting a
+# live key into a tenant's profile, and are read only when the profile does not carry its own.
+
+def cal_api_key() -> str | None:
+    return get("CAL_API_KEY")
+
+
+def cal_event_type_id() -> str | None:
+    return get("CAL_EVENT_TYPE_ID")

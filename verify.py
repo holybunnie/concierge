@@ -415,7 +415,32 @@ def phase4() -> int:
     return r.render()
 
 
-PHASES = {0: phase0, 1: phase1, 2: phase2, 3: phase3, 4: phase4}
+def phase5() -> int:
+    r = Report(
+        5,
+        "Booking (live Cal.com)",
+        preamble=(
+            "\nGATE 5 replaces GATE 3's fixture calendar with real Cal.com v2 calls. It fetches\n"
+            "real availability, runs the full NEW -> BOOKED journey, creates a real booking with a\n"
+            "UTC start and nested attendee, confirms it by the API's own status, and then cancels\n"
+            "it so a real calendar is not left with clutter. The one added object wraps the real\n"
+            "adapter to observe it; every network call it makes is live.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase5
+        verify_phase5.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 5 harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
+PHASES = {0: phase0, 1: phase1, 2: phase2, 3: phase3, 4: phase4, 5: phase5}
 
 
 def main() -> int:

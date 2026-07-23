@@ -17,6 +17,7 @@ python3 verify.py --phase 1        # expect 11 pass / 0 fail
 python3 verify.py --phase 2        # expect 11 pass / 0 fail / 1 info
 python3 verify.py --phase 3        # expect 16 pass / 0 fail / 3 info
 python3 verify.py --phase 4        # expect 8 pass / 0 fail / 3 info
+python3 verify.py --phase 5        # expect 5 pass / 0 fail / 2 info — makes+cancels a real booking
 ```
 
 All four must be green before writing new code. They make real network calls and run real SQL —
@@ -68,6 +69,7 @@ git config --local --add credential.helper \
 | 2 Vertical-aware onboarding | **11 pass / 1 info** | real estate, legal, spa + generic |
 | 3 State machine + guardrails | **16 pass / 3 info** | 10 of them attacks |
 | 4 Email connector (Postmark) | **8 pass / 3 info** | code complete; live inbox delivery pending items 1-3 |
+| 5 Booking (live Cal.com) | **5 pass / 2 info** | real booking created + cancelled against live Cal.com |
 
 ### What Phase 4 added
 
@@ -137,11 +139,15 @@ subdomain), so that is the domain to verify in Postmark, not the apex. Remaining
 items 1-3 and the go-live checklist above. Domain (item 2) is bought (quietdesks.com); Postmark
 (item 3) is in approval.
 
-### Phase 5 — booking (Cal.com) · BLOCKED on operator item 4
-Ask the prospect's timezone explicitly (never infer), fetch slots in their timezone, apply the
-tenant's booking rules, offer 3, **re-fetch on selection** to catch the slot race, POST with UTC
-start + nested attendee, confirm status via the API response. Pin `cal-api-version` — ledger §1
-proves a stale pin silently downgrades to a different validation schema rather than erroring.
+### Phase 5 — booking (Cal.com) · DONE, GATE 5 passed 2026-07-23
+`calcom.py` fills the `engine.Calendar` seam with live Cal.com v2 calls; `verify_phase5.py`
+runs the full NEW→BOOKED journey against the real API, creates a real booking (UTC start, nested
+attendee, prospect timezone), confirms it by the API's own `accepted` status, and **cancels it**
+so a real calendar is left clean. Versions pinned: slots `2024-09-04`, bookings `2026-02-25`
+(ledger proves a stale pin silently downgrades). Credentials come from `profile.calendar_ref`
+with a `CAL_API_KEY`/`CAL_EVENT_TYPE_ID` env fallback for the single-operator demo. Event type
+6433300, connected to a Google Calendar. **The Cal.com key is `cal_live_` and was exposed in
+chat — rotate before submission.**
 
 ### Phase 6 — receipts on X Layer **mainnet (196)** · BLOCKED on operator item 6
 Contract, signing, content hashing, tamper detection can all be written and unit-tested now;

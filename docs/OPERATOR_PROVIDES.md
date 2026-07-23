@@ -3,10 +3,12 @@
 What CONCIERGE needs from you, what each thing unblocks, and what stays broken until it arrives.
 Nothing here is faked, stubbed, or simulated. A missing credential is reported as missing.
 
-**Status as of 2026-07-23: 1 of 8 provided; 1 in progress.**
+**Status as of 2026-07-23: 2 of 8 provided; 1 in progress.**
 - Item 2 (domain): **PROVIDED** — `quietdesks.com`, registered at Cloudflare, DNS there.
 - Item 3 (Postmark): **IN APPROVAL** — account created, approval requested, "still reviewing".
   Sending domain to verify is `inbox.quietdesks.com` (replies are FROM the inbox subdomain).
+- Item 4 (Cal.com): **PROVIDED** — key `cal_live_…` + event type `6433300`. GATE 5 passed with a
+  real booking. **Key was exposed in chat — rotate before submission.**
 - Everything else below is still MISSING.
 
 **Deadline 2026-07-27 22:59 UTC — 4 days 20 hours remain.**

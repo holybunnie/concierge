@@ -321,11 +321,26 @@ receipts — an estimate is not a verified fact and is not treated as one here.
 
 ---
 
+## PHASE 5 — Cal.com booking (built + proven live 2026-07-23)
+
+- **Slots response shape confirmed live** (version `2024-09-04`): `{"status":"success",
+  "data":{"<date>":[{"start":"…Z"}]}}` — a dict keyed by date, each a list of `{start}` in UTC.
+  `calcom.py` flattens, filters to `>= earliest`, and returns the next N.
+- **A real booking round trip succeeded** against event type `6433300`: POST `/v2/bookings`
+  (version `2026-02-25`) with a UTC `start`, nested `attendee{name,email,timeZone}`, returned
+  `status: "accepted"` and a booking uid. The booking was then cancelled via
+  `/v2/bookings/{uid}/cancel`. Because GATE 0 proved the same server rejects a non-ISO start and
+  a missing nested attendee, a successful create is itself proof the request was correctly shaped.
+- The 24-hour notice window applied correctly: with the tenant's "minimum 24 hours" rule the
+  engine skipped this weekend and offered the following Monday.
+
+---
+
 ## OPEN / UNVERIFIED — nothing here may be built on until proven
 
 | # | Fact | Blocks | Resolve at |
 |---|---|---|---|
-| U1 | Cal.com slots rate limit (spec claims 60/min/key) | slot-client tuning | GATE 5 |
+| U1 | Cal.com slots rate limit (spec claims 60/min/key) — not stress-tested; one call per offer/re-fetch stays well under | slot-client tuning | not blocking |
 | U2 | ~~Postmark inbound auth mechanism~~ **RESOLVED at GATE 4** — Basic Auth in URL, no HMAC | — | done |
 | U3 | OKX a2a-pay escrow call signatures + settlement currencies | all of Phase 7 | GATE 7 |
 | U4 | Whether the progress monitor can run headless on a VPS | "never offline" claim | GATE 7 |
