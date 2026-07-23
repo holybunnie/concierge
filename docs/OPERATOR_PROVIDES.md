@@ -3,10 +3,14 @@
 What CONCIERGE needs from you, what each thing unblocks, and what stays broken until it arrives.
 Nothing here is faked, stubbed, or simulated. A missing credential is reported as missing.
 
-**Status as of 2026-07-23: 0 of 8 provided.** Everything below is MISSING. Phases 0 and 1 completed
-without any of them — Phase 0 needed only public endpoints, Phase 1 needs only a local PostgreSQL
-(`docker compose up -d postgres`, no credential required). **Phase 4 and everything after it is
-blocked.**
+**Status as of 2026-07-23 02:13 UTC: 0 of 8 provided.** Everything below is MISSING.
+
+**Deadline 2026-07-27 22:59 UTC — 4 days 20 hours remain.**
+
+Phases 0, 1 and 2 completed without any credentials: Phase 0 needed only public endpoints, and
+Phases 1–2 need only a local PostgreSQL (`docker compose up -d postgres`). Phase 3 is next and
+also needs nothing from you. **Phase 4 and everything after it is blocked**, and Phases 4–5 are
+what the demo video actually shows.
 
 | # | Item | Status | Blocks | Notes |
 |---|---|---|---|---|

@@ -27,6 +27,9 @@ Work proceeds in numbered phases, each ending at a GATE. A gate is passed only b
 `python3 verify.py --phase N` printing real evidence, plus a written self-audit (§6 of the brief).
 The operator cannot read code — the harness output is the entire interface.
 
+Current state and the next action live in **`docs/HANDOFF.md`** — read it first, it is kept
+current. Summary:
+
 | Phase | State | Gate |
 |---|---|---|
 | 0 Foundations + live verification | done | 9 pass / 2 info |
@@ -39,6 +42,9 @@ The operator cannot read code — the harness output is the entire interface.
 | 7 A2A escrow + settlement | blocked | operator item 5, ledger U3 |
 | 8 Summary + scheduled actions | not started | |
 | 9 Hardening + submission | not started | deadline 2026-07-27 22:59 UTC |
+
+Repo: **github.com/holybunnie/concierge** (public). If `git push` returns 403, see the git
+section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real credentials.
 
 ## Rules that have already been tested and must not regress
 
