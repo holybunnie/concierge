@@ -1,0 +1,139 @@
+-- CONCIERGE schema.
+--
+-- Tenant isolation here is a property of the database, not of the application code and
+-- certainly not of a prompt. The application connects as `concierge_app`, a role that:
+--   * does not own any table, so it cannot bypass row-level security;
+--   * sees rows only where tenant_id = current_setting('app.tenant_id');
+--   * sees NOTHING at all when app.tenant_id is unset, because NULL = uuid is NULL, not true.
+--
+-- That last property is what makes §2b's "no path runs without a resolved tenant_id" true in
+-- the strong sense: a forgotten tenant scope is not a leak, it is an empty result.
+--
+-- Idempotent: safe to re-run.
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- ---------------------------------------------------------------- tables
+
+CREATE TABLE IF NOT EXISTS tenants (
+    tenant_id       uuid PRIMARY KEY,
+    owner_wallet    text        NOT NULL,
+    owner_email     text        NOT NULL,
+    business_name   text        NOT NULL,
+    vertical        text        NOT NULL,
+    inbound_address text        NOT NULL UNIQUE,
+    -- profile: services, pricing_rules, calendar_ref, icp, escalation_triggers, artifact_samples.
+    -- Every price and commitment the engine emits is derived from this column by code (§2).
+    profile         jsonb       NOT NULL DEFAULT '{}'::jsonb,
+    -- engagement: scope, escrow_ref, window, status (§7).
+    engagement      jsonb       NOT NULL DEFAULT '{}'::jsonb,
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS threads (
+    thread_id       uuid PRIMARY KEY,
+    tenant_id       uuid        NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+    client_contact  text        NOT NULL,
+    client_name     text,
+    -- Never inferred. Captured by asking the prospect outright (§9b.1); NULL until they answer.
+    client_timezone text,
+    state           text        NOT NULL,
+    -- Provider-side conversation key (email Message-ID / A2A engagement ref).
+    external_ref    text,
+    history         jsonb       NOT NULL DEFAULT '[]'::jsonb,
+    current_offer   jsonb,
+    offered_slots   jsonb       NOT NULL DEFAULT '[]'::jsonb,
+    last_updated    timestamptz NOT NULL DEFAULT now(),
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+-- Threading key is scoped by tenant: two tenants may legitimately hold the same external_ref.
+CREATE UNIQUE INDEX IF NOT EXISTS threads_tenant_external_ref
+    ON threads (tenant_id, external_ref) WHERE external_ref IS NOT NULL;
+CREATE INDEX IF NOT EXISTS threads_tenant_contact ON threads (tenant_id, client_contact);
+
+CREATE TABLE IF NOT EXISTS receipts (
+    receipt_id    uuid PRIMARY KEY,
+    tenant_id     uuid        NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+    thread_id     uuid        REFERENCES threads(thread_id) ON DELETE CASCADE,
+    action        text        NOT NULL,
+    decision      jsonb       NOT NULL,
+    rule_checked  text        NOT NULL,
+    within_rules  boolean     NOT NULL,
+    content_hash  text        NOT NULL,
+    signature     text,
+    xlayer_tx     text,
+    created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS receipts_tenant_thread ON receipts (tenant_id, thread_id);
+
+-- ---------------------------------------------------------------- row-level security
+
+ALTER TABLE tenants  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE threads  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE receipts ENABLE ROW LEVEL SECURITY;
+
+-- current_setting(..., true) returns NULL rather than raising when the GUC is unset.
+-- NULL = uuid evaluates to NULL, which is not true, so an unscoped session sees zero rows
+-- and can write nothing. Fail-closed by construction.
+CREATE OR REPLACE FUNCTION current_tenant() RETURNS uuid
+    LANGUAGE sql STABLE AS
+$$ SELECT nullif(current_setting('app.tenant_id', true), '')::uuid $$;
+
+DROP POLICY IF EXISTS tenant_isolation ON tenants;
+CREATE POLICY tenant_isolation ON tenants
+    USING (tenant_id = current_tenant())
+    WITH CHECK (tenant_id = current_tenant());
+
+DROP POLICY IF EXISTS tenant_isolation ON threads;
+CREATE POLICY tenant_isolation ON threads
+    USING (tenant_id = current_tenant())
+    WITH CHECK (tenant_id = current_tenant());
+
+DROP POLICY IF EXISTS tenant_isolation ON receipts;
+CREATE POLICY tenant_isolation ON receipts
+    USING (tenant_id = current_tenant())
+    WITH CHECK (tenant_id = current_tenant());
+
+-- ---------------------------------------------------------------- the one deliberate door
+--
+-- Resolution is a chicken-and-egg problem: an inbound email arrives addressed to
+-- acme@inbox.example.com and we must learn which tenant that is BEFORE we can scope a session.
+--
+-- These two functions are the only way across that gap. They are SECURITY DEFINER (they run as
+-- the table owner, so RLS does not apply to them) and they are deliberately narrow: they take
+-- untrusted external input and return an opaque uuid and nothing else. No profile, no pricing,
+-- no history. Even a total compromise of the resolver leaks an identifier, not a business.
+--
+-- They are also the only functions in the system with this property, which makes the audit
+-- surface for §2b exactly these twenty lines.
+
+CREATE OR REPLACE FUNCTION resolve_tenant_by_inbound_address(addr text) RETURNS uuid
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
+$$ SELECT tenant_id FROM tenants WHERE inbound_address = lower(btrim(addr)) $$;
+
+CREATE OR REPLACE FUNCTION resolve_tenant_by_engagement(ref text) RETURNS uuid
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
+$$ SELECT tenant_id FROM tenants WHERE engagement->>'escrow_ref' = btrim(ref) $$;
+
+-- ---------------------------------------------------------------- the application role
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'concierge_app') THEN
+        CREATE ROLE concierge_app LOGIN PASSWORD 'concierge_app';
+    END IF;
+END
+$$;
+
+GRANT USAGE ON SCHEMA public TO concierge_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, threads, receipts TO concierge_app;
+GRANT EXECUTE ON FUNCTION resolve_tenant_by_inbound_address(text) TO concierge_app;
+GRANT EXECUTE ON FUNCTION resolve_tenant_by_engagement(text) TO concierge_app;
+GRANT EXECUTE ON FUNCTION current_tenant() TO concierge_app;
+
+-- Explicitly withhold the escape hatches. Without BYPASSRLS (default) and without table
+-- ownership, `SET row_security = off` does not help concierge_app: Postgres raises
+-- "query would be affected by row-level security policy" instead of returning rows.
+ALTER ROLE concierge_app NOBYPASSRLS;

@@ -213,6 +213,50 @@ $ curl -X POST https://testrpc.xlayer.tech ... eth_chainId
 
 ---
 
+## 8. PostgreSQL row-level security — the mechanism tenant isolation rests on
+
+| Field | Value |
+|---|---|
+| Needed for | Phase 1 (§2b Tenant-Isolation Law) — and therefore every phase after it |
+| Verified where | Live PostgreSQL 16.10 (`postgres:16-alpine`), queried as the real application role |
+| Date | 2026-07-23 |
+
+Isolation is only as good as the database behaviour it assumes, so each assumption was attacked
+rather than trusted. Full output: `python3 verify.py --phase 1`.
+
+- **An unset scope yields nothing, not everything.** `current_setting('app.tenant_id', true)`
+  returns NULL when unset; `tenant_id = NULL` is NULL, not true; the policy therefore matches no
+  rows. Live: an unscoped session counts `tenants=0, threads=0, receipts=0` while those rows
+  demonstrably exist. This is the property that makes a forgotten tenant scope a visible empty
+  result instead of a silent cross-tenant read.
+- **A non-owner cannot disable RLS.** As `concierge_app`:
+  ```
+  SET row_security = off; SELECT * FROM tenants;
+  -> InsufficientPrivilege: query would be affected by row-level security policy for table "tenants"
+  ```
+  Postgres refuses the query outright rather than serving rows. Requires both NOBYPASSRLS
+  (the default) and non-ownership of the table — we assert both.
+- **WITH CHECK blocks forged writes.** Inserting a row stamped with another tenant's id:
+  `new row violates row-level security policy for table "threads"`.
+- **Predicate-free writes are still fenced.** `UPDATE threads SET state='DEAD'` with no WHERE
+  clause at all, run as tenant B, reported `1 row affected` — B's own. `DELETE FROM receipts`
+  reported `0`.
+- **`SET LOCAL` is transaction-scoped**, so the scope cannot survive into a pooled connection's
+  next user. Set via `set_config('app.tenant_id', %s, true)` with the value bound as a parameter,
+  never interpolated.
+- **SECURITY DEFINER is the single deliberate exception.** Address→tenant resolution must run
+  before a scope exists, so two `SECURITY DEFINER` functions cross the boundary. They return a
+  uuid and nothing else. Live proof they are narrow: holding the uuid the resolver returned, the
+  next query for that tenant's row in the same unscoped session still returns 0 rows.
+
+> **NOT A CORRECTION, BUT WORTH RECORDING.** The build spec (§2b) says isolation must be
+> "structurally impossible, not prompt-prevented" but does not say how. Application-level
+> `WHERE tenant_id = ?` would satisfy a casual reading and is what most multi-tenant systems do —
+> and it fails the moment one query author forgets. RLS moves the guarantee below the application,
+> so `store.py` contains **no tenant predicates at all** and still cannot leak.
+
+---
+
 ## OPEN / UNVERIFIED — nothing here may be built on until proven
 
 | # | Fact | Blocks | Resolve at |

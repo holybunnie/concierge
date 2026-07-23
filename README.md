@@ -27,17 +27,38 @@ Anyone can say their agent "quotes intelligently." The interesting question is w
 
 ## Status
 
-**Phase 0 complete — GATE 0 passed.** Foundations and external verification only. No engine yet.
+**Phases 0–1 complete. GATE 0 and GATE 1 passed.** Foundations, external verification, and the
+tenant model with structural isolation. The deal engine itself is not built yet.
 
+```bash
+pip install -r requirements.txt
+docker compose up -d postgres        # GATE 1 needs a real Postgres; SQLite cannot do this
+
+python3 verify.py --phase 0          # live calls to Cal.com and X Layer, raw evidence printed
+python3 verify.py --phase 1          # 11 checks, 9 of which are attacks on tenant isolation
 ```
-python3 verify.py --phase 0
-```
 
-Makes real network calls to Cal.com and X Layer and prints the raw evidence behind every claim.
-There are no mocks and no fixtures in it; if the network is down it reports FAIL rather than
-falling back to a cached answer.
+Neither harness contains a mock or a fixture response. Phase 0 makes real network calls and
+reports FAIL if the network is down rather than falling back to a cached answer. Phase 1 runs
+real SQL against a real PostgreSQL 16 server as the real unprivileged application role.
 
-Phases 1–9 are not started. Nothing in this repo simulates a phase it has not built.
+Phases 2–9 are not started. Nothing in this repo simulates a phase it has not built.
+
+### How isolation is actually enforced (GATE 1)
+
+Every tenant table has a PostgreSQL row-level security policy keyed on a transaction-scoped
+setting. The application connects as a role that owns no tables and has `NOBYPASSRLS`, so:
+
+- `store.py` contains **no `WHERE tenant_id = ?` clauses anywhere** — and still cannot leak.
+- A session with **no tenant resolved sees zero rows**, not all rows. A forgotten scope is a
+  visible empty result, never a silent cross-tenant read.
+- `SET row_security = off` from the app role is refused by Postgres outright.
+- Tenant B running `UPDATE threads SET state='DEAD'` with no WHERE clause affects exactly one
+  row: her own.
+
+The single deliberate crossing point is address→tenant resolution, which must run before a scope
+exists. It is two `SECURITY DEFINER` functions that return an opaque uuid and nothing else — and
+the harness proves that holding that uuid still reads no rows.
 
 ## Reproduce every claim
 

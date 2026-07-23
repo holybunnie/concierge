@@ -1,0 +1,3 @@
+# Phase 0-1. Kept minimal on purpose: every dependency is a supply-chain surface, and this
+# system signs commitments. Added only when a phase actually needs it.
+psycopg[binary]>=3.2

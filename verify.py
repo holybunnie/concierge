@@ -29,9 +29,10 @@ USER_AGENT = "CONCIERGE-verify/0.1 (+https://github.com/concierge-asp)"
 class Report:
     """Collects checks and prints them as prose with evidence attached."""
 
-    def __init__(self, phase: int, title: str):
+    def __init__(self, phase: int, title: str, preamble: str = ""):
         self.phase = phase
         self.title = title
+        self.preamble = preamble
         self.checks: list[tuple[str, bool, str, str]] = []
 
     def check(self, name: str, passed: bool, finding: str, evidence: str = "") -> bool:
@@ -47,6 +48,9 @@ class Report:
         print(line)
         print(f"CONCIERGE · VERIFY · PHASE {self.phase} — {self.title}")
         print(line)
+        if self.preamble:
+            for para in self.preamble.strip().split("\n"):
+                print(para)
 
         for name, passed, finding, evidence in self.checks:
             mark = {True: "PASS", False: "FAIL", None: "INFO"}[passed]
@@ -66,9 +70,9 @@ class Report:
         print(f"RESULT: {passed_n} passed, {len(failed)} failed, {info_n} informational")
         if failed:
             print("FAILED CHECKS: " + ", ".join(failed))
-            print("PHASE 0 VERDICT: FAIL — do not proceed past GATE 0.")
+            print(f"PHASE {self.phase} VERDICT: FAIL — do not proceed past GATE {self.phase}.")
         else:
-            print("PHASE 0 VERDICT: PASS")
+            print(f"PHASE {self.phase} VERDICT: PASS")
         print(line)
         return 1 if failed else 0
 
@@ -254,7 +258,44 @@ def phase0() -> int:
     return r.render()
 
 
-PHASES = {0: phase0}
+# ---------------------------------------------------------------- phase 1
+
+def phase1() -> int:
+    r = Report(
+        1,
+        "Tenant model & isolation",
+        preamble=(
+            "\nGATE 1 asks one question: can tenant B reach tenant A's data? The answer below is\n"
+            "not an assertion, it is eight attacks. Each one is a real query run as the real\n"
+            "application role against a real PostgreSQL server, with its real result pasted in.\n"
+            "The happy path is one check out of ten; the other nine are attempts to break it.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase1
+    except ImportError as e:
+        r.check("Phase 1 code is importable", False,
+                f"Could not import the phase 1 module: {e}\n"
+                f"Install the driver with: pip install 'psycopg[binary]'")
+        return r.render()
+
+    try:
+        verify_phase1.run(r)
+    except Exception as e:
+        import traceback
+        r.check(
+            "Phase 1 harness completed", False,
+            f"The harness itself raised {type(e).__name__}: {e}\n"
+            f"This is reported as a FAIL rather than swallowed. Most likely cause: no PostgreSQL\n"
+            f"at the configured DATABASE_URL. Start one with:\n"
+            f"  docker run -d --name concierge-pg -e POSTGRES_PASSWORD=concierge \\\n"
+            f"    -e POSTGRES_USER=concierge -e POSTGRES_DB=concierge -p 5432:5432 postgres:16-alpine",
+            traceback.format_exc(),
+        )
+    return r.render()
+
+
+PHASES = {0: phase0, 1: phase1}
 
 
 def main() -> int:

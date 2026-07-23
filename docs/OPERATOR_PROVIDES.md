@@ -3,9 +3,10 @@
 What CONCIERGE needs from you, what each thing unblocks, and what stays broken until it arrives.
 Nothing here is faked, stubbed, or simulated. A missing credential is reported as missing.
 
-**Status as of 2026-07-22: 0 of 8 provided.** Everything below is MISSING. Phase 0 (foundations +
-verification) completed without any of them because it only needed public endpoints. **Phase 4 and
-everything after it is blocked.**
+**Status as of 2026-07-23: 0 of 8 provided.** Everything below is MISSING. Phases 0 and 1 completed
+without any of them — Phase 0 needed only public endpoints, Phase 1 needs only a local PostgreSQL
+(`docker compose up -d postgres`, no credential required). **Phase 4 and everything after it is
+blocked.**
 
 | # | Item | Status | Blocks | Notes |
 |---|---|---|---|---|
@@ -24,7 +25,8 @@ everything after it is blocked.**
 
 Real work, no fabrication, no credentials needed:
 
-- **Phase 1** — tenant model + isolation, on local Postgres. Fully provable.
+- ~~**Phase 1** — tenant model + isolation, on local Postgres. Fully provable.~~ **DONE, GATE 1
+  passed 2026-07-23.** 11 checks, 9 of them attacks. `python3 verify.py --phase 1`.
 - **Phase 2** — vertical-aware onboarding. Template/gap/read-back logic is deterministic code and is
   testable without an LLM; only the free-text classification step needs item 7.
 - **Phase 3** — the state machine and deterministic guardrails, driven by fixture inquiries. This is

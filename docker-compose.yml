@@ -1,0 +1,21 @@
+# The database CONCIERGE's isolation guarantees depend on. PostgreSQL specifically:
+# row-level security is what makes §2b structural, and SQLite has no equivalent.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: concierge-pg
+    environment:
+      POSTGRES_USER: concierge
+      POSTGRES_PASSWORD: concierge
+      POSTGRES_DB: concierge
+    ports:
+      - "5432:5432"
+    volumes:
+      - concierge-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U concierge"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  concierge-pgdata:
