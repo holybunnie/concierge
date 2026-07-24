@@ -151,6 +151,18 @@ def insert_receipt(
     return Receipt.from_row(cur.fetchone())
 
 
+def mark_anchored(
+    cur: Cursor, *, receipt_id: uuid.UUID, signature: str, xlayer_tx: str,
+) -> Receipt:
+    """Fill in the two columns Phase 6 exists to fill. Never called with a fabricated value —
+    both arguments come from a confirmed on-chain transaction (see concierge/xlayer.py)."""
+    cur.execute(
+        "UPDATE receipts SET signature = %s, xlayer_tx = %s WHERE receipt_id = %s RETURNING *",
+        (signature, xlayer_tx, str(receipt_id)),
+    )
+    return Receipt.from_row(cur.fetchone())
+
+
 def list_receipts(cur: Cursor, thread_id: uuid.UUID | None = None) -> list[Receipt]:
     if thread_id is None:
         cur.execute("SELECT * FROM receipts ORDER BY created_at")

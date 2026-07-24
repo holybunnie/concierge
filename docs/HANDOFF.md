@@ -1,6 +1,6 @@
 # HANDOFF
 
-Resume point for a session starting cold. **Current as of 2026-07-23 02:13 UTC.**
+Resume point for a session starting cold. **Current as of 2026-07-24.**
 
 **Deadline: 2026-07-27 22:59 UTC — 4 days 20 hours remain.**
 
@@ -18,14 +18,17 @@ python3 verify.py --phase 2        # expect 11 pass / 0 fail / 1 info
 python3 verify.py --phase 3        # expect 16 pass / 0 fail / 3 info
 python3 verify.py --phase 4        # expect 8 pass / 0 fail / 3 info
 python3 verify.py --phase 5        # expect 5 pass / 0 fail / 2 info — makes+cancels a real booking
+python3 verify.py --phase 6        # expect 8 pass / 0 fail / 1 info — anchors 2 real receipts on X Layer mainnet
 ```
 
-All four must be green before writing new code. They make real network calls and run real SQL —
-no fixtures, no mocks, with one declared exception: GATE 3's calendar, which is a fixture living
-in the harness rather than the package, named as such in every check that uses it. A network
-failure reports FAIL rather than passing from cache.
+All must be green before writing new code. They make real network calls and run real SQL — no
+fixtures, no mocks, with one declared exception: GATE 3's calendar, which is a fixture living in
+the harness rather than the package, named as such in every check that uses it. A network failure
+reports FAIL rather than passing from cache. **Phase 6 spends real (tiny) mainnet gas every run**
+— each pass anchors two receipts, ~0.0000021 OKB total.
 
-**Then: Phase 4 or 5 the moment credentials land.** Everything unblocked has been built.
+**Then: Phase 4 go-live the moment items 1–3 land, or Phase 7 once item 5 + ledger U3 resolve.**
+Everything unblocked has been built.
 
 ## Git — already configured, but fragile across codespace rebuilds
 
@@ -70,6 +73,7 @@ git config --local --add credential.helper \
 | 3 State machine + guardrails | **16 pass / 3 info** | 10 of them attacks |
 | 4 Email connector (Postmark) | **8 pass / 3 info** | code complete; live inbox delivery pending items 1-3 |
 | 5 Booking (live Cal.com) | **5 pass / 2 info** | real booking created + cancelled against live Cal.com |
+| 6 Receipts on X Layer mainnet | **8 pass / 1 info** | ReceiptAnchor deployed, 2 real receipts anchored, tamper + forgery attacks caught |
 
 ### What Phase 4 added
 
@@ -107,6 +111,41 @@ deployed on the VPS (item 1). See the Phase 4 go-live checklist below.
 6. Point Postmark's inbound webhook at
    `https://<user>:<secret>@app.quietdesks.com/inbound/postmark`.
 7. Live test: onboard a tenant, email its address, confirm the reply lands and is not in spam.
+
+### What Phase 6 added
+
+`contracts/ReceiptAnchor.sol` (minimal Solidity: `anchorReceipt(bytes32)` → event + storage
+write, compiled with Foundry), `concierge/xlayer.py` (signs and sends real transactions against
+X Layer mainnet — RPC transport on stdlib `urllib`, signing via `eth_account`, the one dependency
+this phase adds and the reasoning for taking it is in the module docstring), new functions in
+`receipts.py` (`anchor()`, `recover_signer()`), `store.mark_anchored`, `verify_phase6.py`.
+
+Deployed contract: `0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587` on chain 196. Every receipt now
+carries two independent proofs once anchored: an offline ECDSA signature over the content hash
+(recoverable with no RPC call), and the same hash anchored on-chain, confirmed by polling the
+transaction receipt for `status: 0x1` — never assumed from a broadcast succeeding. Recording a
+receipt and anchoring it are deliberately two separate steps (`receipts.record` then
+`receipts.anchor`), so a customer-facing reply is never blocked on a mainnet confirmation.
+
+**Wired into the live webhook, not the shared engine path.** `app.py`'s `/inbound/postmark` route
+fires `_anchor_in_background` on its own daemon thread after the reply is already sent, only when
+a receipt exists and both `XLAYER_PRIVATE_KEY`/`XLAYER_CONTRACT` are configured. This is
+deliberately *not* inside `engine.step` or `mail.handle_inbound` — both are called directly, with
+real chain credentials now present in `.env`, by `verify_phase3.py`, `verify_phase4.py` and
+`verify_phase5.py`, and a gate run must never have the side effect of spending real mainnet gas.
+Only the actual FastAPI process spends gas, and only on a real inbound email. Confirmed by a
+direct call to `_anchor_in_background` (NULL → real signature + real tx) and a mocked
+`TestClient` request proving the thread only fires under the right conditions — not yet proven
+against a real Postmark-delivered email, since that still needs item 3.
+
+One finding not in any doc: **the public RPC (`rpc.xlayer.tech`) is eventually consistent across
+nodes** — an `eth_call` issued immediately after a confirmed write can hit a node that hasn't
+seen it yet. `verify_phase6.py` polls rather than reading once; production code anchoring
+synchronously would need the same care.
+
+`XLAYER_PRIVATE_KEY` and `XLAYER_CONTRACT` are in `.env` (gitignored). The signer
+(`0x69eb1bAA26BffCD0fA9089aa2187F6Ca3e2A54f6`) holds only gas money (~0.0103 OKB after the
+deploy) — never a key holding meaningful assets, per OPERATOR_PROVIDES' own advice.
 
 ### What Phase 3 added
 
@@ -149,10 +188,16 @@ with a `CAL_API_KEY`/`CAL_EVENT_TYPE_ID` env fallback for the single-operator de
 6433300, connected to a Google Calendar. **The Cal.com key is `cal_live_` and was exposed in
 chat — rotate before submission.**
 
-### Phase 6 — receipts on X Layer **mainnet (196)** · BLOCKED on operator item 6
-Contract, signing, content hashing, tamper detection can all be written and unit-tested now;
-deployment and real anchoring need a funded signer. Ledger §9: one anchor ≈ $0.0001, 1 OKB ≈
-909,000 anchors. **Never anchor to a testnet and present it as proof.**
+### Phase 6 — receipts on X Layer **mainnet (196)** · DONE, GATE 6 passed 2026-07-24
+`xlayer.py` fills the anchoring seam with live X Layer calls against a deployed `ReceiptAnchor`
+contract; `verify_phase6.py` runs a real conversation through the real engine, anchors the
+resulting quote receipt and a floor-breach receipt, confirms both on-chain independently, and
+red-teams a decision tamper and a signature-forgery attempt. Real measured gas: 224,160 for the
+one-time deploy, 51,849 per anchor — both cheaper than the pre-deploy estimates in ledger §9.
+**Not yet wired into the live request path** — `engine.step` still writes `signature`/`xlayer_tx`
+as NULL; a background worker calling `receipts.anchor()` on unanchored rows is Phase 8 territory
+(see "Workers" in CLAUDE.md §12), so replies stay fast and are never blocked on a mainnet
+confirmation.
 
 ### Phase 7 — A2A escrow + settlement · BLOCKED on operator item 5 **and ledger U3**
 U3 (the OKX escrow API call signatures) is unresolved — the OnchainOS docs cover wallet install
@@ -160,7 +205,9 @@ but not the escrow credentials. **No escrow code may be written against a guesse
 Resolve U3 first.
 
 ### Phase 8 — summary + scheduled actions + product-gap intelligence
-Needs 4–7 to produce real data.
+Needs live Phase 4 + Phase 7 to produce real end-to-end data (5 and 6 already do). Also where the
+receipt-anchoring background worker belongs — Phase 6 built `receipts.anchor()` but nothing calls
+it automatically yet.
 
 ### Phase 9 — hardening + submission
 Public repo ✓, OSI licence ✓, CREDITS ✓, ledger ✓, operator-provides ✓. Still needed: ~90s demo
@@ -170,12 +217,15 @@ video, architecture diagram, "reproduce every claim" README pass, Google form be
 
 ## The critical path is not code
 
-**0 of 8 operator credentials have arrived.** Full instructions in `docs/OPERATOR_PROVIDES.md`.
+**3 of 8 operator credentials have arrived: items 4 (Cal.com), 6 (funded X Layer signer), 7 (LLM
+key).** Phases 5 and 6 are proven live because of them. Items 1, 2 (partial), 3, 5 remain — full
+instructions in `docs/OPERATOR_PROVIDES.md`.
 
 The binding constraint is **Postmark**: it manually reviews new accounts before they may send
-outside domains you own — stated at under 24h on weekdays, longer at weekends. It is Thursday.
-The domain purchase and the Postmark approval request must happen **first**; everything else can
-slip a day. Phases 4 and 5 are what the demo video actually shows, and both are credential-blocked.
+outside domains you own — stated at under 24h on weekdays, longer at weekends. The domain
+(`quietdesks.com`) is bought; DNS and the Postmark approval are still the gate on Phase 4 going
+live, and Phase 7 is gated separately on the OKX wallet plus resolving ledger U3. Phase 4 is what
+the rest of the demo video needs — booking and receipts already have their real footage.
 
 Mitigation if approval runs late: while pending you can still configure inbound, use the API, and
 send to your own verified domain — so Phase 4 is buildable and demoable provided the test

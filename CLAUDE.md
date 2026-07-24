@@ -36,9 +36,9 @@ current. Summary:
 | 1 Tenant model + isolation | done | 11 pass, 9 of them attacks |
 | 2 Vertical-aware onboarding | done | 11 pass / 1 info |
 | 3 State machine + guardrails | done | 16 pass / 3 info, 10 of them attacks |
-| 4 Email (Postmark) | blocked | operator items 1-3 |
-| 5 Booking (Cal.com) | blocked | operator item 4 |
-| 6 Receipts on X Layer **mainnet** | blocked | operator item 6 |
+| 4 Email (Postmark) | code complete, go-live blocked | operator items 1-3 |
+| 5 Booking (Cal.com) | done | 5 pass / 2 info |
+| 6 Receipts on X Layer **mainnet** | done | 8 pass / 1 info |
 | 7 A2A escrow + settlement | blocked | operator item 5, ledger U3 |
 | 8 Summary + scheduled actions | not started | |
 | 9 Hardening + submission | not started | deadline 2026-07-27 22:59 UTC |

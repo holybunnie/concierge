@@ -12,13 +12,31 @@ Behind nginx:  app.<domain> → 127.0.0.1:8000, and Postmark's inbound webhook U
 from __future__ import annotations
 
 import logging
+import threading
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from . import config, mail, postmark
+from . import config, db, mail, postmark, receipts
 
 log = logging.getLogger("concierge.webhook")
+
+
+def _anchor_in_background(tenant_id, receipt) -> None:
+    """Sign and anchor a receipt on X Layer without holding up the webhook response.
+
+    Runs on its own thread, started after the reply has already been sent — the customer is
+    never kept waiting on a mainnet confirmation. Deliberately not called from
+    `mail.handle_inbound` itself: that function is shared with the verification harness, and a
+    gate run must never have the side effect of spending real gas. Failure here leaves
+    `signature`/`xlayer_tx` NULL, the honest state (see receipts.py) — logged, never papered
+    over with a fabricated transaction hash.
+    """
+    try:
+        with db.tenant_session(tenant_id) as cur:
+            receipts.anchor(cur, receipt)
+    except Exception:
+        log.exception("Background anchor failed for receipt %s", receipt.receipt_id)
 
 app = FastAPI(title="CONCIERGE inbound", docs_url=None, redoc_url=None)
 
@@ -68,8 +86,15 @@ async def inbound_postmark(request: Request) -> JSONResponse:
         log.error("Send failed: %s", e)
         return JSONResponse({"status": "send_failed", "detail": str(e)}, status_code=502)
 
+    receipt = handled.outcome.receipt
+    if receipt is not None and config.xlayer_private_key() and config.xlayer_contract():
+        threading.Thread(
+            target=_anchor_in_background, args=(handled.tenant_id, receipt), daemon=True,
+        ).start()
+
     return JSONResponse(
         {"status": "ok", "state": handled.outcome.state_after,
          "action": handled.outcome.action, "replied": handled.reply_email is not None,
-         "owner_alerted": handled.owner_alert_email is not None},
+         "owner_alerted": handled.owner_alert_email is not None,
+         "anchoring": receipt is not None and bool(config.xlayer_contract())},
         status_code=200)

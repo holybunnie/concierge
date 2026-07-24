@@ -440,7 +440,32 @@ def phase5() -> int:
     return r.render()
 
 
-PHASES = {0: phase0, 1: phase1, 2: phase2, 3: phase3, 4: phase4, 5: phase5}
+def phase6() -> int:
+    r = Report(
+        6,
+        "Receipts anchored on X Layer mainnet (196)",
+        preamble=(
+            "\nGATE 6 anchors real receipts — the same `Outcome.receipt` a real conversation\n"
+            "writes in production — on X Layer mainnet. Every check below makes a live RPC call;\n"
+            "nothing is cached from an earlier deploy or a previous run. Two independent proofs\n"
+            "are checked: an offline signature over the content hash, and an on-chain transaction\n"
+            "anchoring the same hash in the deployed ReceiptAnchor contract.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase6
+        verify_phase6.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 6 harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
+PHASES = {0: phase0, 1: phase1, 2: phase2, 3: phase3, 4: phase4, 5: phase5, 6: phase6}
 
 
 def main() -> int:

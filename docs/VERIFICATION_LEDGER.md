@@ -336,6 +336,34 @@ receipts — an estimate is not a verified fact and is not treated as one here.
 
 ---
 
+## PHASE 6 — receipt anchoring, X Layer mainnet (built + proven live 2026-07-24)
+
+- **`ReceiptAnchor` deployed to X Layer mainnet (196)**: `0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587`,
+  deploy tx `0xda15e052d17c783efb0b8ae969f3b2c615d297b5ccbf82199a538f28503f95b0`, block 66089300,
+  **224,160 gas actually used** — well under the pre-deploy estimate (900,000) in §9, because that
+  figure was a conservative guess made before any bytecode existed. Compiled with Foundry
+  (`forge`, solc 0.8.35) from `contracts/ReceiptAnchor.sol`.
+- **`anchorReceipt(bytes32)` measured at 51,849 gas** per call, both on the first real anchor and
+  the second — cheaper than §9's 55,000 estimate, and now a measured fact rather than a guess. At
+  live gas price (20,000,001 wei) that is **~0.00000104 OKB (~$0.000085) per anchor** — 1 OKB
+  covers roughly 960,000 anchors, in line with §9's order-of-magnitude estimate.
+- **Two independent proofs per receipt, both real:** an offline ECDSA signature over the content
+  hash (`eth_account.Account.unsafe_sign_hash`, recoverable with no RPC call via `eth_keys`), and
+  the same hash anchored on-chain via `anchorReceipt`, confirmed by polling
+  `eth_getTransactionReceipt` for `status: 0x1` — never assumed from a broadcast being accepted.
+  `python3 verify.py --phase 6` anchors one real quote receipt and one real floor-breach
+  (ESCALATED) receipt, reads both back independently via `eth_call`, and runs two tamper attacks:
+  an edited decision fails hash re-verification, and a forged signature (a real signature paired
+  with an unrelated hash) recovers to the wrong address rather than validating.
+- **A public multi-node RPC (`https://rpc.xlayer.tech`) is eventually consistent** across nodes:
+  an `eth_call` issued immediately after a confirmed write can hit a node that has not seen it
+  yet. `verify_phase6.py` polls (`xlayer._wait_for_receipt`) rather than reading once and trusting
+  it — not disclosed in any doc, found by the harness failing on the first run.
+- Signer: `0x69eb1bAA26BffCD0fA9089aa2187F6Ca3e2A54f6`, funded 2026-07-24, ~0.0103 OKB (~$0.85) —
+  enough for the deploy plus several thousand anchors at the measured cost.
+
+---
+
 ## OPEN / UNVERIFIED — nothing here may be built on until proven
 
 | # | Fact | Blocks | Resolve at |

@@ -7,3 +7,9 @@ psycopg[binary]>=3.2
 # reachable 24/7 on the VPS. uvicorn is the ASGI runner systemd supervises.
 fastapi>=0.110
 uvicorn[standard]>=0.29
+
+# Phase 6. Receipt anchoring on X Layer mainnet (concierge/xlayer.py) needs secp256k1 signing and
+# RLP transaction encoding. Hand-rolling either to avoid a dependency is a worse security
+# trade-off than taking one audited, widely-used library — the RPC transport itself stays on
+# urllib, same as postmark.py and calcom.py.
+eth_account>=0.13

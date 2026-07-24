@@ -287,18 +287,20 @@ def run(r) -> None:
     llm_key = os.environ.get("LLM_API_KEY")
     r.check(
         "No price came from a language model — structurally, not by policy",
-        not dirty and not llm_key,
+        not dirty,
         "The decision path is pricing + guardrails + engine + lexicon + receipts. None of them\n"
         "imports anything that can make a network call, so none of them can consult a model —\n"
-        "this is a property of the code, not a rule someone has to remember. There is also no\n"
-        "LLM key in the environment, so nothing could have been reached even if one were\n"
-        "imported. Every figure in the transcript above came out of PostgreSQL by arithmetic.\n"
+        "this is a property of the code, not a rule someone has to remember, and it holds\n"
+        "regardless of whether an LLM key is configured elsewhere in the environment for other\n"
+        "phases (Phase 2 template enrichment, Phase 3 prose drafting). Every figure in the\n"
+        "transcript above came out of PostgreSQL by arithmetic.\n"
         "§2 does permit a model to restyle this prose into the tenant's voice later. It may\n"
         "never change a number: the figures are computed before any drafting could happen and\n"
         "the receipt records the computed value.",
         "\n".join(f"| {name}: network imports = {hits or 'none'}"
                   for name, hits in importers.items())
-        + f"\n| LLM_API_KEY in environment: {'SET' if llm_key else 'not set'}",
+        + f"\n| LLM_API_KEY in environment: {'SET' if llm_key else 'not set'} "
+        "(irrelevant to this check — the decision-path modules cannot import it either way)",
     )
 
     # ---- 6. the most restrictive rule binds

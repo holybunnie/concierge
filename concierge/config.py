@@ -107,3 +107,25 @@ def cal_api_key() -> str | None:
 
 def cal_event_type_id() -> str | None:
     return get("CAL_EVENT_TYPE_ID")
+
+
+# ---------------------------------------------------------------- chain (Phase 6)
+#
+# X Layer mainnet only (§9, docs/VERIFICATION_LEDGER.md) — a testnet receipt proves nothing to a
+# customer or an arbitrator. XLAYER_CONTRACT is written once, at deploy time, by the operator
+# (or by the deploy script into this same .env) — it is not something CONCIERGE code invents.
+
+XLAYER_MAINNET_RPC = "https://rpc.xlayer.tech"
+XLAYER_MAINNET_CHAIN_ID = 196
+
+
+def xlayer_rpc() -> str:
+    return get("XLAYER_RPC") or XLAYER_MAINNET_RPC
+
+
+def xlayer_private_key() -> str | None:
+    return get("XLAYER_PRIVATE_KEY")
+
+
+def xlayer_contract() -> str | None:
+    return get("XLAYER_CONTRACT")

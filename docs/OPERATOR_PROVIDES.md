@@ -13,20 +13,19 @@ Nothing here is faked, stubbed, or simulated. A missing credential is reported a
 
 **Deadline 2026-07-27 22:59 UTC — 4 days 20 hours remain.**
 
-Phases 0, 1 and 2 completed without any credentials: Phase 0 needed only public endpoints, and
-Phases 1–2 need only a local PostgreSQL (`docker compose up -d postgres`). Phase 3 is next and
-also needs nothing from you. **Phase 4 and everything after it is blocked**, and Phases 4–5 are
-what the demo video actually shows.
+Phases 0–3 and 5–6 are done. **Items 4, 6 and 7 have arrived** and Phases 5 and 6 are proven live
+against real Cal.com and real X Layer mainnet. **Phase 4 go-live and Phase 7 remain blocked** —
+Phase 4 on items 1–3, Phase 7 on item 5 and ledger U3 (the OKX escrow API shape).
 
 | # | Item | Status | Blocks | Notes |
 |---|---|---|---|---|
 | 1 | VPS — 2 vCPU / 4GB / 40GB, Ubuntu 24.04, 24/7 | ❌ MISSING | P4, P7, P8 | Inbound webhook must be publicly reachable and always up. Workers run follow-ups + progress monitor. |
-| 2 | Domain + DNS access | ❌ MISSING | P4 | Needs MX on `inbox.<domain>`, plus SPF/DKIM/DMARC on the sending domain. |
-| 3 | Postmark server API token (inbound + outbound) | ❌ MISSING | P4 | SendGrid Inbound Parse is a documented alternative — **say the word and I'll switch.** |
-| 4 | Cal.com account + API key (`cal_...`) + event type ID | ❌ MISSING | P5 | Public slot reads work without it (proven); real bookings do not. Calendly is an alternative — **ask me.** |
+| 2 | Domain + DNS access | 🟡 PARTIAL | P4 | `quietdesks.com` bought. MX on `inbox.quietdesks.com` + SPF/DKIM/DMARC not yet set at Cloudflare — see HANDOFF's go-live checklist. |
+| 3 | Postmark server API token (inbound + outbound) | ❌ MISSING | P4 | Account submitted, in manual approval as of last check. SendGrid Inbound Parse remains a documented alternative — **say the word and I'll switch.** |
+| 4 | Cal.com account + API key (`cal_...`) + event type ID | ✅ PROVIDED | P5 | In `.env`. **GATE 5 passed live 2026-07-23** — real booking created and cancelled against event type 6433300. Key is `cal_live_` — rotate before submission, it was exposed in chat. |
 | 5 | OKX Agentic Wallet + creation email; `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE` | ❌ MISSING | P7 | Also blocks verifying the escrow API shape at all (ledger U3). |
-| 6 | Funded OKB on X Layer **mainnet (196)** | ❌ MISSING | **P6**, P7 | ~1 OKB (~$82) covers ~909,000 receipt anchors. Mainnet only — a testnet receipt proves nothing to a customer or an arbitrator. |
-| 7 | LLM API key | ❌ MISSING | P2, P3 drafting | Understanding / drafting / vertical classification **only**. Never a price (§2). |
+| 6 | Funded OKB on X Layer **mainnet (196)** | ✅ PROVIDED | ~~P6~~, P7 | In `.env` as `XLAYER_PRIVATE_KEY`. **GATE 6 passed live 2026-07-24** — `ReceiptAnchor` deployed at `0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587`, two real receipts anchored, ~0.0103 OKB left (~9,900 more anchors at the measured 51,849 gas/anchor). |
+| 7 | LLM API key | ✅ PROVIDED | P2, P3 drafting | In `.env`. Not currently consumed by any code path — GATE 2's classifier and GATE 3's drafting are both deterministic lexicon/template logic by design (see `classify.py`), kept that way so neither needs a credential to work or to audit. Available for the "propose a template for an unseen trade" enhancement noted in HANDOFF's known gaps. |
 | 8 | Web-search / retrieval API key | ❌ MISSING | P2 enrichment | **Optional.** Without it, onboarding uses built-in vertical templates and says so out loud. |
 
 ---
@@ -47,12 +46,15 @@ Real work, no fabrication, no credentials needed:
   provide the domain.
 - **Phase 3** — the state machine and deterministic guardrails, driven by fixture inquiries. This is
   the **decisive** gate (every price provably from the profile) and it needs **nothing from you**.
-- **Phase 6** — the receipt contract, signing, hashing and tamper detection can all be written and
-  unit-tested now. **Deployment and real anchoring wait for item 6** (funded mainnet signer). I will
-  not anchor to a testnet and present it as proof.
+- ~~**Phase 6** — the receipt contract, signing, hashing and tamper detection.~~ **DONE, GATE 6
+  passed live 2026-07-24**, once item 6 arrived. `ReceiptAnchor` deployed at
+  `0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587`; two real receipts anchored and independently
+  re-verified on-chain; two tamper attacks caught. `python3 verify.py --phase 6`.
+- ~~**Phase 5** — booking against live Cal.com.~~ **DONE, GATE 5 passed live 2026-07-23**, once
+  item 4 arrived.
 
-So: Phases 1, 2, 3 can proceed now, and Phase 6 can be built but not proven. **4, 5, 7, 8 cannot
-start.**
+So: Phases 1, 2, 3, 5, 6 are done. **4 and 7 remain blocked** — 4 on items 1–3, 7 on item 5 and
+ledger U3.
 
 ---
 
@@ -203,6 +205,9 @@ API shape.
 → `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE` in `.env` — once U3 is resolved.
 
 ## 7. OKB for gas — MAINNET, chain 196. Buy ~1 OKB (~$82)
+
+**✅ PROVIDED 2026-07-24. GATE 6 passed live — see docs/VERIFICATION_LEDGER.md's Phase 6 entry
+for the real deploy tx, contract address, and measured gas (cheaper than the estimate below).**
 
 **This is a mainnet product. Receipts anchor on X Layer mainnet (196) from Phase 6 onward.**
 

@@ -5,13 +5,16 @@ rule that was checked, whether the decision was within that rule, and a hash ove
 thing, so a disagreement months later is settled by recomputation rather than by argument. That
 is the product's trust claim, and in an escrow dispute (§7) it is the defence.
 
-**What is real here and what is not, stated plainly.** The content hash is real and the tamper
-check works. `signature` and `xlayer_tx` are NULL on every receipt this phase writes, because
-signing needs a funded key on X Layer mainnet (OPERATOR_PROVIDES item 6) and that has not
-arrived. Nothing here pretends otherwise: there is no placeholder transaction hash, and the
-harness reports the NULLs rather than hiding them. Phase 6 fills those two columns in and adds
-the anchoring; the hash written now is the value that will be anchored then, so receipts
-written today remain verifiable afterwards.
+**Two independent proofs, not one.** `signature` is CONCIERGE's own key signing the content hash
+directly (`eth_account.Account.unsafe_sign_hash`) — verifiable offline, with no RPC call, by
+anyone who knows the operator's address (`recover_signer`, below). `xlayer_tx` is the same hash
+anchored on X Layer mainnet via `ReceiptAnchor.anchorReceipt` — verifiable on-chain, by anyone,
+forever, independent of CONCIERGE staying up. Recording is synchronous (every state transition);
+anchoring is a second step (`anchor`) so a customer-facing reply is never blocked on a mainnet
+confirmation — see `verify_phase6.py` and HANDOFF's note on the receipt-batch worker.
+
+Both are NULL until `anchor()` runs. There is no placeholder transaction hash and no placeholder
+signature: the harness reports NULLs rather than hiding them, exactly as before Phase 6.
 """
 
 from __future__ import annotations
@@ -21,9 +24,11 @@ import json
 import uuid
 from typing import Any
 
+from eth_account import Account
+from eth_keys import keys as eth_keys
 from psycopg import Cursor
 
-from . import store
+from . import store, xlayer
 from .models import Receipt
 
 
@@ -70,5 +75,42 @@ def verify(receipt: Receipt) -> bool:
 
 
 def anchored(receipt: Receipt) -> bool:
-    """Whether this receipt has an on-chain anchor. False for everything until Phase 6."""
+    """Whether this receipt has an on-chain anchor. False until `anchor()` has run on it."""
     return bool(receipt.xlayer_tx)
+
+
+def anchor(cur: Cursor, receipt: Receipt) -> Receipt:
+    """Sign the receipt's content hash and anchor it on X Layer mainnet, for real.
+
+    Two chain interactions happen here: an offline signature over the hash (no network call,
+    just the operator's key), and an on-chain `anchorReceipt` transaction, confirmed by polling
+    its receipt — never assumed from a broadcast succeeding (see `xlayer._send`). Both results
+    are written back to the row; nothing here can produce a NULL replaced by a fake value.
+    """
+    hash_bytes = bytes.fromhex(receipt.content_hash)
+    signed = Account.unsafe_sign_hash(hash_bytes, xlayer._account().key)
+    signature = signed.signature.hex()
+    if not signature.startswith("0x"):
+        signature = "0x" + signature
+
+    tx = xlayer.anchor(receipt.content_hash)
+
+    return store.mark_anchored(
+        cur, receipt_id=receipt.receipt_id, signature=signature, xlayer_tx=tx.tx_hash,
+    )
+
+
+def recover_signer(receipt: Receipt) -> str | None:
+    """Recover the address that produced `receipt.signature`, with no RPC call.
+
+    Independent of `verify()`: `verify()` proves the row wasn't altered after signing;
+    this proves *who* signed it. A row that fails this check was never anchored by
+    CONCIERGE's own key, whatever the DB says.
+    """
+    if not receipt.signature:
+        return None
+    sig = receipt.signature[2:] if receipt.signature.startswith("0x") else receipt.signature
+    r, s, v = int(sig[:64], 16), int(sig[64:128], 16), int(sig[128:130], 16)
+    hash_bytes = bytes.fromhex(receipt.content_hash)
+    pubkey = eth_keys.ecdsa_recover(hash_bytes, eth_keys.Signature(vrs=(v - 27, r, s)))
+    return pubkey.to_checksum_address()
