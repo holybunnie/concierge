@@ -24,6 +24,7 @@ python3 verify.py --phase 5        # expect 5 pass / 0 fail / 2 info — makes+c
 python3 verify.py --phase 6        # expect 8 pass / 0 fail / 1 info — anchors 2 real receipts on X Layer mainnet
 python3 verify.py --phase 6b       # expect 6 pass / 0 fail / 1 info — anchors 2 more real receipts; public verify page
 python3 verify.py --phase 8        # expect 7 pass / 0 fail / 0 info — summary + scheduled actions, no new gas spent
+python3 verify.py --phase 8b-1     # expect 5 pass / 0 fail / 0 info — Feature 1, product-gap intelligence
 ```
 
 `--phase` now takes a string, so sub-gates from the feature addendum sit alongside the numbered
@@ -88,6 +89,7 @@ git config --local --add credential.helper \
 | 3b-4 Safe Follow-Up | **3 pass / 1 info** | real stalled thread nudged once from its own history, second stall marks it DEAD, a thread with no genuine prior contact never triggers one however far the clock is pushed |
 | 6b Public receipt verification (Feature 3) | **6 pass / 1 info** | real anchored receipt reads back correctly on the public page; nonexistent id, malformed id, and a real internal-only (floor-breach) receipt all render the identical clean 404; two tenants' pages never cross |
 | 8 Summary + scheduled actions | **7 pass / 0 fail** | real conversation numbers counted exactly, escalation text carried verbatim, scheduler's anchor/follow-up/summary jobs all read+write the same real rows, no new mainnet gas spent proving it |
+| 8b-1 Product-gap intelligence (Feature 1) | **5 pass / 0 fail** | an unquotable inquiry writes one verbatim GapEvent and surfaces word-for-word in the owner summary; a floor breach writes none; a second tenant's summary never contains it; with no LLM key the gap shows as raw text, never a fabricated category |
 
 ## Feature addendum (Phases 3b/6b/8b/7b) — status
 
@@ -100,12 +102,35 @@ addendum message itself, not reproduced here). Sequencing per the addendum's Par
 | 5 — Decaying floor | Phase 3 | 3b-3 | **done**, 4 pass / 0 fail / 1 info |
 | Safe Follow-Up | Phase 3 | 3b-4 | **done**, 3 pass / 0 fail / 1 info |
 | 3 — Public receipt verification | Phase 6 | 6b | **done**, 6 pass / 0 fail / 1 info |
-| 1 — Product-gap intelligence | Phase 8 | 3b/8b-1 | not started — Phase 8 is now done, so this is next |
+| 1 — Product-gap intelligence | Phase 8 | 8b-1 | **done**, 5 pass / 0 fail |
 | 4 — Cross-tenant benchmarking | Phase 7 | 7b | blocked — needs real Phase 7 engagement data first, per the addendum's own §0.2 |
 
-The Phase-3 family (Features 2, 5, and Safe Follow-Up), Feature 3 (Phase 6's family), and Phase 8
-itself are all complete. Only Feature 1 (unblocked now, not yet started) and Feature 4 (blocked on
-Phase 7) remain.
+The Phase-3 family (Features 2, 5, and Safe Follow-Up), Feature 3 (Phase 6's family), Phase 8, and
+Feature 1 are all complete. Only Feature 4 remains (blocked on Phase 7).
+
+**What Feature 1 added:** `concierge/gaps.py` and a `gap_events` table (same RLS `tenant_isolation`
+policy as every other tenant table — no new isolation mechanism). The write path is exactly one
+side effect on Phase 3's existing "unknown query → ESCALATE, never invent" transition:
+`engine.decide` sets `Decision.product_gap` **only** on the `Unquotable` branch (never on a floor
+breach, a human request, or a tripped trigger), and `engine.step` writes one `GapEvent` row with
+the prospect's verbatim text. `summary.build_summary` now takes an optional `gap_events` list
+(backward-compatible — pre-Feature-1 callers unchanged) and `render_summary_text` adds the payoff
+section ("N inquiries asked for something you don't offer… verbatim examples"). `scheduler.process_tenant`
+fetches the gaps and calls `gaps.classify_pending` before building the summary. GATE 8b-1
+(`verify_phase8b1.py`) proves write → verbatim-in-summary → floor-breach-is-not-a-gap → cross-tenant
+isolation → honest no-key degradation.
+
+**Categorization is optional enrichment and is NOT currently working — the `LLM_API_KEY` in `.env`
+is invalid.** `gaps.classify_gap` uses the correct current Anthropic API shape (`messages.create`
+with `output_config={"format": {"type": "json_schema", …}}`, model `claude-opus-4-8`, SDK 0.119.0 —
+verified against the claude-api reference), but a live call returns **401 "API key is invalid."**
+The key is a real-format `sk-ant-…` (length 100) that the server rejects — expired, revoked, or
+mistyped. Feature 1 degrades exactly as designed: `classify_gap` returns `None`, gaps render as raw,
+unclustered text, and the summary says so — GATE 8b-1 check 5 proves this deterministically. So the
+feature is honest and complete; only the coarse category labels are missing until the operator
+supplies a working key. **This is also the first code path that actually consumes item 7** —
+`OPERATOR_PROVIDES.md` previously said it was "not currently consumed by any code path," which is
+why the bad key went unnoticed until now.
 
 **What Feature 3 added:** a third "deliberate door" in `schema.sql` — `public_receipt(rid uuid)`,
 a `SECURITY DEFINER` function scoped by receipt_id alone, returning at most one row and never
@@ -328,7 +353,8 @@ mainnet gas — GATE 6/6b already prove the anchoring mechanism itself, repeated
 Not yet built: actually installing `scheduler.dispatch` on a cron/systemd timer on the VPS (a
 deploy action, same as `app.py`'s webhook — §12) and end-to-end proof against live Phase 4 email
 + Phase 7 A2A data, which is blocked on those phases the same way it always was. Feature 1
-(product-gap intelligence) is next now that Phase 8 exists — it attaches here per the addendum.
+(product-gap intelligence) attached here and is **done** (GATE 8b-1) — see the Feature addendum
+section above for what it added and the invalid-LLM-key finding.
 
 ### Phase 9 — hardening + submission
 Public repo ✓, OSI licence ✓, CREDITS ✓, ledger ✓, operator-provides ✓. Still needed: ~90s demo

@@ -79,3 +79,24 @@ class Receipt:
             "receipt_id", "tenant_id", "thread_id", "action", "decision", "rule_checked",
             "within_rules", "content_hash", "signature", "xlayer_tx", "confidence", "created_at",
         )})
+
+
+@dataclass
+class GapEvent:
+    """Feature 1 (Product-Gap Intelligence) — one inquiry the tenant's profile could not
+    answer. Written as a side effect of the existing ESCALATE transition (§ Unquotable),
+    never a decision of its own."""
+
+    gap_id: uuid.UUID
+    tenant_id: uuid.UUID
+    thread_id: uuid.UUID | None
+    raw_query_text: str
+    classified_category: str | None = None
+    escalated_at: datetime | None = None
+
+    @classmethod
+    def from_row(cls, row: dict[str, Any]) -> "GapEvent":
+        return cls(**{k: row[k] for k in (
+            "gap_id", "tenant_id", "thread_id", "raw_query_text", "classified_category",
+            "escalated_at",
+        )})

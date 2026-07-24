@@ -594,9 +594,37 @@ def phase8() -> int:
     return r.render()
 
 
+def phase8b1() -> int:
+    r = Report(
+        "8b-1",
+        "Product-gap intelligence (Feature 1)",
+        preamble=(
+            "\nGATE 8b-1 turns Phase 3's existing 'asked for something not in the profile ->\n"
+            "ESCALATE, never invent' transition into a market signal. Check 1 proves the one new\n"
+            "side effect (a verbatim GapEvent row); check 2 is the payoff (it surfaces in the\n"
+            "owner summary, word for word); check 3 proves a floor breach is NOT a gap; check 4 is\n"
+            "the isolation attack (one tenant's gaps never reach another's report); check 5 proves\n"
+            "honest degradation with no LLM key. No new isolation mechanism — gap_events carries\n"
+            "the same RLS policy GATE 1 already proved.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase8b1
+        verify_phase8b1.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 8b-1 harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
 PHASES = {
     "0": phase0, "1": phase1, "2": phase2, "3": phase3, "4": phase4, "5": phase5, "6": phase6,
     "3b-2": phase3b2, "3b-3": phase3b3, "3b-4": phase3b4, "6b": phase6b, "8": phase8,
+    "8b-1": phase8b1,
 }
 
 

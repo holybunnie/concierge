@@ -243,6 +243,10 @@ class Decision:
     client_timezone: str | None = None
     offered_slots: list[dict[str, Any]] | None = None
     confidence: dict[str, Any] | None = None
+    # Feature 1 (Product-Gap Intelligence) — set ONLY on the Unquotable/"asked about something
+    # not in the profile" escalation. Never set for any other escalation reason (a human
+    # request, a tripped trigger, a floor breach) — those are not product gaps.
+    product_gap: str | None = None
 
 
 # ---------------------------------------------------------------- conversational acts
@@ -386,13 +390,15 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
     offer = dict(thread.current_offer or {})
 
     def escalate(reason: str, *, action: str, rule: str,
-                 detail: dict[str, Any] | None = None) -> Decision:
+                 detail: dict[str, Any] | None = None,
+                 product_gap: str | None = None) -> Decision:
         return Decision(
             state_after="ESCALATED", action=action, rule_checked=rule, within_rules=False,
             detail={"reason": reason, **(detail or {})},
             reply_body=PROSE["escalated"],
             owner_alert=f"[{tenant.business_name}] {reason}\n\n"
                         f"From: {inbound.from_address}\nTheir message: {text.strip()}",
+            product_gap=product_gap,
         )
 
     # A thread the owner has taken over is not re-entered. Replying over the top of a human
@@ -551,7 +557,7 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
     except Unquotable as e:
         return escalate(
             e.reason, action="unquotable", rule="profile.services + pricing_rules",
-            detail={"considered": e.considered})
+            detail={"considered": e.considered}, product_gap=text.strip())
 
     offer = {
         "quote": _offer_from_quote(quote),
@@ -843,6 +849,16 @@ def step(cur: Cursor, tenant: Tenant, thread: Thread, inbound: Inbound,
         confidence=decision.confidence,
         receipt_id=receipt_id,
     )
+
+    # Feature 1 (Product-Gap Intelligence): exactly one side effect on the existing
+    # Unquotable/ESCALATE transition — no new decision logic. store.py, not gaps.py: the LLM
+    # categorization step runs later, on a schedule (concierge.gaps.classify_pending), never
+    # from inside this no-network decision path.
+    if decision.product_gap:
+        store.insert_gap_event(
+            cur, tenant_id=tenant.tenant_id, thread_id=thread.thread_id,
+            raw_query_text=decision.product_gap,
+        )
 
     return Outcome(
         thread=thread, state_before=before, state_after=state_after,

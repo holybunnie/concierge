@@ -75,11 +75,30 @@ ALTER TABLE receipts ADD COLUMN IF NOT EXISTS confidence jsonb;
 
 CREATE INDEX IF NOT EXISTS receipts_tenant_thread ON receipts (tenant_id, thread_id);
 
+-- Feature 1 (Product-Gap Intelligence, GATE 3b/8b-1). Instrumentation on the ESCALATE
+-- transition Phase 3 already has for "asked about something not in the profile" — no new
+-- decision logic, this table only records that it happened. Isolated by the SAME RLS policy
+-- pattern as every other tenant table (§2b) — no new isolation mechanism for this feature.
+CREATE TABLE IF NOT EXISTS gap_events (
+    gap_id              uuid PRIMARY KEY,
+    tenant_id           uuid        NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+    thread_id           uuid        REFERENCES threads(thread_id) ON DELETE CASCADE,
+    raw_query_text      text        NOT NULL,
+    -- NULL until concierge/gaps.py's optional LLM categorization runs (needs OPERATOR_PROVIDES
+    -- item 7). Absent a key, gaps are reported as raw, unclustered text — never silently
+    -- omitted and never a fabricated category.
+    classified_category text,
+    escalated_at        timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS gap_events_tenant ON gap_events (tenant_id, escalated_at);
+
 -- ---------------------------------------------------------------- row-level security
 
-ALTER TABLE tenants  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE threads  ENABLE ROW LEVEL SECURITY;
-ALTER TABLE receipts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tenants     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE threads     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE receipts    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE gap_events  ENABLE ROW LEVEL SECURITY;
 
 -- current_setting(..., true) returns NULL rather than raising when the GUC is unset.
 -- NULL = uuid evaluates to NULL, which is not true, so an unscoped session sees zero rows
@@ -100,6 +119,11 @@ CREATE POLICY tenant_isolation ON threads
 
 DROP POLICY IF EXISTS tenant_isolation ON receipts;
 CREATE POLICY tenant_isolation ON receipts
+    USING (tenant_id = current_tenant())
+    WITH CHECK (tenant_id = current_tenant());
+
+DROP POLICY IF EXISTS tenant_isolation ON gap_events;
+CREATE POLICY tenant_isolation ON gap_events
     USING (tenant_id = current_tenant())
     WITH CHECK (tenant_id = current_tenant());
 
@@ -148,7 +172,7 @@ END
 $$;
 
 GRANT USAGE ON SCHEMA public TO concierge_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, threads, receipts TO concierge_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, threads, receipts, gap_events TO concierge_app;
 GRANT EXECUTE ON FUNCTION resolve_tenant_by_inbound_address(text) TO concierge_app;
 GRANT EXECUTE ON FUNCTION resolve_tenant_by_engagement(text) TO concierge_app;
 GRANT EXECUTE ON FUNCTION public_receipt(uuid) TO concierge_app;

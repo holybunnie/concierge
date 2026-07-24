@@ -14,7 +14,7 @@ from typing import Any
 from psycopg import Cursor
 from psycopg.types.json import Jsonb
 
-from .models import Receipt, Tenant, Thread
+from .models import GapEvent, Receipt, Tenant, Thread
 
 
 # ---------------------------------------------------------------- tenants
@@ -177,3 +177,35 @@ def list_receipts(cur: Cursor, thread_id: uuid.UUID | None = None) -> list[Recei
         cur.execute("SELECT * FROM receipts WHERE thread_id = %s ORDER BY created_at",
                     (str(thread_id),))
     return [Receipt.from_row(r) for r in cur.fetchall()]
+
+
+# ---------------------------------------------------------------- gap events (Feature 1)
+
+def insert_gap_event(
+    cur: Cursor, *, tenant_id: uuid.UUID, thread_id: uuid.UUID | None, raw_query_text: str,
+) -> GapEvent:
+    """Written as a side effect of the engine's existing ESCALATE-on-Unquotable transition —
+    see `engine.step`. `classified_category` starts NULL; `gaps.classify_pending` fills it in
+    later, only if an LLM key is configured."""
+    cur.execute(
+        """
+        INSERT INTO gap_events (gap_id, tenant_id, thread_id, raw_query_text)
+        VALUES (%s, %s, %s, %s)
+        RETURNING *
+        """,
+        (uuid.uuid4(), tenant_id, thread_id, raw_query_text),
+    )
+    return GapEvent.from_row(cur.fetchone())
+
+
+def update_gap_category(cur: Cursor, *, gap_id: uuid.UUID, category: str) -> GapEvent:
+    cur.execute(
+        "UPDATE gap_events SET classified_category = %s WHERE gap_id = %s RETURNING *",
+        (category, str(gap_id)),
+    )
+    return GapEvent.from_row(cur.fetchone())
+
+
+def list_gap_events(cur: Cursor) -> list[GapEvent]:
+    cur.execute("SELECT * FROM gap_events ORDER BY escalated_at")
+    return [GapEvent.from_row(r) for r in cur.fetchall()]

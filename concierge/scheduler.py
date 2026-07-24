@@ -26,7 +26,7 @@ from typing import Any
 
 from psycopg import Cursor
 
-from . import config, db, followup, receipts, store, summary
+from . import config, db, followup, gaps, receipts, store, summary
 from .followup import FollowUpResult
 from .models import Receipt, Tenant
 from .postmark import Mailer, OutboundEmail
@@ -85,9 +85,16 @@ def process_tenant(cur: Cursor, tenant: Tenant, *,
 
     if due:
         since = last_sent or (now - timedelta(days=period_days))
+        # Feature 1: enrich this tenant's uncategorized gaps before the report reads them. A
+        # no-op (and no network call) when no LLM key is configured — the report then shows the
+        # gaps as raw, unclustered text, per the addendum's "degrade honestly" requirement. This
+        # is scheduled enrichment, not a decision, so `classify_pending` swallows its own errors.
+        gaps.classify_pending(cur, tenant)
         with_threads = store.list_threads(cur)
         with_receipts = store.list_receipts(cur)
-        s = summary.build_summary(with_threads, with_receipts, since=since, until=now)
+        with_gaps = store.list_gap_events(cur)
+        s = summary.build_summary(with_threads, with_receipts, since=since, until=now,
+                                  gap_events=with_gaps)
         text = summary.render_summary_text(tenant, s)
         result.summary_text = text
 

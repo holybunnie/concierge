@@ -21,13 +21,23 @@ from datetime import datetime, timezone as dt_timezone
 from typing import Any
 
 from . import pricing, store
-from .models import Receipt, Tenant, Thread
+from .models import GapEvent, Receipt, Tenant, Thread
 
 # Any receipt whose decision ended the thread in ESCALATED — the one state that always means
 # "the owner has to look at this themselves" (SB 243's human route, a floor breach, an unknown
 # service, a tripped escalation trigger). Counting the STATE rather than a hand-picked list of
 # action names means a new escalation path added later is counted automatically.
 _ESCALATED_STATE = "ESCALATED"
+
+# Feature 1 (Product-Gap Intelligence) — human labels for the coarse categories
+# `concierge/gaps.py` writes. A gap with no category (no LLM key configured) is shown as raw
+# text and never dropped — see `render_summary_text`.
+_GAP_LABELS = {
+    "service_not_offered": "a service you don't offer",
+    "pricing_tier_not_offered": "a pricing tier you don't offer",
+    "geography_not_served": "an area you don't serve",
+    "other": "other",
+}
 
 
 @dataclass
@@ -45,6 +55,11 @@ class Summary:
     follow_ups_sent: int = 0            # Safe Follow-Up nudges
     threads_gone_dead: int = 0          # Safe Follow-Up — went quiet, no reply
     escalation_examples: list[str] = field(default_factory=list)  # verbatim, most recent first
+    # Feature 1 (Product-Gap Intelligence) — inquiries that asked for something the tenant's
+    # profile could not answer. `gap_examples` is verbatim prospect text, never synthesized.
+    product_gaps: int = 0
+    gap_patterns: list[tuple[str, int]] = field(default_factory=list)  # (category, count) desc
+    gap_examples: list[str] = field(default_factory=list)             # verbatim, most recent first
 
 
 def _in_period(ts_raw: Any, start: datetime, end: datetime) -> bool:
@@ -57,10 +72,12 @@ def _in_period(ts_raw: Any, start: datetime, end: datetime) -> bool:
 
 
 def build_summary(threads: list[Thread], receipts: list[Receipt], *,
-                   since: datetime, until: datetime | None = None) -> Summary:
+                   since: datetime, until: datetime | None = None,
+                   gap_events: list[GapEvent] | None = None) -> Summary:
     """Pure aggregation over already-fetched rows — the caller (`scheduler.py`) fetches them via
-    `store.list_threads`/`store.list_receipts`, already RLS-scoped to one tenant. This function
-    never touches a cursor, so it is trivial to test against a hand-built list of real rows.
+    `store.list_threads`/`store.list_receipts`/`store.list_gap_events`, already RLS-scoped to one
+    tenant. This function never touches a cursor, so it is trivial to test against a hand-built
+    list of real rows. `gap_events` is optional so pre-Feature-1 callers keep working unchanged.
     """
     until = until or datetime.now(dt_timezone.utc)
     s = Summary(period_start=since, period_end=until)
@@ -102,6 +119,18 @@ def build_summary(threads: list[Thread], receipts: list[Receipt], *,
                 s.escalation_examples.append(body)
 
     s.escalation_examples = s.escalation_examples[-5:][::-1]   # most recent first, capped
+
+    # Feature 1 (Product-Gap Intelligence): the same ESCALATE-on-Unquotable transition counted
+    # above, but read from its own instrumentation table so the verbatim text and the optional
+    # category survive. `gap_events` arrive ordered oldest-first from `store.list_gap_events`.
+    gaps = [g for g in (gap_events or []) if _in_period(g.escalated_at, since, until)]
+    s.product_gaps = len(gaps)
+    s.gap_examples = [g.raw_query_text.strip() for g in gaps][-5:][::-1]  # most recent first
+    counts: dict[str, int] = {}
+    for g in gaps:
+        if g.classified_category:
+            counts[g.classified_category] = counts.get(g.classified_category, 0) + 1
+    s.gap_patterns = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
     return s
 
 
@@ -128,4 +157,22 @@ def render_summary_text(tenant: Tenant, s: Summary) -> str:
     if s.escalation_examples:
         lines += ["", "What came to you directly, most recent first:"]
         lines += [f"  - {ex}" for ex in s.escalation_examples]
+
+    # Feature 1 (Product-Gap Intelligence) — the market signal in the escalations: what
+    # prospects asked for that this business does not sell. Verbatim, never synthesized.
+    if s.product_gaps:
+        lines += ["",
+                  f"{s.product_gaps} inquiries this period asked for something you don't offer."]
+        if s.gap_patterns:
+            lines += ["Top patterns:"]
+            lines += [f"  - {_GAP_LABELS.get(cat, cat)}: {n}" for cat, n in s.gap_patterns]
+            categorized = sum(n for _, n in s.gap_patterns)
+            if categorized < s.product_gaps:
+                lines += [f"  - not yet categorized: {s.product_gaps - categorized}"]
+        else:
+            # Honest degradation (addendum §Feature 1): no LLM key, so gaps stay unclustered
+            # rather than being dropped or given a fabricated category.
+            lines += ["(Shown as raw text — connect an LLM key to cluster these into patterns.)"]
+        lines += ["Verbatim examples, most recent first:"]
+        lines += [f"  - {ex}" for ex in s.gap_examples]
     return "\n".join(lines)

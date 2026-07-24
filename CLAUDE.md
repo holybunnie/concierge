@@ -110,6 +110,16 @@ section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real cred
   nonexistent or malformed id gets. Do not "fix" a missing field on that page by widening
   `PUBLIC_ACTIONS` or by returning `tenant_id`/`thread_id` from `public_receipt` — GATE 6b's
   check 5 anchors a real floor-breach receipt and proves it is unreachable by its own real id.
+- **Product-Gap Intelligence is instrumentation on an existing decision, never a new one.** A
+  `gap_events` row is written by `engine.step` as ONE side effect of Phase 3's existing
+  `Unquotable`→ESCALATE transition — `engine.decide` sets `Decision.product_gap` only on that
+  branch, never on a floor breach, a human request, or a tripped trigger (recording "too cheap" or
+  "wants a person" as unmet market demand would be a lie). `gap_events` carries the same
+  `tenant_isolation` RLS policy as every other tenant table — do not add a new isolation mechanism
+  for it. Categorization (`gaps.classify_gap`) is OPTIONAL enrichment that runs later on a schedule;
+  absent or invalid `LLM_API_KEY` it returns `None` and the summary shows the gap as raw, verbatim
+  text — never a fabricated category, never silently dropped. GATE 8b-1 proves all of this, and its
+  check 5 proves the honest no-key degradation deterministically.
 - **The summary is arithmetic over stored receipts, never a separate ledger that could drift.**
   `summary.build_summary` counts the same rows every other gate already writes and verifies — no
   parallel bookkeeping. `scheduler.anchor_pending`/`followup.process_tenant` calls, run on a
