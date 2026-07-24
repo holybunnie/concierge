@@ -190,7 +190,7 @@ def run(r) -> None:
 
     # ---- 1. the full journey, NEW -> BOOKED
     msgs = ["Hi, how much is a deep tissue massage?",
-            "Could you do 75?",
+            "Could you do 80?",
             "yes please",
             "London",
             "2"]

@@ -127,7 +127,7 @@ def run(r) -> None:
 
     # ---- 2. the full journey NEW -> BOOKED against real Cal.com, then released
     msgs = ["Hi, how much is a deep tissue massage?",
-            "Could you do 75?",
+            "Could you do 80?",
             "yes please",
             "London",
             "1"]
@@ -154,7 +154,7 @@ def run(r) -> None:
              and booking_uid is not None
              and booked.get("status") in engine.ACCEPTED_BOOKING_STATUSES),
             "The whole conversation ran against live Cal.com: the £85 price was quoted from the\n"
-            "profile, £75 checked against the floor and agreed, the timezone asked for, three real\n"
+            "profile, £80 checked against the floor and agreed, the timezone asked for, three real\n"
             "openings offered in Europe/London, and the pick booked. The booking is treated as\n"
             "done only because the API returned an accepted status — GATE 0 proved this same\n"
             "server rejects a non-ISO start and a missing nested attendee, so a successful create\n"

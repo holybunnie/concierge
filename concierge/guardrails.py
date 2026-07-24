@@ -102,6 +102,19 @@ def bounds_for(profile: dict[str, Any], quote: Quote) -> list[Bound]:
     return out
 
 
+def binding_bound(bounds: list[Bound]) -> Bound | None:
+    """Which stored rule constrains a quote the hardest, if any.
+
+    Ties go to the floor (§ same rationale as `negotiate`). Factored out so Feature 2's
+    confidence scoring (`concierge.confidence`) can find the binding floor for a fresh quote —
+    one that has not been negotiated yet, so `negotiate()` itself is never called — without a
+    second copy of "the most restrictive rule wins" drifting out of sync with this one.
+    """
+    if not bounds:
+        return None
+    return max(bounds, key=lambda b: (b.limit, b.rule_name == pricing.RULE_FLOOR))
+
+
 def negotiate(profile: dict[str, Any], quote: Quote, asked: float) -> Ruling:
     """May CONCIERGE agree to `asked`? Arithmetic only — the prospect's wording is not an input."""
 
@@ -126,7 +139,7 @@ def negotiate(profile: dict[str, Any], quote: Quote, asked: float) -> Ruling:
 
     # The most restrictive rule wins. Ties go to the floor, which is the rule the owner is
     # most likely to be able to recite from memory if a client ever challenges it.
-    binding = max(bounds, key=lambda b: (b.limit, b.rule_name == pricing.RULE_FLOOR))
+    binding = binding_bound(bounds)
     floor = binding.limit
 
     if asked >= quote.amount:

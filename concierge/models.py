@@ -8,7 +8,10 @@ from datetime import datetime
 from typing import Any
 
 # Thread states (§9). A thread is always in exactly one of these.
-STATES = ("NEW", "ENGAGED", "AWAITING_REPLY", "NEGOTIATING", "BOOKED", "ESCALATED", "IGNORED", "DEAD")
+# AWAITING_OWNER_APPROVAL (Feature 2, GATE 3b-2): a reply was drafted but scored below the
+# tenant's autonomy threshold for that service, so it is held for the owner rather than sent.
+STATES = ("NEW", "ENGAGED", "AWAITING_REPLY", "NEGOTIATING", "BOOKED", "ESCALATED", "IGNORED",
+          "DEAD", "AWAITING_OWNER_APPROVAL")
 
 
 @dataclass
@@ -67,11 +70,12 @@ class Receipt:
     content_hash: str
     signature: str | None = None
     xlayer_tx: str | None = None
+    confidence: dict[str, Any] | None = None
     created_at: datetime | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> "Receipt":
         return cls(**{k: row[k] for k in (
             "receipt_id", "tenant_id", "thread_id", "action", "decision", "rule_checked",
-            "within_rules", "content_hash", "signature", "xlayer_tx", "created_at",
+            "within_rules", "content_hash", "signature", "xlayer_tx", "confidence", "created_at",
         )})

@@ -49,7 +49,7 @@ from zoneinfo import ZoneInfo, available_timezones
 
 from psycopg import Cursor
 
-from . import guardrails, lexicon, pricing, receipts, store
+from . import confidence, guardrails, lexicon, pricing, receipts, store
 from .models import Receipt, Tenant, Thread
 from .pricing import Quote, Unquotable
 
@@ -114,6 +114,10 @@ PROSE: dict[str, str] = {
     "closed":
         "{business} has this one directly now, so I'll leave it with them rather than "
         "reply over the top of a colleague.",
+
+    "awaiting_approval_hold":
+        "Thanks for the follow-up — {business} is reviewing the last reply before it goes "
+        "out, and you'll hear from them shortly.",
 }
 
 # Words that would make this a single-trade product if they appeared in PROSE. The GATE 3
@@ -199,6 +203,7 @@ class Outcome:
     within_rules: bool
     derivation: tuple[str, ...] = ()
     quote: Quote | None = None
+    confidence: dict[str, Any] | None = None
 
 
 @dataclass
@@ -217,6 +222,7 @@ class Decision:
     offer: dict[str, Any] | None = None
     client_timezone: str | None = None
     offered_slots: list[dict[str, Any]] | None = None
+    confidence: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------- conversational acts
@@ -343,9 +349,17 @@ def notice_hours(profile: dict[str, Any]) -> int | None:
 # ---------------------------------------------------------------- the decision
 
 def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
-           calendar: Calendar | None = None) -> Decision:
-    """Work out what to do about one message. Pure: reads state, writes nothing."""
+           calendar: Calendar | None = None,
+           precedent: list[Receipt] | None = None) -> Decision:
+    """Work out what to do about one message. Pure: reads state, writes nothing.
+
+    `precedent` is this tenant's own receipt history, already RLS-scoped — fetched by `step()`
+    (which owns the cursor) and passed in as data, the same seam pattern as `calendar`, so this
+    function stays a pure read of whatever it is given rather than reaching for a connection
+    itself. It feeds Feature 2's precedent signal (`confidence.score`) only.
+    """
     calendar = calendar or NoCalendar()
+    precedent = precedent or []
     profile = tenant.profile or {}
     words = lexicon.words(profile)
     text = inbound.body or ""
@@ -362,13 +376,20 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
         )
 
     # A thread the owner has taken over is not re-entered. Replying over the top of a human
-    # colleague is worse than silence.
-    if thread.state in ("ESCALATED", "BOOKED", "IGNORED", "DEAD"):
+    # colleague is worse than silence. AWAITING_OWNER_APPROVAL (Feature 2) is the same
+    # principle: a drafted reply is already waiting on the owner, so a further message from the
+    # prospect must not trigger a second autonomous decision on top of it.
+    if thread.state in ("ESCALATED", "BOOKED", "IGNORED", "DEAD", "AWAITING_OWNER_APPROVAL"):
+        hold_reply = (
+            PROSE["closed"] if thread.state == "ESCALATED"
+            else PROSE["awaiting_approval_hold"] if thread.state == "AWAITING_OWNER_APPROVAL"
+            else None
+        )
         return Decision(
             state_after=thread.state, action="hold", rule_checked="thread.state is terminal",
             within_rules=True,
             detail={"state": thread.state, "note": "no autonomous reply into a closed thread"},
-            reply_body=PROSE["closed"] if thread.state == "ESCALATED" else None,
+            reply_body=hold_reply,
             owner_alert=f"[{tenant.business_name}] Further message on a {thread.state} thread "
                         f"from {inbound.from_address}: {text.strip()}",
         )
@@ -463,6 +484,10 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
         agreed = ruling.agreed
         offer["agreed"] = agreed
         holding = agreed is not None and quote.amount is not None and agreed >= quote.amount
+        conf = confidence.score(
+            profile=profile, service=quote.service_name, amount=quote.amount,
+            agreed=agreed, floor=ruling.floor, receipts=precedent,
+        ).as_dict()
         return Decision(
             state_after="AWAITING_REPLY", action="counter_within_rules",
             rule_checked=f"pricing_rules.{ruling.binding_rule}", within_rules=True,
@@ -470,7 +495,7 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
             reply_body=(PROSE["hold_price"] if holding else PROSE["counter_agreed"]),
             derivation=tuple(str(b) for b in ruling.bounds),
             quote=quote, offer=offer,
-            owner_alert=None)
+            owner_alert=None, confidence=conf)
 
     if thread.state in ("AWAITING_REPLY", "NEGOTIATING") and is_acceptance(text):
         if not offer.get("quote"):
@@ -497,6 +522,17 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
         "quote": _offer_from_quote(quote),
         "awaiting": "reply",
     }
+    conf = None
+    if quote.unit != "prose" and quote.amount is not None:
+        # A fresh quote, nothing negotiated yet — `agreed` is just the quoted amount, and the
+        # binding floor (if any) comes straight from the stored bounds, not from a `Ruling`,
+        # because `guardrails.negotiate` is not called until the prospect actually counters.
+        floor_bound = guardrails.binding_bound(guardrails.bounds_for(profile, quote))
+        conf = confidence.score(
+            profile=profile, service=quote.service_name, amount=quote.amount,
+            agreed=quote.amount, floor=floor_bound.limit if floor_bound else None,
+            receipts=precedent,
+        ).as_dict()
     return Decision(
         state_after="AWAITING_REPLY", action="quoted",
         rule_checked="profile.services + pricing_rules", within_rules=True,
@@ -506,7 +542,7 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
             "derivation": [str(d) for d in quote.derivation],
         },
         reply_body=PROSE["quote"], derivation=tuple(str(d) for d in quote.derivation),
-        quote=quote, offer=offer)
+        quote=quote, offer=offer, confidence=conf)
 
 
 # ---------------------------------------------------------------- booking helpers
@@ -590,7 +626,11 @@ def _book(tenant, thread, inbound, offer, idx, words, calendar, escalate):
         rule_checked="§9b.5 — booking status confirmed via API response", within_rules=True,
         detail={"booking_ref": result.get("id"), "status": status,
                 "start_utc": chosen["start_utc"], "timezone": tz,
-                "agreed": offer.get("agreed"), "service": (offer.get("quote") or {}).get("service")},
+                "agreed": offer.get("agreed"), "service": (offer.get("quote") or {}).get("service"),
+                # The quoted amount, kept even when nothing was negotiated (`agreed` is then
+                # None) — Feature 2's precedent signal needs a figure to match against either
+                # way (`concierge.confidence._precedent`).
+                "amount": (offer.get("quote") or {}).get("amount")},
         reply_body=PROSE["booked"], offer=offer)
 
 
@@ -681,10 +721,39 @@ def step(cur: Cursor, tenant: Tenant, thread: Thread, inbound: Inbound,
          calendar: Calendar | None = None) -> Outcome:
     """Decide, reply, persist, and write the receipt. The cursor is already RLS-scoped."""
     before = thread.state
-    decision = decide(tenant, thread, inbound, calendar)
+    precedent = store.list_receipts(cur)   # this tenant's own history, RLS-scoped — Feature 2
+    decision = decide(tenant, thread, inbound, calendar, precedent=precedent)
     reply = render(tenant, decision, thread)
 
-    thread.state = decision.state_after
+    # Feature 2 (GATE 3b-2): a pricing/negotiation decision that scored below this service's
+    # autonomy threshold is drafted but not sent. The decision itself (state, offer, rule
+    # checked) is unchanged — only whether the prospect sees it changes. Queuing happens here,
+    # not in `decide()`, because only `step()` knows what the rendered reply actually says.
+    queued = decision.confidence is not None and not decision.confidence["autonomous"]
+    state_after = "AWAITING_OWNER_APPROVAL" if queued else decision.state_after
+    owner_alert = decision.owner_alert
+    outbound_reply = reply
+
+    if queued:
+        drafted_reply = reply
+        outbound_reply = None
+        offer = dict(decision.offer if decision.offer is not None else (thread.current_offer or {}))
+        offer["pending_approval"] = {
+            "decision_action": decision.action,
+            "drafted_reply": drafted_reply,
+            "confidence": decision.confidence,
+        }
+        decision.offer = offer
+        conf = decision.confidence
+        owner_alert = (
+            f"[{tenant.business_name}] Confidence {conf['score']:.2f} is below the "
+            f"{conf['threshold']:.2f} autonomy threshold set for {conf['service_key']!r}, so "
+            f"this reply is drafted but held for you rather than sent automatically.\n\n"
+            f"Drafted reply:\n{drafted_reply}\n\n"
+            f"From: {inbound.from_address}\nTheir message: {inbound.body.strip()}"
+        )
+
+    thread.state = state_after
     if decision.offer is not None:
         thread.current_offer = decision.offer
     if decision.client_timezone:
@@ -697,8 +766,9 @@ def step(cur: Cursor, tenant: Tenant, thread: Thread, inbound: Inbound,
     now = datetime.now(dt_timezone.utc).isoformat()
     thread.history = list(thread.history or []) + [
         {"at": now, "direction": "in", "from": inbound.from_address, "text": inbound.body},
-        {"at": now, "direction": "out", "state": decision.state_after,
-         "action": decision.action, "text": reply},
+        {"at": now, "direction": "out", "state": state_after,
+         "action": decision.action, "text": outbound_reply,
+         **({"queued_for_approval": True} if queued else {})},
     ]
     thread = store.save_thread(cur, thread) or thread
 
@@ -708,21 +778,24 @@ def step(cur: Cursor, tenant: Tenant, thread: Thread, inbound: Inbound,
         action=decision.action, rule_checked=decision.rule_checked,
         within_rules=decision.within_rules,
         decision={
-            "state_before": before, "state_after": decision.state_after,
+            "state_before": before, "state_after": state_after,
             "action": decision.action, "rule_checked": decision.rule_checked,
             "within_rules": decision.within_rules,
             "inbound_from": inbound.from_address, "inbound_body": inbound.body,
-            "reply_sent": reply,
+            "reply_sent": outbound_reply,
+            "queued_for_approval": queued,
             "detail": decision.detail,
             "lexicon_fallbacks": list(words.gaps),
-        })
+        },
+        confidence=decision.confidence,
+    )
 
     return Outcome(
-        thread=thread, state_before=before, state_after=decision.state_after,
-        reply=reply, owner_alert=decision.owner_alert, receipt=receipt,
+        thread=thread, state_before=before, state_after=state_after,
+        reply=outbound_reply, owner_alert=owner_alert, receipt=receipt,
         action=decision.action, rule_checked=decision.rule_checked,
         within_rules=decision.within_rules, derivation=decision.derivation,
-        quote=decision.quote)
+        quote=decision.quote, confidence=decision.confidence)
 
 
 def open_thread(cur: Cursor, tenant: Tenant, inbound: Inbound) -> Thread:

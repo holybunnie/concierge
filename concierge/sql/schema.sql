@@ -63,8 +63,15 @@ CREATE TABLE IF NOT EXISTS receipts (
     content_hash  text        NOT NULL,
     signature     text,
     xlayer_tx     text,
+    -- Feature 2 (GATE 3b-2): {score, threshold, autonomous, service_key, signals}, computed by
+    -- concierge/confidence.py. NULL for decisions the feature does not apply to (spam, prose
+    -- fees, escalations) — never a fabricated score standing in for "not applicable".
+    confidence    jsonb,
     created_at    timestamptz NOT NULL DEFAULT now()
 );
+
+-- Idempotent add for a table that may already exist from before Feature 2.
+ALTER TABLE receipts ADD COLUMN IF NOT EXISTS confidence jsonb;
 
 CREATE INDEX IF NOT EXISTS receipts_tenant_thread ON receipts (tenant_id, thread_id);
 

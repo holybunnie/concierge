@@ -42,6 +42,12 @@ current. Summary:
 | 7 A2A escrow + settlement | blocked | operator item 5, ledger U3 |
 | 8 Summary + scheduled actions | not started | |
 | 9 Hardening + submission | not started | deadline 2026-07-27 22:59 UTC |
+| 3b-2 Confidence-scored autonomy (addendum Feature 2) | done | 7 pass / 2 info |
+
+Feature addendum (Product-Gap Intelligence, Confidence-Scored Autonomy, Public Receipt
+Verification, Cross-Tenant Benchmarking, Decaying Floor, Safe Follow-Up) attaches to the phases
+above rather than replacing them — see `docs/HANDOFF.md`'s "Feature addendum" section for the
+per-feature gate table. `verify.py --phase` takes a string now (`3b-2`, `6b`, … alongside `0`-`6`).
 
 Repo: **github.com/holybunnie/concierge** (public). If `git push` returns 403, see the git
 section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real credentials.
@@ -71,6 +77,13 @@ section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real cred
 - **Never fabricate a credential or a placeholder that looks live.** Missing domain yields
   `PENDING-DOMAIN.invalid` (RFC 2606), which fails loudly by construction.
 - **AI disclosure in the first line of every outbound message**, with a route to a human.
+- **No confidence score, floor-curve point or benchmark aggregate comes from a language model.**
+  `confidence.py` computes a decision-confidence score from three named, stored signals (profile
+  completeness, floor proximity, precedent) via a fixed weighted formula — it may only decide
+  whether an already-computed reply sends immediately or queues in `AWAITING_OWNER_APPROVAL` for
+  the owner. It never touches the price, the rule, or the state the pricing/guardrail decision
+  already produced. GATE 3b-2 proves both directions (thin profile queues, complete + precedent-
+  rich profile sends) and re-proves GATE 3's own NEW→BOOKED journey is unaffected.
 
 ## Local setup
 

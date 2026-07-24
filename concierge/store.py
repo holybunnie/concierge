@@ -137,16 +137,18 @@ def insert_receipt(
     content_hash: str,
     signature: str | None = None,
     xlayer_tx: str | None = None,
+    confidence: dict[str, Any] | None = None,
 ) -> Receipt:
     cur.execute(
         """
         INSERT INTO receipts (receipt_id, tenant_id, thread_id, action, decision, rule_checked,
-                              within_rules, content_hash, signature, xlayer_tx)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                              within_rules, content_hash, signature, xlayer_tx, confidence)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING *
         """,
         (uuid.uuid4(), tenant_id, thread_id, action, Jsonb(decision), rule_checked,
-         within_rules, content_hash, signature, xlayer_tx),
+         within_rules, content_hash, signature, xlayer_tx,
+         Jsonb(confidence) if confidence is not None else None),
     )
     return Receipt.from_row(cur.fetchone())
 

@@ -16,10 +16,15 @@ python3 verify.py --phase 0        # expect 9 pass / 0 fail / 2 info
 python3 verify.py --phase 1        # expect 11 pass / 0 fail
 python3 verify.py --phase 2        # expect 11 pass / 0 fail / 1 info
 python3 verify.py --phase 3        # expect 16 pass / 0 fail / 3 info
+python3 verify.py --phase 3b-2     # expect 7 pass / 0 fail / 2 info — Feature 2, confidence-scored autonomy
 python3 verify.py --phase 4        # expect 8 pass / 0 fail / 3 info
 python3 verify.py --phase 5        # expect 5 pass / 0 fail / 2 info — makes+cancels a real booking
 python3 verify.py --phase 6        # expect 8 pass / 0 fail / 1 info — anchors 2 real receipts on X Layer mainnet
 ```
+
+`--phase` now takes a string, so sub-gates from the feature addendum sit alongside the numbered
+phases (`3b-2` today; `6b`, `7b`, `8b-1`, `3b-3`, `3b-4` as they're built — see "Feature addendum"
+below). The plain numeric phases are unchanged in behavior and in what "pass" means.
 
 All must be green before writing new code. They make real network calls and run real SQL — no
 fixtures, no mocks, with one declared exception: GATE 3's calendar, which is a fixture living in
@@ -74,6 +79,39 @@ git config --local --add credential.helper \
 | 4 Email connector (Postmark) | **8 pass / 3 info** | code complete; live inbox delivery pending items 1-3 |
 | 5 Booking (live Cal.com) | **5 pass / 2 info** | real booking created + cancelled against live Cal.com |
 | 6 Receipts on X Layer mainnet | **8 pass / 1 info** | ReceiptAnchor deployed, 2 real receipts anchored, tamper + forgery attacks caught |
+| 3b-2 Confidence-scored autonomy (Feature 2) | **7 pass / 2 info** | thin profile queues, complete profile auto-sends, precedent moves a marginal figure over the line, GATE 3 regression re-proved |
+
+## Feature addendum (Phases 3b/6b/8b/7b) — status
+
+Five features attach to the existing phase plan rather than restarting it (full spec: the
+addendum message itself, not reproduced here). Sequencing per the addendum's Part IV:
+
+| Feature | Attaches to | Gate | State |
+|---|---|---|---|
+| 2 — Confidence-scored autonomy | Phase 3 | 3b-2 | **done**, 7 pass / 0 fail / 2 info |
+| 5 — Decaying floor | Phase 3 | 3b-3 | not started |
+| Safe Follow-Up | Phase 3 | 3b-4 | not started |
+| 3 — Public receipt verification | Phase 6 | 6b | not started |
+| 1 — Product-gap intelligence | Phase 8 | 3b/8b-1 | not started (needs Phase 8) |
+| 4 — Cross-tenant benchmarking | Phase 7 | 7b | blocked — needs real Phase 7 engagement data first, per the addendum's own §0.2 |
+
+**What Feature 2 added:** `concierge/confidence.py` (three deterministic signals — profile
+completeness, floor proximity, precedent — combined by a fixed, documented weighted formula;
+never an LLM call), a new `AWAITING_OWNER_APPROVAL` thread state, a `confidence jsonb` column on
+`receipts` (persisted alongside the decision, not just rendered for display), and the gating
+logic in `engine.step()` that drafts-but-holds a reply scoring below the tenant's per-service
+`profile.autonomy_thresholds` (default 0.55, conservative). `verify_phase3b.py` / GATE 3b-2 proves
+it end to end, including a real regression re-run of GATE 3's own NEW→BOOKED journey.
+
+One correction made *while building this feature*, worth recording here since the ledger is for
+external facts and this isn't one — it's an internal calibration note: the first weighting
+(0.40/0.35/0.25, threshold 0.70) broke GATE 3's and GATE 5's existing "full autonomous journey"
+fixtures, because with a 0.25 precedent weight no brand-new tenant could ever clear 0.70 on a real
+negotiated discount. Recalibrated to 0.40/0.45/0.15 with a 0.55 threshold (see `confidence.py`'s
+own docstring for the two scenarios it's calibrated against) and adjusted GATE 3/5's demo
+counter-offer from £75 to £80 so their "comfortable, non-marginal negotiation" fixtures stay
+comfortable rather than sitting on the boundary this feature exists to flag. The £75-against-a-
+£72.25-floor case is now what GATE 3b-2 checks 3-4 use on purpose, to prove that exact boundary.
 
 ### What Phase 4 added
 
@@ -255,6 +293,9 @@ Each has a harness check that fails loudly if broken.
    tenant's reservation price; the breach escalates and no figure is sent (GATE 3 check 7).
 9. **Nothing is claimed as booked without the calendar API confirming it**, and with no calendar
    connected the engine escalates rather than inventing an appointment (GATE 3 check 12).
+10. **No confidence score, floor-curve point or benchmark aggregate comes from a language
+    model.** `confidence.py` is arithmetic over three named, stored signals; it may only decide
+    whether a reply sends or queues, never what the reply says (GATE 3b-2).
 
 ## Open questions for the operator
 

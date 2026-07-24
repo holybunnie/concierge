@@ -55,17 +55,20 @@ def record(
     decision: dict[str, Any],
     rule_checked: str,
     within_rules: bool,
+    confidence: dict[str, Any] | None = None,
 ) -> Receipt:
     """Write the receipt for one decision. The cursor is already tenant-scoped by RLS.
 
     `signature` and `xlayer_tx` are left NULL deliberately — see the module docstring. A
     fabricated transaction hash would make every receipt in the table untrustworthy, including
-    the real ones added later.
+    the real ones added later. `confidence` (Feature 2, GATE 3b-2) is `concierge.confidence`'s
+    computed score for this decision, or None when the feature does not apply to it.
     """
     return store.insert_receipt(
         cur, tenant_id=tenant_id, thread_id=thread_id, action=action,
         decision=decision, rule_checked=rule_checked, within_rules=within_rules,
         content_hash=content_hash(decision), signature=None, xlayer_tx=None,
+        confidence=confidence,
     )
 
 

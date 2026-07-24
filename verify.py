@@ -29,7 +29,7 @@ USER_AGENT = "CONCIERGE-verify/0.1 (+https://github.com/concierge-asp)"
 class Report:
     """Collects checks and prints them as prose with evidence attached."""
 
-    def __init__(self, phase: int, title: str, preamble: str = ""):
+    def __init__(self, phase: str, title: str, preamble: str = ""):
         self.phase = phase
         self.title = title
         self.preamble = preamble
@@ -465,20 +465,52 @@ def phase6() -> int:
     return r.render()
 
 
-PHASES = {0: phase0, 1: phase1, 2: phase2, 3: phase3, 4: phase4, 5: phase5, 6: phase6}
+def phase3b2() -> int:
+    r = Report(
+        "3b-2",
+        "Confidence-scored autonomy (Feature 2)",
+        preamble=(
+            "\nGATE 3b-2 extends GATE 3's state machine with one more question per pricing\n"
+            "decision: not just 'is this within the rules', but 'how confident is CONCIERGE that\n"
+            "it should send this without a human looking first'. The score is arithmetic over\n"
+            "three named, stored signals (concierge/confidence.py) — never an LLM's self-reported\n"
+            "certainty, and it never changes a price. Checks 1-2 are a thin profile queuing and a\n"
+            "complete one auto-sending; 3-4 prove the score is persisted and retrievable, not just\n"
+            "shown once; 5 is the regression proof that GATE 3's baseline is unaffected.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase3b
+        verify_phase3b.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 3b-2 harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
+PHASES = {
+    "0": phase0, "1": phase1, "2": phase2, "3": phase3, "4": phase4, "5": phase5, "6": phase6,
+    "3b-2": phase3b2,
+}
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="CONCIERGE verification harness")
-    ap.add_argument("--phase", type=int, required=True)
+    ap.add_argument("--phase", type=str, required=True,
+                    help="e.g. 0, 1, ... 6, or a sub-gate like 3b-2")
     args = ap.parse_args()
 
-    if args.phase not in PHASES:
-        built = ", ".join(str(p) for p in sorted(PHASES))
-        print(f"Phase {args.phase} has no harness yet. Built so far: {built}.")
+    key = args.phase.strip()
+    if key not in PHASES:
+        built = ", ".join(sorted(PHASES, key=lambda k: (len(k), k)))
+        print(f"Phase {key!r} has no harness yet. Built so far: {built}.")
         print("This is not a pass. It means that phase has not been implemented.")
         return 2
-    return PHASES[args.phase]()
+    return PHASES[key]()
 
 
 if __name__ == "__main__":
