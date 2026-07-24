@@ -66,27 +66,48 @@ class Ruling:
         return not self.allowed
 
 
-def bounds_for(profile: dict[str, Any], quote: Quote) -> list[Bound]:
+def bounds_for(profile: dict[str, Any], quote: Quote, *,
+                round_index: int = 0, days_elapsed: int = 0) -> list[Bound]:
     """Every stored rule that constrains this quote, expressed in the quote's own unit.
 
     A floor is only comparable to a quote in the same unit: a 1.2% commission floor says
     nothing about an £85 cash price. A mismatched floor is dropped here and reported rather
     than coerced — coercing it would invent a bound the tenant never set.
+
+    `round_index` / `days_elapsed` matter only when the tenant set a decaying floor (Feature 5,
+    `pricing_rules.floor_curve`) — the caller (`engine.py`, which owns the thread) resolves both
+    from the real conversation and passes them in; this function just picks whichever the
+    curve's own `decay_trigger` asked for. A tenant with no curve set never looks at either
+    argument, so behaviour is byte-for-byte identical to before Feature 5 existed.
     """
     out: list[Bound] = []
     if quote.amount is None:
         return out
 
-    floor = pricing.rule(profile, pricing.RULE_FLOOR)
-    if floor and floor.get("value") is not None:
-        floor_unit = "cash" if floor["kind"] == "cash" else "percent"
+    curve = pricing.floor_curve(profile)
+    if curve is not None:
+        floor_unit = "percent" if curve.get("kind") == "percent" else "cash"
         if floor_unit == quote.unit:
+            trigger = curve.get("decay_trigger", "rounds")
+            index = days_elapsed if trigger == "days" else round_index
+            value, point = pricing.floor_curve_value(curve, index)
             out.append(Bound(
                 rule_name=pricing.RULE_FLOOR,
-                profile_path=f"pricing_rules.{pricing.RULE_FLOOR}",
-                raw=floor.get("raw"), limit=float(floor["value"]),
-                derivation="the tenant's stated floor, used as-is",
+                profile_path="pricing_rules.floor_curve",
+                raw=curve, limit=value,
+                derivation=f"decaying floor ({trigger}) — {point}",
             ))
+    else:
+        floor = pricing.rule(profile, pricing.RULE_FLOOR)
+        if floor and floor.get("value") is not None:
+            floor_unit = "cash" if floor["kind"] == "cash" else "percent"
+            if floor_unit == quote.unit:
+                out.append(Bound(
+                    rule_name=pricing.RULE_FLOOR,
+                    profile_path=f"pricing_rules.{pricing.RULE_FLOOR}",
+                    raw=floor.get("raw"), limit=float(floor["value"]),
+                    derivation="the tenant's stated floor, used as-is",
+                ))
 
     cap = pricing.rule(profile, pricing.RULE_MAX_DISCOUNT)
     if cap and cap.get("value") is not None:
@@ -115,8 +136,14 @@ def binding_bound(bounds: list[Bound]) -> Bound | None:
     return max(bounds, key=lambda b: (b.limit, b.rule_name == pricing.RULE_FLOOR))
 
 
-def negotiate(profile: dict[str, Any], quote: Quote, asked: float) -> Ruling:
-    """May CONCIERGE agree to `asked`? Arithmetic only — the prospect's wording is not an input."""
+def negotiate(profile: dict[str, Any], quote: Quote, asked: float, *,
+              round_index: int = 0, days_elapsed: int = 0) -> Ruling:
+    """May CONCIERGE agree to `asked`? Arithmetic only — the prospect's wording is not an input.
+
+    `round_index` / `days_elapsed` only matter to a tenant who set a decaying floor (Feature 5)
+    — see `bounds_for`. Omitting them (the default) reproduces the flat-floor behaviour this
+    function has always had.
+    """
 
     if quote.unit == "prose" or quote.amount is None:
         return Ruling(
@@ -127,7 +154,7 @@ def negotiate(profile: dict[str, Any], quote: Quote, asked: float) -> Ruling:
                 f"on it goes to the owner."),
         )
 
-    bounds = bounds_for(profile, quote)
+    bounds = bounds_for(profile, quote, round_index=round_index, days_elapsed=days_elapsed)
     if not bounds:
         return Ruling(
             allowed=False, agreed=None, floor=None, binding_rule=None, bounds=(),

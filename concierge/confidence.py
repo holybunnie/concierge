@@ -76,7 +76,10 @@ PRECEDENT_BAND_PCT = 0.10
 PRECEDENT_FULL_CONFIDENCE_COUNT = 3
 
 _COMPLETENESS_CHECKS: tuple[tuple[str, Any], ...] = (
-    ("pricing_rules.floor", lambda p: bool(pricing.rule(p, pricing.RULE_FLOOR))),
+    # A floor is "set" whether it's the flat rule or Feature 5's decaying curve — both are the
+    # tenant stating a real floor, just in a richer shape for the curve.
+    ("pricing_rules.floor", lambda p: bool(pricing.rule(p, pricing.RULE_FLOOR))
+                                       or pricing.floor_curve(p) is not None),
     ("pricing_rules.max_discount", lambda p: bool(pricing.rule(p, pricing.RULE_MAX_DISCOUNT))),
     ("escalation_triggers", lambda p: bool(p.get("escalation_triggers"))),
     ("calendar_ref.booking_rules",

@@ -27,9 +27,15 @@ Anyone can say their agent "quotes intelligently." The interesting question is w
 
 ## Status
 
-**Phases 0–2 complete. GATE 0, 1 and 2 passed.** Foundations, external verification, the tenant
-model with structural isolation, and vertical-aware onboarding. The deal engine itself (Phase 3)
-is next.
+**Phases 0–6 complete.** Foundations and live external verification, the tenant model with
+structural isolation, vertical-aware onboarding, the deal-engine state machine and guardrails,
+email (Postmark, code-complete pending operator go-live items), booking against live Cal.com, and
+receipts anchored on X Layer **mainnet**. On top of that, a full follow-on feature addendum's
+Phase-3 family is also built and gated: **confidence-scored autonomy**, **the decaying floor**, and
+**Safe Follow-Up** (all described below). Phase 7 (A2A escrow) is blocked on an unresolved API
+shape; Phase 8 (summary + scheduled actions) and the remaining addendum features (public receipt
+verification, product-gap intelligence, cross-tenant benchmarking) are not started. Full state, per
+phase and per feature, in [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 ```bash
 pip install -r requirements.txt
@@ -38,13 +44,25 @@ docker compose up -d postgres        # GATE 1 needs a real Postgres; SQLite cann
 python3 verify.py --phase 0          # live calls to Cal.com and X Layer, raw evidence printed
 python3 verify.py --phase 1          # 11 checks, 9 of which are attacks on tenant isolation
 python3 verify.py --phase 2          # 11 checks on real estate / barrister / spa onboarding
+python3 verify.py --phase 3          # the state machine + guardrails, 16 checks
+python3 verify.py --phase 3b-2       # confidence-scored autonomy, 7 checks
+python3 verify.py --phase 3b-3       # the decaying floor, 4 checks
+python3 verify.py --phase 3b-4       # Safe Follow-Up, 3 checks
+python3 verify.py --phase 4          # email connector (Postmark), 8 checks
+python3 verify.py --phase 5          # booking against live Cal.com — makes + cancels a real booking
+python3 verify.py --phase 6          # receipts anchored on X Layer mainnet — spends real (tiny) gas
 ```
 
-Neither harness contains a mock or a fixture response. Phase 0 makes real network calls and
-reports FAIL if the network is down rather than falling back to a cached answer. Phase 1 runs
-real SQL against a real PostgreSQL 16 server as the real unprivileged application role.
+`--phase` takes a string, so feature-addendum sub-gates (`3b-2`, `3b-3`, more to come) sit
+alongside the numbered phases without disturbing what they already prove.
 
-Phases 2–9 are not started. Nothing in this repo simulates a phase it has not built.
+Neither harness contains a mock or a fixture response, with two narrowly declared exceptions,
+named as such in every check that touches them: GATE 3's calendar (a fixture that lives in the
+harness, not the package — GATE 5 replaces it with live Cal.com calls) and GATE 4's recording
+mailer (replaced by a real Postmark client once the operator's account is approved). Phase 0 makes
+real network calls and reports FAIL if the network is down rather than falling back to a cached
+answer. Every other gate runs real SQL against a real PostgreSQL 16 server as the real
+unprivileged application role — nothing in this repo simulates a phase it has not built.
 
 ### How isolation is actually enforced (GATE 1)
 
@@ -86,6 +104,67 @@ The failure this phase exists to prevent is a business quoting £85 because the 
 Classification is a weighted lexicon that returns the exact terms behind its decision — no LLM.
 That is partly auditability and partly that the LLM key hasn't arrived, and a classifier that
 needs a credential we don't have is a classifier that doesn't exist.
+
+### Confidence-scored autonomy — not every reply earns the right to send itself (GATE 3b-2)
+
+Every quote and counter-offer CONCIERGE computes now carries a **decision-confidence score**,
+worked out from three things that are actually checkable, not felt: how complete the tenant's own
+profile is, how close the agreed figure sits to their floor, and whether this exact price has been
+booked before. A reply scoring below the tenant's own per-service threshold (conservative by
+default) is **drafted but not sent** — it queues for the owner to approve or edit, in a new thread
+state, rather than going out on a guess.
+
+- **The score is arithmetic, never a model's self-reported certainty.** `concierge/confidence.py`
+  imports nothing that could reach a network, exactly like `pricing.py` and `guardrails.py`. It
+  may only decide whether an already-computed reply sends or waits — never the price, the rule, or
+  the words in it.
+- **It is persisted, not just rendered once.** The score and every signal that produced it are
+  written onto the same receipt Phase 3 already writes, so it can be read back and argued over
+  later — the harness proves this with a fresh database query, not the in-memory object.
+- **A thin profile queues; a complete one, doing the same kind of quote, sends immediately** — and
+  a *complete* profile still queues a negotiation sitting right on the floor, because completeness
+  alone isn't the whole story. Three real prior bookings at that exact price move the same
+  previously-marginal figure into auto-send territory. GATE 3b-2 proves both directions, plus a
+  regression re-run of GATE 3's own fully-autonomous booking journey to show it's unaffected.
+
+### The decaying floor — a richer floor shape, still a hard bound (GATE 3b-3)
+
+A tenant's floor doesn't have to be one flat number. `pricing_rules.floor_curve` lets a tenant
+optionally declare a curve — start at a higher figure, allow more room as a negotiation goes on
+(measured in rounds or days), but never below an absolute floor — and the *same* guardrail check
+GATE 3 already proved evaluates the current point on that curve instead of a static one.
+
+- **Optional, and backward compatible.** A tenant who never sets a curve negotiates on the flat
+  floor exactly as before — nothing about `bounds_for` or `negotiate` changes for them, proven by
+  re-running GATE 3's flat-floor tenant at round 0 and round 9 and getting byte-identical rulings.
+- **The absolute floor is a hard clamp, not a convention.** It's enforced inside the function that
+  reads the curve, so no caller — however far into a negotiation, however the curve was authored —
+  can construct a bound below it. GATE 3b-3's red-team pushes six real negotiation rounds past
+  where the curve's defined points run out and confirms the floor never moves a penny further.
+- **The curve is set by the tenant, never inferred.** Nothing adjusts it mid-negotiation — "be
+  more flexible because the conversation feels promising" is exactly the failure mode this design
+  refuses to implement, and there is no function in this codebase that could do it.
+
+### Safe Follow-Up — re-engaging a thread that already exists, never cold outbound (GATE 3b-4)
+
+A prospect asks a question, gets a quote, then goes quiet. Safe Follow-Up nudges them once — from
+the *same* thread's own history, not a generic template — and marks the thread `DEAD` if a second,
+longer silence follows. It is deliberately **not** cold outbound (prospecting a stranger who never
+contacted the tenant): that's a different product decision, with a different legal footing, and
+this build refuses to blur the two.
+
+- **The nudge is drawn from the actual conversation.** `followup.draft` calls the same
+  `engine.render` every other reply uses, so it inherits the AI disclosure, the tenant's own
+  nouns, and — via the same mechanism the `booked` confirmation already uses — whatever price is
+  actually on the table for that thread. Never "just checking in" with nothing behind it.
+- **The boundary against cold outbound is enforced in code, not policy.** A follow-up may reach
+  only a thread whose own stored history already contains a real message *from* that contact —
+  checked directly on the thread's data, never trusted from the caller or inferred from its state
+  alone. GATE 3b-4's negative test builds a thread with no genuine inbound message at all, pushes
+  the clock ten years forward, and confirms it is never touched and no email is ever sent to it.
+- **There is no function anywhere in this codebase that accepts a bare email address and sends an
+  introduction.** If that's ever wanted, it's a separate product built on the same engine — not a
+  gap quietly left in this one.
 
 ## Reproduce every claim
 

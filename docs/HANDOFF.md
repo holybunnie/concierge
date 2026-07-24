@@ -17,6 +17,8 @@ python3 verify.py --phase 1        # expect 11 pass / 0 fail
 python3 verify.py --phase 2        # expect 11 pass / 0 fail / 1 info
 python3 verify.py --phase 3        # expect 16 pass / 0 fail / 3 info
 python3 verify.py --phase 3b-2     # expect 7 pass / 0 fail / 2 info — Feature 2, confidence-scored autonomy
+python3 verify.py --phase 3b-3     # expect 4 pass / 0 fail / 1 info — Feature 5, the decaying floor
+python3 verify.py --phase 3b-4     # expect 3 pass / 0 fail / 1 info — Safe Follow-Up
 python3 verify.py --phase 4        # expect 8 pass / 0 fail / 3 info
 python3 verify.py --phase 5        # expect 5 pass / 0 fail / 2 info — makes+cancels a real booking
 python3 verify.py --phase 6        # expect 8 pass / 0 fail / 1 info — anchors 2 real receipts on X Layer mainnet
@@ -80,6 +82,8 @@ git config --local --add credential.helper \
 | 5 Booking (live Cal.com) | **5 pass / 2 info** | real booking created + cancelled against live Cal.com |
 | 6 Receipts on X Layer mainnet | **8 pass / 1 info** | ReceiptAnchor deployed, 2 real receipts anchored, tamper + forgery attacks caught |
 | 3b-2 Confidence-scored autonomy (Feature 2) | **7 pass / 2 info** | thin profile queues, complete profile auto-sends, precedent moves a marginal figure over the line, GATE 3 regression re-proved |
+| 3b-3 Decaying floor (Feature 5) | **4 pass / 1 info** | 5 real negotiation rounds tracked the curve exactly, 6 rounds past it the absolute floor still never broke, flat-floor tenant regression re-proved |
+| 3b-4 Safe Follow-Up | **3 pass / 1 info** | real stalled thread nudged once from its own history, second stall marks it DEAD, a thread with no genuine prior contact never triggers one however far the clock is pushed |
 
 ## Feature addendum (Phases 3b/6b/8b/7b) — status
 
@@ -89,11 +93,53 @@ addendum message itself, not reproduced here). Sequencing per the addendum's Par
 | Feature | Attaches to | Gate | State |
 |---|---|---|---|
 | 2 — Confidence-scored autonomy | Phase 3 | 3b-2 | **done**, 7 pass / 0 fail / 2 info |
-| 5 — Decaying floor | Phase 3 | 3b-3 | not started |
-| Safe Follow-Up | Phase 3 | 3b-4 | not started |
+| 5 — Decaying floor | Phase 3 | 3b-3 | **done**, 4 pass / 0 fail / 1 info |
+| Safe Follow-Up | Phase 3 | 3b-4 | **done**, 3 pass / 0 fail / 1 info |
 | 3 — Public receipt verification | Phase 6 | 6b | not started |
 | 1 — Product-gap intelligence | Phase 8 | 3b/8b-1 | not started (needs Phase 8) |
 | 4 — Cross-tenant benchmarking | Phase 7 | 7b | blocked — needs real Phase 7 engagement data first, per the addendum's own §0.2 |
+
+The Phase-3 family (Features 2, 5, and Safe Follow-Up) is now complete — everything the addendum's
+Part IV build order sequenced before Phase 6's Feature 3.
+
+**What Safe Follow-Up added:** `concierge/followup.py` — `due_threads()` (pure arithmetic over
+stored timestamps, an injectable clock so the harness never has to sleep through a real week),
+`draft()` (builds the nudge via the SAME `engine.render()` every other reply uses, so it inherits
+the AI disclosure, the tenant's own nouns, and — via the existing `terms_line` mechanism — whatever
+is actually on the table for that thread), and `process_tenant()`/`dispatch()` (persist + receipt,
+then send outside any open transaction, mirroring `mail.handle_inbound`'s separation of DB work
+from network I/O). Tenant-configurable via `profile.follow_up_policy` (`quiet_hours` default 48,
+`dead_after_hours` default 168), same seam as `autonomy_thresholds` and `floor_curve`.
+
+**The hard boundary against cold outbound is `followup._has_real_contact()`** — checked on the
+thread's own stored history (a `direction: in` entry must actually exist), not trusted from the
+caller or from `state == AWAITING_REPLY` alone. GATE 3b-4 check 3 proves it with a thread
+constructed directly (bypassing `engine.step` entirely, so no real inbound ever happened) and
+pushed 10 years into the future — it is never touched, no email ever sent to it. Cold outbound
+itself — a function accepting a bare address and an "send an intro" instruction — was not built;
+there is no code path in this module that could do it, per the addendum's own §0.3.
+
+**What Feature 5 added:** `pricing.floor_curve()` / `pricing.floor_curve_value()` (an OPTIONAL,
+richer `pricing_rules.floor_curve` shape — `{initial, floor, kind, decay_trigger, decay_steps}` —
+read only when a tenant sets one; absent, behavior is byte-identical to the flat floor that
+already existed), `guardrails.bounds_for`/`negotiate` gained `round_index`/`days_elapsed`
+parameters so the SAME "most restrictive rule binds" logic can evaluate against a moving point on
+the curve instead of a static number, and `engine.py`'s negotiation branch now tracks
+`negotiation_round` on the thread's own offer (same pattern as `timezone_attempts`) and computes
+elapsed days from `thread.created_at`. The absolute floor (`floor_curve.floor`) is a hard clamp
+applied inside `pricing.floor_curve_value` itself — no caller can construct a bound below it, even
+by feeding it a malformed curve. `verify_phase3b3.py` / GATE 3b-3 proves the curve is followed
+point-by-point (not jumped to the eventual floor early, not stuck at the starting point late), red
+-teams six rounds past where the curve runs out, and re-proves a curve-less tenant is unaffected.
+
+One real cross-feature bug found and fixed while building this: `confidence.py`'s completeness
+signal (Feature 2) only recognized the flat `pricing_rules.floor`, so a tenant using ONLY a
+`floor_curve` scored as if they'd never set a floor at all — correctly caught by GATE 3b-3's own
+harness when every negotiation round unexpectedly queued for owner approval instead of sending.
+Fixed in `confidence.py` to recognize either shape as "a floor is set". Worth remembering when
+building Safe Follow-Up or the remaining features: anything Feature 2 reads out of the profile
+needs to know about every OTHER feature's optional profile shapes, or its completeness signal
+silently under-scores tenants using them.
 
 **What Feature 2 added:** `concierge/confidence.py` (three deterministic signals — profile
 completeness, floor proximity, precedent — combined by a fixed, documented weighted formula;

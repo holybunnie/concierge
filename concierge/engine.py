@@ -118,6 +118,14 @@ PROSE: dict[str, str] = {
     "awaiting_approval_hold":
         "Thanks for the follow-up — {business} is reviewing the last reply before it goes "
         "out, and you'll hear from them shortly.",
+
+    # Safe Follow-Up (addendum) — reuses {terms_line}, which already renders whatever is
+    # currently on the table (an agreed figure, or the original quote) from THIS thread's own
+    # offer. Never a generic "just checking in" disconnected from what was actually discussed.
+    "follow_up":
+        "Just checking in — {terms_line}"
+        "Still keen to get a {engagement} booked in, or is there anything else I can answer "
+        "first?",
 }
 
 # Words that would make this a single-trade product if they appeared in PROSE. The GATE 3
@@ -464,11 +472,23 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
                 action="discount_without_figure",
                 rule=f"pricing_rules.{pricing.RULE_FLOOR}")
 
-        ruling = guardrails.negotiate(profile, quote, asked)
+        # Feature 5 (decaying floor): how far into this thread's own negotiation we are, so a
+        # tenant's optional `pricing_rules.floor_curve` can be evaluated at the right point.
+        # Read BEFORE this round is decided, so a floor breach (which ends the thread) never
+        # advances it. A tenant with no curve set never has this read at all — `bounds_for`
+        # only looks at it when `pricing.floor_curve(profile)` returns something.
+        round_index = int(offer.get("negotiation_round", 0))
+        days_elapsed = 0
+        if thread.created_at:
+            days_elapsed = max(0, (inbound.received_at - thread.created_at).days)
+
+        ruling = guardrails.negotiate(
+            profile, quote, asked, round_index=round_index, days_elapsed=days_elapsed)
         detail = {
             "asked": asked, "quoted": quote.amount, "unit": quote.unit,
             "floor": ruling.floor, "binding_rule": ruling.binding_rule,
             "bounds": [str(b) for b in ruling.bounds], "explanation": ruling.explanation,
+            "decay_round_index": round_index, "decay_days_elapsed": days_elapsed,
         }
         if not ruling.allowed:
             return Decision(
@@ -483,6 +503,9 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
 
         agreed = ruling.agreed
         offer["agreed"] = agreed
+        # This round was allowed, so the next one (if the prospect keeps pushing) moves one
+        # step further down the curve. Never touched on a breach — that thread is over.
+        offer["negotiation_round"] = round_index + 1
         holding = agreed is not None and quote.amount is not None and agreed >= quote.amount
         conf = confidence.score(
             profile=profile, service=quote.service_name, amount=quote.amount,

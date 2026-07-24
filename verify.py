@@ -492,9 +492,60 @@ def phase3b2() -> int:
     return r.render()
 
 
+def phase3b3() -> int:
+    r = Report(
+        "3b-3",
+        "The decaying floor (Feature 5)",
+        preamble=(
+            "\nGATE 3b-3 extends GATE 3's guardrail check with an OPTIONAL, richer floor shape:\n"
+            "instead of one static number, a tenant may set a curve that decays from an initial\n"
+            "point down to an absolute floor as a negotiation goes on. Checks 1-2 walk a real,\n"
+            "five-round negotiation down the curve; check 3 is the red-team — six real rounds\n"
+            "past where the curve runs out, proving the absolute floor never breaks; check 4 is\n"
+            "the regression proof that a tenant with no curve set is untouched by any of it.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase3b3
+        verify_phase3b3.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 3b-3 harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
+def phase3b4() -> int:
+    r = Report(
+        "3b-4",
+        "Safe Follow-Up",
+        preamble=(
+            "\nGATE 3b-4 proves the last piece of the Phase-3 family: a thread that already has a\n"
+            "real prospect on it gets nudged once, referencing what was actually quoted, after it\n"
+            "goes quiet — and stays DEAD, not re-nudged forever, if there's still no reply. Check\n"
+            "3 is the one to read closely: it is the negative test proving this cannot become\n"
+            "cold outbound, whatever the clock says.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase3b4
+        verify_phase3b4.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 3b-4 harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
 PHASES = {
     "0": phase0, "1": phase1, "2": phase2, "3": phase3, "4": phase4, "5": phase5, "6": phase6,
-    "3b-2": phase3b2,
+    "3b-2": phase3b2, "3b-3": phase3b3, "3b-4": phase3b4,
 }
 
 

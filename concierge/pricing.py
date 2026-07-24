@@ -130,6 +130,54 @@ def rule(profile: dict[str, Any], name: str) -> dict[str, Any] | None:
     return r if isinstance(r, dict) else None
 
 
+# ---------------------------------------------------------------- decaying floor (Feature 5)
+#
+# `pricing_rules.floor_curve` is an OPTIONAL, richer shape for the same `floor` concept:
+#     {"initial": X, "floor": Y, "kind": "cash"|"percent",
+#      "decay_trigger": "rounds"|"days", "decay_steps": [...]}
+# Absent, the tenant's flat `pricing_rules.floor` governs exactly as it always has —
+# `guardrails.bounds_for` only reaches into this shape when it exists. `Y` (`floor`) is the one
+# number that can never be crossed; the curve only controls how fast CONCIERGE may move toward
+# it as the negotiation goes on. Defined by the tenant at onboarding or in settings — never
+# inferred, and never adjusted mid-negotiation by anything, including an LLM asked to "be more
+# flexible because the conversation feels promising" (§ explicitly rejected, see the addendum).
+
+def floor_curve(profile: dict[str, Any]) -> dict[str, Any] | None:
+    """The tenant's optional decaying floor, or None — in which case the flat floor rule applies."""
+    curve = (profile.get("pricing_rules") or {}).get("floor_curve")
+    if not isinstance(curve, dict) or curve.get("floor") is None:
+        return None
+    return curve
+
+
+def floor_curve_value(curve: dict[str, Any], index: int) -> tuple[float, str]:
+    """The floor permitted at this round/day index.
+
+    The sequence is `[initial, *decay_steps]`, one point per index; past the end of it, the
+    curve has fully decayed and rests at the absolute floor forever. Every value is clamped to
+    never fall below `curve['floor']` regardless of what the sequence itself says — a tenant
+    fat-fingering a decay step below their own stated floor must not be able to author their way
+    past the one number that is supposed to be unconditional.
+    """
+    absolute_floor = float(curve["floor"])
+    sequence: list[float] = []
+    if curve.get("initial") is not None:
+        sequence.append(float(curve["initial"]))
+    sequence += [float(s) for s in (curve.get("decay_steps") or [])]
+
+    if not sequence:
+        return absolute_floor, "no curve points set ('initial'/'decay_steps' both empty) — resting at the absolute floor"
+    if index < len(sequence):
+        value = sequence[index]
+        point = f"index {index} of the curve {sequence}"
+    else:
+        value = absolute_floor
+        point = (f"index {index} is past the curve's {len(sequence)} defined point(s) — "
+                 f"fully decayed, resting at the absolute floor")
+    value = max(value, absolute_floor)
+    return value, f"{point} = {value:,.2f}"
+
+
 class Unquotable(Exception):
     """The profile does not support a quote. Always an escalation, never a guess (§2, §3).
 

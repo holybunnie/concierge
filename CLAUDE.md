@@ -43,6 +43,8 @@ current. Summary:
 | 8 Summary + scheduled actions | not started | |
 | 9 Hardening + submission | not started | deadline 2026-07-27 22:59 UTC |
 | 3b-2 Confidence-scored autonomy (addendum Feature 2) | done | 7 pass / 2 info |
+| 3b-3 Decaying floor (addendum Feature 5) | done | 4 pass / 1 info |
+| 3b-4 Safe Follow-Up (addendum) | done | 3 pass / 1 info |
 
 Feature addendum (Product-Gap Intelligence, Confidence-Scored Autonomy, Public Receipt
 Verification, Cross-Tenant Benchmarking, Decaying Floor, Safe Follow-Up) attaches to the phases
@@ -84,6 +86,21 @@ section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real cred
   the owner. It never touches the price, the rule, or the state the pricing/guardrail decision
   already produced. GATE 3b-2 proves both directions (thin profile queues, complete + precedent-
   rich profile sends) and re-proves GATE 3's own NEW→BOOKED journey is unaffected.
+- **A decaying floor (`pricing_rules.floor_curve`) is OPTIONAL and never inferred.** Absent, a
+  tenant negotiates on the flat floor exactly as before. Set, the curve only controls how fast
+  CONCIERGE may move toward the absolute floor as rounds/days pass — the absolute floor itself is
+  a hard clamp inside `pricing.floor_curve_value`, not a convention callers have to honor. Nothing
+  adjusts the curve mid-negotiation, ever — not a "the conversation feels promising" exception.
+  GATE 3b-3 proves point-by-point tracking, red-teams the absolute floor six rounds past where the
+  curve runs out, and re-proves a curve-less tenant is untouched.
+- **Safe Follow-Up re-engages existing threads only — cold outbound is explicitly out of scope.**
+  `followup.dispatch` reads a tenant's existing threads (`store.list_threads`); there is no
+  function anywhere in this codebase that accepts a bare email address and sends an introduction.
+  `followup._has_real_contact` enforces this on the thread's own stored history (a real `direction:
+  in` entry must exist), not on `state == AWAITING_REPLY` alone or on trust in the caller. If asked
+  to build cold outbound, decline and point at `concierge/followup.py`'s module docstring — GATE
+  3b-4 check 3 proves the boundary holds even for a thread pushed 10 years past any quiet/dead
+  threshold, as long as it never received an inbound message from that contact.
 
 ## Local setup
 
