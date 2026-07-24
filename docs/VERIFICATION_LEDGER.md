@@ -362,6 +362,23 @@ receipts — an estimate is not a verified fact and is not treated as one here.
 - Signer: `0x69eb1bAA26BffCD0fA9089aa2187F6Ca3e2A54f6`, funded 2026-07-24, ~0.0103 OKB (~$0.85) —
   enough for the deploy plus several thousand anchors at the measured cost.
 
+## FEATURE 3 — public receipt verification (X Layer block explorer, verified 2026-07-24)
+
+- **X Layer's public block explorer is OKLink**, and its transaction URL does not match the naive
+  guess. `https://www.oklink.com/xlayer/tx/{txhash}` returns HTTP 301 and redirects to the real
+  path:
+  ```
+  $ curl -sL -o /dev/null -w "%{http_code} %{url_effective}\n" \
+      https://www.oklink.com/xlayer/tx/0xa40636ac0cf13e7190fb434cf431d31701bbf51073c496917572dcdf7d8b480d
+  200 https://www.oklink.com/x-layer/evm/tx/0xa40636ac0cf13e7190fb434cf431d31701bbf51073c496917572dcdf7d8b480d
+  ```
+  Fetched directly (no redirect), `https://www.oklink.com/x-layer/evm/tx/{txhash}` also returns
+  200, and the page's own `<title>` echoes the exact transaction hash back — confirmed against a
+  real anchor from this repo's own Phase 6 run, not a hash picked at random. **CONCIERGE links to
+  `https://www.oklink.com/x-layer/evm/tx/{txhash}` — the resolved path, not the guessed one** —
+  so the public verification page (GATE 6b) never sends a client through an extra redirect hop to
+  a domain neither the tenant nor CONCIERGE controls.
+
 ---
 
 ## OPEN / UNVERIFIED — nothing here may be built on until proven

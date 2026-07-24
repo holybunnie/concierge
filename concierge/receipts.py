@@ -56,6 +56,7 @@ def record(
     rule_checked: str,
     within_rules: bool,
     confidence: dict[str, Any] | None = None,
+    receipt_id: uuid.UUID | None = None,
 ) -> Receipt:
     """Write the receipt for one decision. The cursor is already tenant-scoped by RLS.
 
@@ -63,11 +64,14 @@ def record(
     fabricated transaction hash would make every receipt in the table untrustworthy, including
     the real ones added later. `confidence` (Feature 2, GATE 3b-2) is `concierge.confidence`'s
     computed score for this decision, or None when the feature does not apply to it.
+    `receipt_id` lets `engine.step` pre-generate the id so a verify link (Feature 3) can be
+    embedded in the very email whose receipt this is — see `store.insert_receipt`.
     """
     return store.insert_receipt(
         cur, tenant_id=tenant_id, thread_id=thread_id, action=action,
         decision=decision, rule_checked=rule_checked, within_rules=within_rules,
         content_hash=content_hash(decision), signature=None, xlayer_tx=None,
+        receipt_id=receipt_id,
         confidence=confidence,
     )
 
@@ -80,6 +84,46 @@ def verify(receipt: Receipt) -> bool:
 def anchored(receipt: Receipt) -> bool:
     """Whether this receipt has an on-chain anchor. False until `anchor()` has run on it."""
     return bool(receipt.xlayer_tx)
+
+
+# ---------------------------------------------------------------- public verification (Feature 3)
+
+PUBLIC_ACTIONS = frozenset({"quoted", "counter_within_rules", "booked"})
+
+
+def public_view(row: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The curated, client-safe summary of one receipt — or None if it should not be shown.
+
+    Only receipts that represent a real commitment made TO the client are eligible
+    (`PUBLIC_ACTIONS`). Everything else — a floor breach, an escalation, a spam-ignore, a
+    queued-for-approval draft, a follow-up, a DEAD marker — carries internal guardrail reasoning
+    (an exact floor figure, why something was refused) that was never written for a public page.
+    Those are treated exactly like a receipt that does not exist at all: the caller cannot tell
+    the difference between "no such id" and "that id is real but restricted", which is the whole
+    point of the isolation guarantee — the receipt_id is the sole scope, and a wrong guess learns
+    nothing either way.
+
+    `committed_text` is the exact reply the client received (`decision['reply_sent']`) — the
+    surest way to show "what was committed" is the words themselves, not a hand-picked subset of
+    fields that could drift from what actually went out.
+    """
+    if not row or row.get("action") not in PUBLIC_ACTIONS:
+        return None
+
+    decision = row.get("decision") or {}
+    detail = decision.get("detail") or {}
+    return {
+        "receipt_id": str(row["receipt_id"]),
+        "action": row["action"],
+        "within_rules": bool(row["within_rules"]),
+        "verified": content_hash(decision) == row.get("content_hash"),
+        "committed_text": decision.get("reply_sent"),
+        "service": detail.get("service"),
+        "created_at": row["created_at"],
+        "xlayer_tx": row.get("xlayer_tx"),
+        "signature": row.get("signature"),
+        "anchored": bool(row.get("xlayer_tx")),
+    }
 
 
 def anchor(cur: Cursor, receipt: Receipt) -> Receipt:

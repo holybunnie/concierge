@@ -543,9 +543,34 @@ def phase3b4() -> int:
     return r.render()
 
 
+def phase6b() -> int:
+    r = Report(
+        "6b",
+        "Public receipt verification (Feature 3)",
+        preamble=(
+            "\nGATE 6b anchors real receipts on X Layer mainnet — same call, same real (tiny) gas\n"
+            "as GATE 6 — and proves the public, unauthenticated `/r/{receipt_id}` page reads them\n"
+            "back correctly. Checks 3-5 are the attacks: a nonexistent id, a malformed id, and an\n"
+            "internal-only receipt (a real, anchored floor breach) all render the identical clean\n"
+            "'not found' page — never distinguishable, never a leak.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase6b
+        verify_phase6b.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 6b harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
 PHASES = {
     "0": phase0, "1": phase1, "2": phase2, "3": phase3, "4": phase4, "5": phase5, "6": phase6,
-    "3b-2": phase3b2, "3b-3": phase3b3, "3b-4": phase3b4,
+    "3b-2": phase3b2, "3b-3": phase3b3, "3b-4": phase3b4, "6b": phase6b,
 }
 
 

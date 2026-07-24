@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import uuid
-from typing import Iterator
+from typing import Any, Iterator
 
 import psycopg
 from psycopg.rows import dict_row
@@ -88,6 +88,24 @@ def resolve_tenant_by_engagement(escrow_ref: str) -> uuid.UUID:
     if not row or not row["tenant_id"]:
         raise TenantUnresolved(f"No tenant holds engagement {escrow_ref!r}. Refusing to guess.")
     return row["tenant_id"]
+
+
+def get_public_receipt(receipt_id: str) -> dict[str, Any] | None:
+    """Feature 3 (GATE 6b): the one public, unauthenticated read in the system.
+
+    Scoped by `receipt_id` alone via the `public_receipt` SECURITY DEFINER function — no tenant
+    context is ever resolved or needed. A malformed id (not even a UUID) is exactly as "not
+    found" as one that is well-formed but does not exist: this never raises into a caller that
+    might turn a parse error into a different, more revealing response.
+    """
+    try:
+        rid = str(uuid.UUID(str(receipt_id)))
+    except (ValueError, AttributeError, TypeError):
+        return None
+    with unscoped_session() as cur:
+        cur.execute("SELECT * FROM public_receipt(%s)", (rid,))
+        row = cur.fetchone()
+    return dict(row) if row and row.get("receipt_id") else None
 
 
 def normalise_address(address: str) -> str:

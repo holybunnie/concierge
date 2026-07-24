@@ -22,6 +22,7 @@ python3 verify.py --phase 3b-4     # expect 3 pass / 0 fail / 1 info — Safe Fo
 python3 verify.py --phase 4        # expect 8 pass / 0 fail / 3 info
 python3 verify.py --phase 5        # expect 5 pass / 0 fail / 2 info — makes+cancels a real booking
 python3 verify.py --phase 6        # expect 8 pass / 0 fail / 1 info — anchors 2 real receipts on X Layer mainnet
+python3 verify.py --phase 6b       # expect 6 pass / 0 fail / 1 info — anchors 2 more real receipts; public verify page
 ```
 
 `--phase` now takes a string, so sub-gates from the feature addendum sit alongside the numbered
@@ -84,6 +85,7 @@ git config --local --add credential.helper \
 | 3b-2 Confidence-scored autonomy (Feature 2) | **7 pass / 2 info** | thin profile queues, complete profile auto-sends, precedent moves a marginal figure over the line, GATE 3 regression re-proved |
 | 3b-3 Decaying floor (Feature 5) | **4 pass / 1 info** | 5 real negotiation rounds tracked the curve exactly, 6 rounds past it the absolute floor still never broke, flat-floor tenant regression re-proved |
 | 3b-4 Safe Follow-Up | **3 pass / 1 info** | real stalled thread nudged once from its own history, second stall marks it DEAD, a thread with no genuine prior contact never triggers one however far the clock is pushed |
+| 6b Public receipt verification (Feature 3) | **6 pass / 1 info** | real anchored receipt reads back correctly on the public page; nonexistent id, malformed id, and a real internal-only (floor-breach) receipt all render the identical clean 404; two tenants' pages never cross |
 
 ## Feature addendum (Phases 3b/6b/8b/7b) — status
 
@@ -95,12 +97,33 @@ addendum message itself, not reproduced here). Sequencing per the addendum's Par
 | 2 — Confidence-scored autonomy | Phase 3 | 3b-2 | **done**, 7 pass / 0 fail / 2 info |
 | 5 — Decaying floor | Phase 3 | 3b-3 | **done**, 4 pass / 0 fail / 1 info |
 | Safe Follow-Up | Phase 3 | 3b-4 | **done**, 3 pass / 0 fail / 1 info |
-| 3 — Public receipt verification | Phase 6 | 6b | not started |
+| 3 — Public receipt verification | Phase 6 | 6b | **done**, 6 pass / 0 fail / 1 info |
 | 1 — Product-gap intelligence | Phase 8 | 3b/8b-1 | not started (needs Phase 8) |
 | 4 — Cross-tenant benchmarking | Phase 7 | 7b | blocked — needs real Phase 7 engagement data first, per the addendum's own §0.2 |
 
-The Phase-3 family (Features 2, 5, and Safe Follow-Up) is now complete — everything the addendum's
-Part IV build order sequenced before Phase 6's Feature 3.
+The Phase-3 family (Features 2, 5, and Safe Follow-Up) and Feature 3 (Phase 6's family) are both
+complete. Only Feature 1 (needs Phase 8) and Feature 4 (blocked on Phase 7) remain.
+
+**What Feature 3 added:** a third "deliberate door" in `schema.sql` — `public_receipt(rid uuid)`,
+a `SECURITY DEFINER` function scoped by receipt_id alone, returning at most one row and never
+`tenant_id`/`thread_id` (unlike the inbound-address resolvers, which return an opaque uuid, this
+one returns curated receipt columns — but the scoping principle is identical: untrusted input in,
+exactly one thing out). `receipts.public_view()` is the whitelist: only `PUBLIC_ACTIONS =
+{"quoted", "counter_within_rules", "booked"}` are ever shown — a floor breach, an escalation, or a
+Feature-2-queued draft carries internal guardrail reasoning (exact floor figures, refusal
+rationale) and is treated exactly like a receipt that does not exist, indistinguishably. `app.py`
+gained `GET /r/{receipt_id}` — plain server-rendered HTML on the existing FastAPI app, no new
+service, no framework. The outbound quote/counter/booked templates gained one line
+(`PROSE["verify_line"]`) linking to it, appended only when `config.public_base_url()` is
+configured (honest degradation, same pattern as `PENDING-DOMAIN.invalid`) — the receipt_id is
+pre-generated in `engine.step()` before `render()` runs so the SAME id appears in the email and
+the database row (`store.insert_receipt`/`receipts.record` both gained an optional `receipt_id`
+passthrough for this).
+
+One real external fact verified live before building on it: X Layer's block explorer is OKLink,
+and the obvious URL guess (`oklink.com/xlayer/tx/...`) 301-redirects to the real path
+(`oklink.com/x-layer/evm/tx/...`) — confirmed against a real anchored tx from this repo's own
+Phase 6 run. See `docs/VERIFICATION_LEDGER.md`, Feature 3 section.
 
 **What Safe Follow-Up added:** `concierge/followup.py` — `due_threads()` (pure arithmetic over
 stored timestamps, an injectable clock so the harness never has to sleep through a real week),

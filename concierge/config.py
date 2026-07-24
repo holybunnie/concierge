@@ -127,5 +127,27 @@ def xlayer_private_key() -> str | None:
     return get("XLAYER_PRIVATE_KEY")
 
 
+def xlayer_explorer_tx_url(tx_hash: str) -> str:
+    """OKLink's X Layer transaction page — the RESOLVED path, not the naive `/xlayer/tx/` guess,
+    which 301-redirects here (docs/VERIFICATION_LEDGER.md, Feature 3, verified live 2026-07-24).
+    """
+    return f"https://www.oklink.com/x-layer/evm/tx/{tx_hash}"
+
+
+# ---------------------------------------------------------------- public verification (Feature 3)
+#
+# `verify_phase6b.py` / GATE 6b. The page itself needs no credential to exist — it reads receipts
+# already in Postgres — but the LINK in an outbound email needs a real, reachable base URL to
+# point at. Absent, no verify line is appended (§3: never a placeholder that looks live), the
+# same honest degradation as PENDING-DOMAIN.invalid for a tenant address with no domain yet.
+
+def public_base_url() -> str | None:
+    explicit = get("PUBLIC_BASE_URL")
+    if explicit:
+        return explicit.rstrip("/")
+    domain = get("CONCIERGE_DOMAIN")
+    return f"https://app.{domain}" if domain else None
+
+
 def xlayer_contract() -> str | None:
     return get("XLAYER_CONTRACT")

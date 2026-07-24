@@ -138,7 +138,12 @@ def insert_receipt(
     signature: str | None = None,
     xlayer_tx: str | None = None,
     confidence: dict[str, Any] | None = None,
+    receipt_id: uuid.UUID | None = None,
 ) -> Receipt:
+    """`receipt_id` is normally left to generate here. Feature 3 (public verification, GATE 6b)
+    is the one caller that pre-generates it — the verify link has to be embedded in the same
+    outbound email the receipt describes, which is rendered before the row exists — so the
+    engine mints the id first and this just uses it instead of a fresh one."""
     cur.execute(
         """
         INSERT INTO receipts (receipt_id, tenant_id, thread_id, action, decision, rule_checked,
@@ -146,7 +151,7 @@ def insert_receipt(
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING *
         """,
-        (uuid.uuid4(), tenant_id, thread_id, action, Jsonb(decision), rule_checked,
+        (receipt_id or uuid.uuid4(), tenant_id, thread_id, action, Jsonb(decision), rule_checked,
          within_rules, content_hash, signature, xlayer_tx,
          Jsonb(confidence) if confidence is not None else None),
     )

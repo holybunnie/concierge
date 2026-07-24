@@ -30,11 +30,11 @@ Anyone can say their agent "quotes intelligently." The interesting question is w
 **Phases 0–6 complete.** Foundations and live external verification, the tenant model with
 structural isolation, vertical-aware onboarding, the deal-engine state machine and guardrails,
 email (Postmark, code-complete pending operator go-live items), booking against live Cal.com, and
-receipts anchored on X Layer **mainnet**. On top of that, a full follow-on feature addendum's
-Phase-3 family is also built and gated: **confidence-scored autonomy**, **the decaying floor**, and
-**Safe Follow-Up** (all described below). Phase 7 (A2A escrow) is blocked on an unresolved API
-shape; Phase 8 (summary + scheduled actions) and the remaining addendum features (public receipt
-verification, product-gap intelligence, cross-tenant benchmarking) are not started. Full state, per
+receipts anchored on X Layer **mainnet**. On top of that, a full follow-on feature addendum is
+also built and gated: **confidence-scored autonomy**, **the decaying floor**, **Safe Follow-Up**,
+and **public receipt verification** (all described below). Phase 7 (A2A escrow) is blocked on an
+unresolved API shape; Phase 8 (summary + scheduled actions) and the two remaining addendum
+features (product-gap intelligence, cross-tenant benchmarking) are not started. Full state, per
 phase and per feature, in [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 ```bash
@@ -51,6 +51,7 @@ python3 verify.py --phase 3b-4       # Safe Follow-Up, 3 checks
 python3 verify.py --phase 4          # email connector (Postmark), 8 checks
 python3 verify.py --phase 5          # booking against live Cal.com — makes + cancels a real booking
 python3 verify.py --phase 6          # receipts anchored on X Layer mainnet — spends real (tiny) gas
+python3 verify.py --phase 6b         # public receipt verification — anchors 2 more real receipts
 ```
 
 `--phase` takes a string, so feature-addendum sub-gates (`3b-2`, `3b-3`, more to come) sit
@@ -165,6 +166,30 @@ this build refuses to blur the two.
 - **There is no function anywhere in this codebase that accepts a bare email address and sends an
   introduction.** If that's ever wanted, it's a separate product built on the same engine — not a
   gap quietly left in this one.
+
+### Public receipt verification — the client gets to check the receipt too (GATE 6b)
+
+Every commitment CONCIERGE makes is already a signed, on-chain-anchored receipt (Phase 6). This
+feature turns that into something the *client* can look at, not just an internal audit trail:
+`GET /r/{receipt_id}` is a public, unauthenticated, read-only page showing exactly what was
+committed — and the outbound quote/negotiation email now carries a link straight to it.
+
+- **A third narrowly-scoped door, same pattern as tenant resolution.** `public_receipt(rid uuid)`
+  is a `SECURITY DEFINER` SQL function scoped by receipt_id alone — it returns at most one row,
+  and never `tenant_id` or `thread_id`. There is no query shape that turns "I have one receipt
+  id" into "show me this tenant's other receipts."
+- **Only real commitments are shown — never internal reasoning.** `receipts.public_view`
+  whitelists exactly three actions (a quote, a negotiated counter, a booking). A floor breach or
+  an escalation carries the tenant's actual floor figure and the reasoning behind a refusal —
+  never meant for a stranger with a link — so it renders **the identical "not found" page** a
+  nonexistent or malformed id gets. GATE 6b proves this with a real, anchored floor-breach
+  receipt: it exists, it's on-chain, and it is still unreachable by its own real id.
+- **The link is never fabricated.** It only appears when a real public base URL is configured;
+  absent one, the email sends exactly as it did before this feature existed — the same honest
+  degradation as a tenant address with no domain yet (`PENDING-DOMAIN.invalid`).
+- **The transaction link goes to a verified real URL**, not a guessed one: the obvious
+  `oklink.com/xlayer/tx/...` pattern actually 301-redirects to `oklink.com/x-layer/evm/tx/...` —
+  found by checking live against a real anchored transaction, not assumed (ledger, Feature 3).
 
 ## Reproduce every claim
 

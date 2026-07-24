@@ -11,11 +11,12 @@ Behind nginx:  app.<domain> → 127.0.0.1:8000, and Postmark's inbound webhook U
 
 from __future__ import annotations
 
+import html
 import logging
 import threading
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from . import config, db, mail, postmark, receipts
 
@@ -98,3 +99,81 @@ async def inbound_postmark(request: Request) -> JSONResponse:
          "owner_alerted": handled.owner_alert_email is not None,
          "anchoring": receipt is not None and bool(config.xlayer_contract())},
         status_code=200)
+
+
+# ---------------------------------------------------------------- public receipt verification
+#
+# Feature 3 (GATE 6b). Read-only, unauthenticated, scoped by receipt_id alone — see
+# `db.get_public_receipt` and `receipts.public_view` for the isolation guarantee. No framework:
+# this is plain server-rendered HTML, because a trust page has no business needing a build step.
+
+_PAGE = """<!doctype html>
+<html><head><meta charset="utf-8"><title>{title}</title></head>
+<body style="font-family: -apple-system, sans-serif; max-width: 40em; margin: 4em auto; padding: 0 1em; color: #1a1a1a;">
+{body}
+</body></html>"""
+
+
+def _not_found_page() -> HTMLResponse:
+    """Identical for a malformed id, a nonexistent one, and one that exists but is not a public
+    commitment (an internal-only receipt — a floor breach, an escalation, a queued draft). The
+    caller cannot tell these apart, which is the point: a wrong or ineligible guess learns
+    nothing about what CONCIERGE does or does not hold."""
+    return HTMLResponse(_PAGE.format(
+        title="Receipt not found",
+        body=(
+            "<h1>Receipt not found</h1>"
+            "<p>There is no verifiable commitment at this address. If you followed a link from "
+            "a CONCIERGE email, check that it was copied in full.</p>"
+        ),
+    ), status_code=404)
+
+
+def _receipt_page(view: dict) -> HTMLResponse:
+    e = html.escape
+    if view["verified"]:
+        integrity = ('<strong style="color:#127a3d;">Verified — unaltered since it was '
+                     'written</strong>')
+    else:
+        integrity = ('<strong style="color:#b00020;">NOT VERIFIED — this record does not match '
+                      'its own hash</strong>')
+
+    if view["anchored"]:
+        tx_url = config.xlayer_explorer_tx_url(view["xlayer_tx"])
+        chain_line = (f'<p>On-chain: <a href="{e(tx_url)}">{e(view["xlayer_tx"])}</a> '
+                      f'(X Layer mainnet, chain 196)</p>')
+    else:
+        chain_line = "<p>On-chain anchoring is queued but not yet confirmed.</p>"
+
+    committed = (
+        f'<pre style="white-space: pre-wrap; font-family: inherit; background: #f6f6f6; '
+        f'padding: 1em; border-radius: 6px;">{e(view["committed_text"])}</pre>'
+        if view["committed_text"] else
+        "<p><em>This commitment has not been sent to the client yet.</em></p>"
+    )
+
+    body = (
+        "<h1>Verified commitment</h1>"
+        f"<p>{integrity}</p>"
+        f"<p>Service: <strong>{e(view['service'] or '—')}</strong></p>"
+        f"<p>Recorded: {e(str(view['created_at']))}</p>"
+        f"{chain_line}"
+        "<hr>"
+        "<h2>What was committed</h2>"
+        f"{committed}"
+        "<hr>"
+        '<p style="color:#666; font-size: 0.9em;">This offer was committed by an autonomous '
+        "agent (CONCIERGE) and cannot be silently altered: the text above is hashed, and the "
+        "hash is anchored on a public blockchain independent of CONCIERGE staying online. "
+        f"Receipt id: {e(view['receipt_id'])}.</p>"
+    )
+    return HTMLResponse(_PAGE.format(title="Verified commitment", body=body))
+
+
+@app.get("/r/{receipt_id}")
+def verify_receipt(receipt_id: str) -> HTMLResponse:
+    row = db.get_public_receipt(receipt_id)
+    view = receipts.public_view(row)
+    if view is None:
+        return _not_found_page()
+    return _receipt_page(view)

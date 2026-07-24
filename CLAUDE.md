@@ -45,6 +45,7 @@ current. Summary:
 | 3b-2 Confidence-scored autonomy (addendum Feature 2) | done | 7 pass / 2 info |
 | 3b-3 Decaying floor (addendum Feature 5) | done | 4 pass / 1 info |
 | 3b-4 Safe Follow-Up (addendum) | done | 3 pass / 1 info |
+| 6b Public receipt verification (addendum Feature 3) | done | 6 pass / 1 info |
 
 Feature addendum (Product-Gap Intelligence, Confidence-Scored Autonomy, Public Receipt
 Verification, Cross-Tenant Benchmarking, Decaying Floor, Safe Follow-Up) attaches to the phases
@@ -101,6 +102,14 @@ section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real cred
   to build cold outbound, decline and point at `concierge/followup.py`'s module docstring — GATE
   3b-4 check 3 proves the boundary holds even for a thread pushed 10 years past any quiet/dead
   threshold, as long as it never received an inbound message from that contact.
+- **The public receipt page shows only commitments, and only by exact receipt_id.** `/r/{id}`
+  (`app.py`) is scoped by `schema.sql`'s `public_receipt` function, which returns at most one row
+  and never `tenant_id`/`thread_id`. `receipts.public_view` further whitelists which actions are
+  eligible (`PUBLIC_ACTIONS` — quotes, negotiated counters, bookings); anything else — a floor
+  breach, an escalation, a Feature-2-queued draft — renders the identical "not found" page a
+  nonexistent or malformed id gets. Do not "fix" a missing field on that page by widening
+  `PUBLIC_ACTIONS` or by returning `tenant_id`/`thread_id` from `public_receipt` — GATE 6b's
+  check 5 anchors a real floor-breach receipt and proves it is unreachable by its own real id.
 
 ## Local setup
 

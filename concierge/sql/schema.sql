@@ -103,18 +103,18 @@ CREATE POLICY tenant_isolation ON receipts
     USING (tenant_id = current_tenant())
     WITH CHECK (tenant_id = current_tenant());
 
--- ---------------------------------------------------------------- the one deliberate door
+-- ---------------------------------------------------------------- the deliberate doors
 --
 -- Resolution is a chicken-and-egg problem: an inbound email arrives addressed to
 -- acme@inbox.example.com and we must learn which tenant that is BEFORE we can scope a session.
 --
--- These two functions are the only way across that gap. They are SECURITY DEFINER (they run as
--- the table owner, so RLS does not apply to them) and they are deliberately narrow: they take
--- untrusted external input and return an opaque uuid and nothing else. No profile, no pricing,
--- no history. Even a total compromise of the resolver leaks an identifier, not a business.
+-- These functions are the only way across that gap. They are SECURITY DEFINER (they run as the
+-- table owner, so RLS does not apply to them) and they are deliberately narrow: they take
+-- untrusted external input and return only what that one specific job needs. Even a total
+-- compromise of a resolver leaks one identifier or one row, never a list, never a business.
 --
--- They are also the only functions in the system with this property, which makes the audit
--- surface for §2b exactly these twenty lines.
+-- They are also the only functions in the system with this property, which keeps the audit
+-- surface for §2b and Feature 3's public verification (GATE 6b) to exactly this block.
 
 CREATE OR REPLACE FUNCTION resolve_tenant_by_inbound_address(addr text) RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
@@ -123,6 +123,19 @@ $$ SELECT tenant_id FROM tenants WHERE inbound_address = lower(btrim(addr)) $$;
 CREATE OR REPLACE FUNCTION resolve_tenant_by_engagement(ref text) RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
 $$ SELECT tenant_id FROM tenants WHERE engagement->>'escrow_ref' = btrim(ref) $$;
+
+-- Feature 3 (public receipt verification, GATE 6b): the client who received a quote should be
+-- able to verify it, without CONCIERGE handing out a general receipts-read capability. This
+-- returns AT MOST ONE row, keyed only by receipt_id — never tenant_id, never thread_id, so
+-- there is no column in its own output that could be used to ask for a second row. A caller who
+-- does not already hold a receipt_id (a random UUID, not enumerable) learns nothing.
+CREATE OR REPLACE FUNCTION public_receipt(rid uuid) RETURNS TABLE (
+    receipt_id uuid, action text, decision jsonb, rule_checked text, within_rules boolean,
+    content_hash text, signature text, xlayer_tx text, created_at timestamptz
+) LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
+$$ SELECT receipt_id, action, decision, rule_checked, within_rules, content_hash, signature,
+          xlayer_tx, created_at
+   FROM receipts WHERE receipt_id = rid $$;
 
 -- ---------------------------------------------------------------- the application role
 
@@ -138,6 +151,7 @@ GRANT USAGE ON SCHEMA public TO concierge_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, threads, receipts TO concierge_app;
 GRANT EXECUTE ON FUNCTION resolve_tenant_by_inbound_address(text) TO concierge_app;
 GRANT EXECUTE ON FUNCTION resolve_tenant_by_engagement(text) TO concierge_app;
+GRANT EXECUTE ON FUNCTION public_receipt(uuid) TO concierge_app;
 GRANT EXECUTE ON FUNCTION current_tenant() TO concierge_app;
 
 -- Explicitly withhold the escape hatches. Without BYPASSRLS (default) and without table

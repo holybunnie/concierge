@@ -8,6 +8,11 @@ psycopg[binary]>=3.2
 fastapi>=0.110
 uvicorn[standard]>=0.29
 
+# Feature 3 (public receipt verification, GATE 6b). Only used by the harness's
+# fastapi.testclient.TestClient to drive the real /r/{receipt_id} route in-process — the route
+# itself makes no outbound HTTP calls of its own.
+httpx>=0.27
+
 # Phase 6. Receipt anchoring on X Layer mainnet (concierge/xlayer.py) needs secp256k1 signing and
 # RLP transaction encoding. Hand-rolling either to avoid a dependency is a worse security
 # trade-off than taking one audited, widely-used library — the RPC transport itself stays on
