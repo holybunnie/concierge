@@ -27,15 +27,17 @@ Anyone can say their agent "quotes intelligently." The interesting question is w
 
 ## Status
 
-**Phases 0–6 complete.** Foundations and live external verification, the tenant model with
+**Phases 0–6 and 8 complete.** Foundations and live external verification, the tenant model with
 structural isolation, vertical-aware onboarding, the deal-engine state machine and guardrails,
-email (Postmark, code-complete pending operator go-live items), booking against live Cal.com, and
-receipts anchored on X Layer **mainnet**. On top of that, a full follow-on feature addendum is
-also built and gated: **confidence-scored autonomy**, **the decaying floor**, **Safe Follow-Up**,
-and **public receipt verification** (all described below). Phase 7 (A2A escrow) is blocked on an
-unresolved API shape; Phase 8 (summary + scheduled actions) and the two remaining addendum
-features (product-gap intelligence, cross-tenant benchmarking) are not started. Full state, per
-phase and per feature, in [`docs/HANDOFF.md`](docs/HANDOFF.md).
+email (Postmark, code-complete pending operator go-live items), booking against live Cal.com,
+receipts anchored on X Layer **mainnet**, and a per-tenant summary driven by a scheduler that
+finally calls the receipt-anchoring and follow-up jobs on a timer instead of never. On top of
+that, a full follow-on feature addendum is also built and gated: **confidence-scored autonomy**,
+**the decaying floor**, **Safe Follow-Up**, and **public receipt verification** (all described
+below). Phase 7 (A2A escrow) is blocked on an unresolved API shape; the two remaining addendum
+features (product-gap intelligence — unblocked now that Phase 8 exists, not yet started; cross-
+tenant benchmarking — blocked on Phase 7) are what's left. Full state, per phase and per feature,
+in [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 ```bash
 pip install -r requirements.txt
@@ -52,6 +54,7 @@ python3 verify.py --phase 4          # email connector (Postmark), 8 checks
 python3 verify.py --phase 5          # booking against live Cal.com — makes + cancels a real booking
 python3 verify.py --phase 6          # receipts anchored on X Layer mainnet — spends real (tiny) gas
 python3 verify.py --phase 6b         # public receipt verification — anchors 2 more real receipts
+python3 verify.py --phase 8          # summary + scheduled actions, 7 checks, no new gas spent
 ```
 
 `--phase` takes a string, so feature-addendum sub-gates (`3b-2`, `3b-3`, more to come) sit
@@ -190,6 +193,27 @@ committed — and the outbound quote/negotiation email now carries a link straig
 - **The transaction link goes to a verified real URL**, not a guessed one: the obvious
   `oklink.com/xlayer/tx/...` pattern actually 301-redirects to `oklink.com/x-layer/evm/tx/...` —
   found by checking live against a real anchored transaction, not assumed (ledger, Feature 3).
+
+### The summary, and the scheduler that finally runs on a timer (Phase 8, GATE 8)
+
+Two jobs existed only as functions nothing ever called on a schedule: signing and anchoring a
+receipt (Phase 6 built `receipts.anchor()`; nothing ran it automatically), and Safe Follow-Up's
+`dispatch()`. Phase 8 is the scheduler that calls both, plus a periodic per-tenant summary.
+
+- **Every number in the summary is arithmetic over rows every other gate already writes and
+  verifies.** `summary.build_summary` counts real threads and receipts — quotes, negotiations,
+  bookings and their value, escalations (with the prospect's actual words carried through,
+  verbatim), how many replies Feature 2 held for approval, how many leads Safe Follow-Up nudged
+  or marked gone quiet. No parallel bookkeeping that could drift from what actually happened.
+- **The scheduler doesn't block a database transaction on a network call it doesn't need to.**
+  Decide and persist first, send after — the same discipline `mail.handle_inbound` and
+  `followup.dispatch` already use. A summary fires once per period (tracked on the tenant's own
+  profile, read back and re-checked, not assumed from memory), never once per scheduler tick.
+- **GATE 8 proves the anchoring job's honest missing-credential skip without spending any NEW
+  real mainnet gas.** The mechanism itself — signing and confirming a transaction — is GATE 6 and
+  GATE 6b's job, proven repeatedly against the real deployed contract; Phase 8 only needed to
+  prove the scheduled wrapper picks the right rows and degrades exactly as honestly as every
+  other missing-credential path in this codebase when there's no signer configured.
 
 ## Reproduce every claim
 

@@ -23,6 +23,7 @@ python3 verify.py --phase 4        # expect 8 pass / 0 fail / 3 info
 python3 verify.py --phase 5        # expect 5 pass / 0 fail / 2 info — makes+cancels a real booking
 python3 verify.py --phase 6        # expect 8 pass / 0 fail / 1 info — anchors 2 real receipts on X Layer mainnet
 python3 verify.py --phase 6b       # expect 6 pass / 0 fail / 1 info — anchors 2 more real receipts; public verify page
+python3 verify.py --phase 8        # expect 7 pass / 0 fail / 0 info — summary + scheduled actions, no new gas spent
 ```
 
 `--phase` now takes a string, so sub-gates from the feature addendum sit alongside the numbered
@@ -86,6 +87,7 @@ git config --local --add credential.helper \
 | 3b-3 Decaying floor (Feature 5) | **4 pass / 1 info** | 5 real negotiation rounds tracked the curve exactly, 6 rounds past it the absolute floor still never broke, flat-floor tenant regression re-proved |
 | 3b-4 Safe Follow-Up | **3 pass / 1 info** | real stalled thread nudged once from its own history, second stall marks it DEAD, a thread with no genuine prior contact never triggers one however far the clock is pushed |
 | 6b Public receipt verification (Feature 3) | **6 pass / 1 info** | real anchored receipt reads back correctly on the public page; nonexistent id, malformed id, and a real internal-only (floor-breach) receipt all render the identical clean 404; two tenants' pages never cross |
+| 8 Summary + scheduled actions | **7 pass / 0 fail** | real conversation numbers counted exactly, escalation text carried verbatim, scheduler's anchor/follow-up/summary jobs all read+write the same real rows, no new mainnet gas spent proving it |
 
 ## Feature addendum (Phases 3b/6b/8b/7b) — status
 
@@ -98,11 +100,12 @@ addendum message itself, not reproduced here). Sequencing per the addendum's Par
 | 5 — Decaying floor | Phase 3 | 3b-3 | **done**, 4 pass / 0 fail / 1 info |
 | Safe Follow-Up | Phase 3 | 3b-4 | **done**, 3 pass / 0 fail / 1 info |
 | 3 — Public receipt verification | Phase 6 | 6b | **done**, 6 pass / 0 fail / 1 info |
-| 1 — Product-gap intelligence | Phase 8 | 3b/8b-1 | not started (needs Phase 8) |
+| 1 — Product-gap intelligence | Phase 8 | 3b/8b-1 | not started — Phase 8 is now done, so this is next |
 | 4 — Cross-tenant benchmarking | Phase 7 | 7b | blocked — needs real Phase 7 engagement data first, per the addendum's own §0.2 |
 
-The Phase-3 family (Features 2, 5, and Safe Follow-Up) and Feature 3 (Phase 6's family) are both
-complete. Only Feature 1 (needs Phase 8) and Feature 4 (blocked on Phase 7) remain.
+The Phase-3 family (Features 2, 5, and Safe Follow-Up), Feature 3 (Phase 6's family), and Phase 8
+itself are all complete. Only Feature 1 (unblocked now, not yet started) and Feature 4 (blocked on
+Phase 7) remain.
 
 **What Feature 3 added:** a third "deliberate door" in `schema.sql` — `public_receipt(rid uuid)`,
 a `SECURITY DEFINER` function scoped by receipt_id alone, returning at most one row and never
@@ -311,10 +314,21 @@ U3 (the OKX escrow API call signatures) is unresolved — the OnchainOS docs cov
 but not the escrow credentials. **No escrow code may be written against a guessed API shape.**
 Resolve U3 first.
 
-### Phase 8 — summary + scheduled actions + product-gap intelligence
-Needs live Phase 4 + Phase 7 to produce real end-to-end data (5 and 6 already do). Also where the
-receipt-anchoring background worker belongs — Phase 6 built `receipts.anchor()` but nothing calls
-it automatically yet.
+### Phase 8 — summary + scheduled actions · DONE, GATE 8 passed 2026-07-24
+`concierge/summary.py` (pure arithmetic over `store.list_threads`/`list_receipts` — inquiries,
+quotes, negotiations, bookings + value, escalations with verbatim text, Feature-2 queued-for-
+approval count, Safe Follow-Up nudges and DEAD threads) and `concierge/scheduler.py` (the one
+per-tenant entry point: `anchor_pending()` finally calls `receipts.anchor()` on unanchored rows —
+the exact gap this file used to describe — `followup.process_tenant` on a schedule instead of on
+demand, and a periodic summary send gated by `profile.summary_policy.last_sent_at` so it fires
+once per period, not every run). GATE 8 proves the numbers against real conversations this gate
+runs, and proves the anchoring job's honest no-credentials skip *without* spending any new real
+mainnet gas — GATE 6/6b already prove the anchoring mechanism itself, repeatedly.
+
+Not yet built: actually installing `scheduler.dispatch` on a cron/systemd timer on the VPS (a
+deploy action, same as `app.py`'s webhook — §12) and end-to-end proof against live Phase 4 email
++ Phase 7 A2A data, which is blocked on those phases the same way it always was. Feature 1
+(product-gap intelligence) is next now that Phase 8 exists — it attaches here per the addendum.
 
 ### Phase 9 — hardening + submission
 Public repo ✓, OSI licence ✓, CREDITS ✓, ledger ✓, operator-provides ✓. Still needed: ~90s demo

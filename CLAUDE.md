@@ -40,7 +40,7 @@ current. Summary:
 | 5 Booking (Cal.com) | done | 5 pass / 2 info |
 | 6 Receipts on X Layer **mainnet** | done | 8 pass / 1 info |
 | 7 A2A escrow + settlement | blocked | operator item 5, ledger U3 |
-| 8 Summary + scheduled actions | not started | |
+| 8 Summary + scheduled actions | done | 7 pass / 0 fail |
 | 9 Hardening + submission | not started | deadline 2026-07-27 22:59 UTC |
 | 3b-2 Confidence-scored autonomy (addendum Feature 2) | done | 7 pass / 2 info |
 | 3b-3 Decaying floor (addendum Feature 5) | done | 4 pass / 1 info |
@@ -110,6 +110,12 @@ section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real cred
   nonexistent or malformed id gets. Do not "fix" a missing field on that page by widening
   `PUBLIC_ACTIONS` or by returning `tenant_id`/`thread_id` from `public_receipt` — GATE 6b's
   check 5 anchors a real floor-breach receipt and proves it is unreachable by its own real id.
+- **The summary is arithmetic over stored receipts, never a separate ledger that could drift.**
+  `summary.build_summary` counts the same rows every other gate already writes and verifies — no
+  parallel bookkeeping. `scheduler.anchor_pending`/`followup.process_tenant` calls, run on a
+  schedule, feed the exact receipts the summary counts, so "what the scheduler did" and "what the
+  owner reads" cannot disagree. GATE 8 proves this end to end and deliberately spends no NEW real
+  mainnet gas doing it — the anchoring mechanism itself is GATE 6/6b's job, proven repeatedly.
 
 ## Local setup
 

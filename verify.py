@@ -568,9 +568,35 @@ def phase6b() -> int:
     return r.render()
 
 
+def phase8() -> int:
+    r = Report(
+        "8",
+        "Tenant summary + scheduled actions",
+        preamble=(
+            "\nGATE 8 proves the summary's numbers are counted from real conversations this gate\n"
+            "runs, not asserted, and that the scheduler's three jobs (receipt anchoring,\n"
+            "follow-up dispatch, periodic summary) all read and write the same real rows. Check 5\n"
+            "deliberately does not spend any NEW real mainnet gas — GATE 6 and GATE 6b already\n"
+            "prove the anchoring mechanism itself, repeatedly, so this gate only proves the\n"
+            "scheduled job's honest no-credentials skip.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase8
+        verify_phase8.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 8 harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
 PHASES = {
     "0": phase0, "1": phase1, "2": phase2, "3": phase3, "4": phase4, "5": phase5, "6": phase6,
-    "3b-2": phase3b2, "3b-3": phase3b3, "3b-4": phase3b4, "6b": phase6b,
+    "3b-2": phase3b2, "3b-3": phase3b3, "3b-4": phase3b4, "6b": phase6b, "8": phase8,
 }
 
 
