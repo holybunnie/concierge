@@ -621,8 +621,38 @@ def phase8b1() -> int:
     return r.render()
 
 
+def phase3c() -> int:
+    r = Report(
+        "3c",
+        "Comprehension — answering the question actually asked",
+        preamble=(
+            "\nEvery other gate proves CONCIERGE cannot INVENT a figure, and that holds. GATE 3c\n"
+            "asks the harder question: is the figure it sends an answer to the question that was\n"
+            "asked? A real price attached to a misunderstood question is worse than a refusal,\n"
+            "because it is signed, receipted and anchored on-chain as a commitment.\n"
+            "\nThe pass condition is asymmetric on purpose: escalating, asking, or queueing for\n"
+            "the owner all PASS — failing toward a human is the system working. Sending a figure\n"
+            "for a question the stored profile cannot answer is the FAIL.\n"
+            "\nQuestions are generated from each tenant's own profile, never written down in any\n"
+            "trade's vocabulary — check 1 greps the corpus to prove it, and check 4 re-proves the\n"
+            "behaviour on a tenant with no vertical template at all.\n"
+        ),
+    )
+    try:
+        from concierge import verify_phase3c
+        verify_phase3c.run(r)
+    except Exception as e:
+        import traceback
+        r.check("Phase 3c harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
 PHASES = {
-    "0": phase0, "1": phase1, "2": phase2, "3": phase3, "4": phase4, "5": phase5, "6": phase6,
+    "0": phase0, "1": phase1, "2": phase2, "3": phase3, "3c": phase3c, "4": phase4, "5": phase5, "6": phase6,
     "3b-2": phase3b2, "3b-3": phase3b3, "3b-4": phase3b4, "6b": phase6b, "8": phase8,
     "8b-1": phase8b1,
 }

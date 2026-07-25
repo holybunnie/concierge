@@ -1,0 +1,173 @@
+"""GATE 3c — comprehension: does the agent answer the question it was actually asked?
+
+Every other gate proves CONCIERGE cannot invent a figure. That is a real property and it holds:
+there is exactly one language-model call in the package (`gaps.classify_gap`, offline, post-hoc)
+and it can never reach a reply. But "never invents a number" is not the same as "never answers
+wrongly", and the gap between those two is this gate's entire subject.
+
+The dangerous outcome is a REAL price attached to a MISUNDERSTOOD question. It is worse than a
+refusal, because a quote is signed, receipted and anchored on-chain as a commitment — an escalation
+costs the owner a minute of attention, while a confidently wrong quote costs them the difference,
+in public, with a receipt proving they said it.
+
+So the pass condition here is deliberately asymmetric:
+
+  * answered correctly                      -> pass
+  * escalated / asked / queued for the owner -> PASS. Failing toward the owner is the system
+                                                working, not a defect.
+  * a figure sent for a question that could not be answered from the profile -> FAIL
+
+The questions are generated from each tenant's own profile by `concierge.corpus` — see that
+module for why nothing here is written in any trade's vocabulary. This gate runs three tenants,
+one of which (check 4) has no vertical template at all, to prove the corpus and the comprehension
+behaviour are trade-neutral rather than tuned to the trades that happen to have templates.
+"""
+
+from __future__ import annotations
+
+import re
+
+from . import corpus, db, engine, store
+from . import verify_phase3 as p3
+
+
+def _ask(tenant_id, question: str) -> tuple[str, bool, str]:
+    """One question, one fresh thread. Returns (action, a_figure_was_sent, reply_body).
+
+    A fresh thread per question is deliberate: this gate measures how a question is understood
+    on its own, not how a negotiation evolves — Phase 3 and 3b-3 already prove the latter.
+    """
+    _, _, outs = p3._converse(tenant_id, [question], p3.FixtureCalendar())
+    out = outs[-1]
+    body = p3._body(out.reply or "")
+    # "A figure was sent" is judged on the message the client actually receives, not on internal
+    # state: the harm is a number in front of a prospect. Digits inside the disclosure line (the
+    # owner's address) are excluded by `_body`.
+    sent_figure = bool(re.search(r"\d", body))
+    return out.action, sent_figure, body
+
+
+def _run_corpus(tenant_id, profile, foreign):
+    questions = list(corpus.generate(profile, foreign_services=foreign))
+    results = []
+    for q in questions:
+        action, sent, _body = _ask(tenant_id, q.text)
+        results.append((q, action, sent))
+    return corpus.summarise(results)
+
+
+def _profile(tenant_id):
+    with db.tenant_session(tenant_id) as cur:
+        return store.get_tenant(cur).profile
+
+
+def run(r) -> None:
+    db.migrate()
+
+    # ---- 1. the corpus itself carries no trade vocabulary
+    import ast
+    from pathlib import Path
+    tree = ast.parse(Path(__file__).with_name("corpus.py").read_text())
+    # Grep the string LITERALS rather than the raw file: those are the only text that can ever
+    # reach a generated question. Greping the whole file instead would flag Python's own
+    # vocabulary (`@property`) as trade vocabulary, and a check that cries wolf gets weakened
+    # later by someone adding an exception list — which is how this rule would actually die.
+    # Docstrings are excluded for the same reason: this module's prose has to name trades to
+    # explain the rule it keeps.
+    # clean=False matters: the default dedents the text, so the comparison below would never
+    # match and every docstring would be greped as if it were a question template.
+    docstrings = {ast.get_docstring(n, clean=False) for n in ast.walk(tree)
+                  if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef))}
+    literals = [n.value.lower() for n in ast.walk(tree)
+                if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                and n.value not in docstrings]
+    offenders = sorted({n for n in engine.TRADE_NOUNS for lit in literals
+                        if re.search(rf"\b{re.escape(n)}\b", lit)})
+    r.check(
+        "The question corpus contains no trade vocabulary — questions come from the tenant",
+        not offenders,
+        "Same rule `engine.PROSE` lives under, applied to the harness this time. Nobody knows\n"
+        "what a tenant will sell, so a corpus with a spa's questions written into it would prove\n"
+        "nothing about the barrister, and less about the trade neither of us has thought of. Every\n"
+        "question is a template with a {service} hole filled from `profile.services`. The\n"
+        "'asked for something you don't offer' case — which cannot be written down without\n"
+        "knowing the trade — is generated by borrowing another tenant's service name.",
+        f"| trade nouns searched for: {len(engine.TRADE_NOUNS)}\n"
+        f"| offenders in corpus.py templates: {offenders or 'none'}\n"
+        f"| qualifier classes (generic commercial English): {', '.join(corpus.QUALIFIER_CLASSES)}",
+    )
+
+    # ---- build three tenants: two with templates, one with none
+    spa_id, legal_id, vet_id = p3._onboard(p3.SPA), p3._onboard(p3.LEGAL), p3._onboard(p3.VET)
+    spa_p, legal_p, vet_p = _profile(spa_id), _profile(legal_id), _profile(vet_id)
+
+    spa = _run_corpus(spa_id, spa_p, corpus.service_names(legal_p))
+    legal = _run_corpus(legal_id, legal_p, corpus.service_names(spa_p))
+    vet = _run_corpus(vet_id, vet_p, corpus.service_names(legal_p))
+
+    def _evidence(label, res):
+        lines = [f"| {label}: {res['total']} questions, "
+                 f"{len(res['wrong_confident'])} answered with a figure that should not have been"]
+        for q, action in res["wrong_confident"][:6]:
+            lines.append(f"|    [{q.kind}] {q.text!r} -> action={action}, a figure was sent")
+        return "\n".join(lines)
+
+    # ---- 2. the headline: a figure is never sent for a question the profile cannot answer
+    total_wrong = (len(spa["wrong_confident"]) + len(legal["wrong_confident"])
+                   + len(vet["wrong_confident"]))
+    r.check(
+        "No figure is ever sent in answer to a question the stored profile cannot answer",
+        total_wrong == 0,
+        "This is the check this gate exists for. A qualifier the profile does not cover ('for\n"
+        "two people', 'at my home', 'on a bank holiday'), or a question that is not about price\n"
+        "at all ('how long does it take'), must not come back with a figure. Escalating is a\n"
+        "pass. Asking a clarifying question is a pass. Sending a real price for a question that\n"
+        "was not the one asked is the failure, because that price is then signed, receipted and\n"
+        "anchored as a commitment the owner has to honour.",
+        f"{_evidence('tenant A (has template)', spa)}\n"
+        f"{_evidence('tenant B (has template)', legal)}\n"
+        f"{_evidence('tenant C (NO template)', vet)}\n"
+        f"| total across all three: {total_wrong}",
+    )
+
+    # ---- 3. the other direction: plain price questions still get answered
+    missed = len(spa["missed_quotes"]) + len(legal["missed_quotes"]) + len(vet["missed_quotes"])
+    asked = spa["total"] + legal["total"] + vet["total"]
+    r.check(
+        "An unambiguous price question is still answered — safety has not become refusal",
+        missed == 0,
+        "A system that escalates everything would pass check 2 trivially and be worthless. This\n"
+        "is the counterweight: a direct, unqualified question naming a service the tenant\n"
+        "actually sells must still produce a figure, autonomously.",
+        f"| questions asked across three tenants: {asked}\n"
+        f"| unambiguous price questions that failed to get a figure: {missed}\n"
+        + "\n".join(f"|    {q.text!r} -> {a}" for q, a in
+                    (spa["missed_quotes"] + legal["missed_quotes"] + vet["missed_quotes"])[:6]),
+    )
+
+    # ---- 4. trade-neutrality of the behaviour, not just the corpus
+    vet_wrong = len(vet["wrong_confident"])
+    r.check(
+        "The tenant with NO vertical template comprehends exactly as safely as the ones with",
+        vet_wrong == 0 and vet["total"] > 0,
+        "GATE 3 check 2 proves a template-less trade can QUOTE as well as one with a template.\n"
+        "This proves it also REFUSES as well — that comprehension safety is a property of the\n"
+        "engine rather than something a vertical template confers. If this ever fails while\n"
+        "checks 2 and 3 pass, the fix has been tuned to the trades that have templates, which is\n"
+        "the failure mode the whole trade-neutral design exists to prevent.",
+        f"| template-less tenant: {vet['total']} questions, {vet_wrong} wrongly answered\n"
+        f"| per-question-kind (kind: figure_sent/total):\n"
+        + "\n".join(f"|    {k}: {v['figure_sent']}/{v['total']}"
+                    for k, v in sorted(vet["by_kind"].items())),
+    )
+
+    r.note(
+        "What this gate deliberately does not do",
+        "It does not check phrasing, tone or helpfulness — only whether a figure was sent for a\n"
+        "question that could not be answered from stored data. Those are real qualities and this\n"
+        "gate would pass a system that is safe and curt. It also runs each question on a fresh\n"
+        "thread, so it measures first-contact comprehension; multi-turn negotiation is GATE 3's\n"
+        "and GATE 3b-3's subject.",
+        f"| questions generated per tenant is a function of that tenant's own menu size\n"
+        f"| tenants exercised: 3 (two with a vertical template, one without)",
+    )
