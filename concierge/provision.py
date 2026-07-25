@@ -34,7 +34,7 @@ import re
 import uuid
 from typing import Any
 
-from . import a2a, db, onboarding, store
+from . import a2a, config, db, onboarding, store
 from .models import Tenant
 
 # A subscription tells us who is paying but not who to wake at 2am. We ask, and until they answer
@@ -235,6 +235,51 @@ def on_message(event: a2a.Event) -> None:
     _advance(tenant_id, event)
 
 
+def on_unserved(event: a2a.Event) -> None:
+    """A message on a job with no tenant behind it. Answer it; never leave it silent.
+
+    This is the case that used to fall through `process_pending`'s `TenantUnresolved` branch into
+    nothing at all. Refusing to act on it was right — there is no profile, so there is no price,
+    and inventing one is the single thing this whole build exists to make impossible. But refusing
+    to act and refusing to *speak* are different decisions, and conflating them meant a stranger
+    who messaged the listing got silence, which reads as broken rather than as principled.
+
+    So: a reply assembled here, from this file, deterministically. No model, no price, no figure
+    of any kind — the same discipline as `engine.PROSE`, and for the same reason. What it says is
+    what CONCIERGE is, why it will not answer the question as asked, and how to make it able to.
+
+    Being asked to invent a price and declining is not a failure to demonstrate the product. It is
+    the demonstration.
+    """
+    _say(event, unserved_reply())
+
+
+def unserved_reply() -> str:
+    """The words. Kept a pure function so the gate can assert on them without a transport."""
+    contact = config.get("OPERATOR_CONTACT")
+    human = (f"A human is reachable at {contact}."
+             if contact else
+             "Reply here and a human will pick this up.")
+    return (
+        # Invariant 6, on every channel: the disclosure is the first line, and a route to a
+        # person comes with it. A marketplace buyer is owed this exactly as much as a client is.
+        "This is an AI agent, not a person. " + human + "\n\n"
+        "CONCIERGE answers inbound enquiries on behalf of a business — it quotes from prices that "
+        "business has stored, negotiates down to a floor they set and no further, books the "
+        "appointment, and writes a signed receipt anchored on X Layer for every commitment it "
+        "makes.\n\n"
+        "It has no prices of its own, which is why it cannot answer a request for a quote sent "
+        "directly to it. There is no business behind this conversation yet, so there are no rules "
+        "to quote from — and a number produced without them would be invented. Inventing one is "
+        "the failure this system is built to make structurally impossible, so it declines instead. "
+        "That refusal is the product working, not the product missing.\n\n"
+        "To see it actually quote: subscribe, and I will interview you the way I would any "
+        "business — what you sell, your prices, your floor, your cancellation policy. It takes "
+        "four steps. From then on, an enquiry like the one you just sent gets a real quote from "
+        "your own rules, a booking in your own calendar, and a receipt anyone can verify."
+    )
+
+
 # ---------------------------------------------------------------- the state machine
 
 def _advance(tenant_id: uuid.UUID, event: a2a.Event) -> None:
@@ -249,7 +294,12 @@ def _advance(tenant_id: uuid.UUID, event: a2a.Event) -> None:
             return                                   # onboarding is done; the engine owns this now
 
         try:
-            reply, state = _step(stage, state, event.content, tenant)
+            # `message_text()`, never `content`: a live notification wraps the buyer's actual
+            # words in the platform's own rendering (arrows, agent ids, divider rules). Handing
+            # all of that to `_step` would have the strict parsers reading platform chrome as the
+            # tenant's answer — and a service line parsed out of a divider rule is a wrong price
+            # sent later under that tenant's name.
+            reply, state = _step(stage, state, event.message_text(), tenant)
         except Refused as r:
             _say(event, str(r))
             return
@@ -429,21 +479,34 @@ def process_pending() -> dict[str, int]:
     UNIQUE `a2a_job_id`, replaying is safe: the duplicate insert loses and the buyer is re-greeted
     rather than duplicated.
     """
-    counts = {"seen": 0, "provisioned": 0, "advanced": 0, "skipped": 0, "failed": 0}
+    counts = {"seen": 0, "provisioned": 0, "advanced": 0,
+              "unserved": 0, "internal": 0, "skipped": 0, "failed": 0}
     for event in a2a.pending_events():
         counts["seen"] += 1
+
+        # The platform asking US something — a failed AI dispatch offering "retry / don't retry",
+        # for instance. Deliberately left unconsumed rather than answered: choosing on the
+        # operator's behalf could re-run a dispatch they meant to abandon, and consuming it would
+        # hide a real operational problem. It stays visible in every run's log until resolved.
+        if event.is_platform_internal():
+            counts["internal"] += 1
+            continue
+
         try:
-            if event.kind in SUBSCRIPTION_EVENTS:
+            if a2a.KNOWN_EVENTS and (set(SUBSCRIPTION_EVENTS) & event.platform_events()):
                 on_subscription(event)
                 counts["provisioned"] += 1
             elif event.job_id:
-                on_message(event)
-                counts["advanced"] += 1
+                try:
+                    on_message(event)
+                    counts["advanced"] += 1
+                except db.TenantUnresolved:
+                    # Not our job — but a stranger is still owed an answer. Silence reads as a
+                    # broken listing; this is the one branch that used to produce it.
+                    on_unserved(event)
+                    counts["unserved"] += 1
             else:
                 counts["skipped"] += 1
-        except db.TenantUnresolved:
-            counts["skipped"] += 1          # a job that is not ours; leave it unconsumed
-            continue
         except Exception:
             counts["failed"] += 1           # leave it unconsumed so the next tick retries
             continue

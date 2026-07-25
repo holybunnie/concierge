@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -45,11 +46,37 @@ class A2AUnavailable(RuntimeError):
     """
 
 
+# The platform's own event names, as they appear in a real payload. Confirmed against live
+# traffic on 2026-07-25 — see `platform_events`.
+KNOWN_EVENTS = (
+    "sub_asp_selected", "sub_trial_into_active", "sub_failed_notify", "sub_cancelled",
+    "job_asp_selected", "job_delivered", "job_confirmed", "job_cancelled",
+)
+
+# Where the top-level `kind` is a *category* rather than an event name. Learned from live traffic:
+# a real buyer message arrives as kind="notification", and the event name (`job_asp_selected`) is
+# nested inside a stringified command several levels down.
+#
+# The backslash tolerance is not decoration. The real payload embeds JSON inside a shell command
+# inside a JSON string, so by the time the name appears it is written `\\\"event\\\":\\\"…`, and a
+# pattern expecting bare quotes finds nothing while looking like it works.
+_EVENT_IN_TEXT = re.compile(r'\\*"event\\*"\s*:\s*\\*"([a-z_]+)')
+
+# A real buyer's words arrive wrapped in corner brackets inside a rendered notification:
+#   📥 [Received] SecAgent#1791 → CONCIERGE#9274 (you)\nJob: 0x4cb7…\n────\n「their message」\n────
+# Everything outside the brackets is the platform's own chrome, addressed to a human reader.
+_QUOTED = re.compile(r"「(.+?)」", re.S)
+
+
 @dataclass
 class Event:
     """One marketplace notification, normalised.
 
-    `kind` is the platform's own event name (`sub_asp_selected`, `sub_trial_into_active`, …).
+    `kind` is what the payload calls itself at the top level. Note that this is NOT reliably the
+    platform's event name: live traffic shows broad categories there (`notification`,
+    `decision_request`) with the real event name buried in a nested string. Use `platform_events`
+    to ask what actually happened, never `kind` alone.
+
     `raw` keeps the entire original payload: the platform adds fields over time and we would
     rather carry an unrecognised one around than drop it.
     """
@@ -67,10 +94,70 @@ class Event:
             todo_id=str(p.get("todoId") or p.get("id") or ""),
             kind=str(p.get("type") or p.get("event") or p.get("kind") or "unknown"),
             job_id=_str_or_none(p.get("jobId") or p.get("job_id")),
-            from_agent_id=_str_or_none(p.get("fromAgentId") or p.get("agentId")),
+            from_agent_id=_str_or_none(p.get("fromAgentId") or p.get("agentId")
+                                       or _sender_from_text(p)),
             content=str(p.get("content") or p.get("userContent") or ""),
             raw=p,
         )
+
+    def platform_events(self) -> set[str]:
+        """Every known event name this payload mentions, wherever it is hiding.
+
+        The top-level `kind` is checked first because that is where the documented shape puts it
+        and where the gate suite's fixtures put it. Then the whole payload is searched as text,
+        because that is where the *real* daemon puts it. Both, rather than either, so this reads
+        the format the vendor documents AND the format it actually sends.
+        """
+        found = {self.kind} & set(KNOWN_EVENTS)
+        for text in _strings(self.raw):
+            found |= {m for m in _EVENT_IN_TEXT.findall(text) if m in KNOWN_EVENTS}
+        return found
+
+    def is_platform_internal(self) -> bool:
+        """Is this the platform talking to US, rather than a buyer talking to us?
+
+        `decision_request` items are the daemon asking its operator to pick from `choices` — a
+        failed AI dispatch offering "retry / don't retry", for instance. Answering one by sending
+        prose to the buyer would deliver our internal plumbing to a customer.
+        """
+        return self.kind == "decision_request" or bool(self.raw.get("choices"))
+
+    def message_text(self) -> str:
+        """What the buyer actually wrote, with the platform's rendering stripped off.
+
+        A real notification is a formatted block — arrows, agent ids, a truncated job id, divider
+        rules — wrapping the message in corner brackets. Feeding all of that to a parser would
+        have it reading the platform's chrome as the buyer's answer.
+        """
+        m = _QUOTED.search(self.content)
+        return (m.group(1) if m else self.content).strip()
+
+
+def _strings(node: Any) -> list[str]:
+    """Every string anywhere in a payload, at any depth.
+
+    Walking the structure rather than `json.dumps`-ing it keeps each embedded string at its own
+    original escaping level instead of adding another one on the way past.
+    """
+    if isinstance(node, str):
+        return [node]
+    if isinstance(node, dict):
+        return [s for v in node.values() for s in _strings(v)]
+    if isinstance(node, (list, tuple)):
+        return [s for v in node for s in _strings(v)]
+    return []
+
+
+def _sender_from_text(p: dict[str, Any]) -> str | None:
+    """Recover the sending agent id from a rendered notification header.
+
+    Live payloads carry no `fromAgentId` field; the sender appears only inside the human-readable
+    line `📥 [Received] SecAgent#1791 → CONCIERGE#9274 (you)`. Reading it there is worth doing
+    because it lets a reply be addressed explicitly rather than relying on the job id alone.
+    """
+    text = str(p.get("userContent") or p.get("content") or "")
+    m = re.search(r"\[Received\][^#\n]*#(\d+)", text)
+    return m.group(1) if m else None
 
 
 def _str_or_none(v: Any) -> str | None:
@@ -138,8 +225,26 @@ def send(job_id: str, content: str, *, to_agent_id: str | None = None) -> None:
 
     The content is produced by our own code and passed through verbatim. There is no model in
     this path — see the module docstring.
+
+    **This is `xmtp-send`, and the distinction is not cosmetic.** The obvious-looking
+    `session send --content` is *AI dispatch*: it injects text into the local AI subsession as
+    though it had arrived from the peer, and the CLI's own help says so — "Manage session metadata
+    and AI dispatch". Calling it to answer a buyer does not answer the buyer. It hands our reply to
+    the bound LLM as a prompt, and the buyer hears nothing at all.
+
+    That mistake was live on 2026-07-25 and cost a real message to a real agent: `session send`
+    exited 0, the notification was consumed as handled, and the only trace of the reply was our own
+    prose sitting in `~/.okx-agent-task/logs/llm.log` while the provider 401'd. An exit code is not
+    a delivery. `xmtp-send` is the one that queues a message through the daemon to the peer.
     """
-    args = ["session", "send", "--job-id", job_id, "--content", content]
+    args = ["xmtp-send", "--job-id", job_id, "--message", content]
     if to_agent_id:
         args += ["--to-agent-id", to_agent_id]
+    else:
+        # xmtp-send addresses a peer, not a job: without a recipient there is nobody to deliver
+        # to. Raising beats letting the CLI fail in a way a caller might read as "nothing to do".
+        raise A2AUnavailable(
+            f"Refusing to send on job {job_id!r} with no recipient agent id — xmtp-send requires "
+            f"--to-agent-id, and a message with no addressee is not a message."
+        )
     _run(args)
