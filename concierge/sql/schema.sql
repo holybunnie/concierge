@@ -30,6 +30,13 @@ CREATE TABLE IF NOT EXISTS tenants (
     created_at      timestamptz NOT NULL DEFAULT now()
 );
 
+-- The marketplace job that provisioned this tenant, for tenants that arrived by subscribing on
+-- OKX A2A rather than being set up by hand. NULL for every hand-built tenant, and UNIQUE so a
+-- replayed subscription event cannot create a second tenant for the same buyer — the database,
+-- not the worker's control flow, is what makes provisioning idempotent.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS a2a_job_id text;
+CREATE UNIQUE INDEX IF NOT EXISTS tenants_a2a_job_id_key ON tenants (a2a_job_id);
+
 CREATE TABLE IF NOT EXISTS threads (
     thread_id       uuid PRIMARY KEY,
     tenant_id       uuid        NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
@@ -144,6 +151,15 @@ CREATE OR REPLACE FUNCTION resolve_tenant_by_inbound_address(addr text) RETURNS 
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
 $$ SELECT tenant_id FROM tenants WHERE inbound_address = lower(btrim(addr)) $$;
 
+-- Auto-provisioning (the provisioning suite) has the same chicken-and-egg problem as inbound mail, one step
+-- earlier: a message arrives over A2A carrying a job id, and we must learn which tenant that job
+-- belongs to before we can scope a session. This is the inbound-address resolver's exact shape —
+-- untrusted external input in, one opaque uuid out — deliberately, rather than a new mechanism.
+-- A caller who guesses job ids learns only whether one is taken, never whose or anything about it.
+CREATE OR REPLACE FUNCTION resolve_tenant_by_a2a_job(job text) RETURNS uuid
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
+$$ SELECT tenant_id FROM tenants WHERE a2a_job_id = btrim(job) $$;
+
 CREATE OR REPLACE FUNCTION resolve_tenant_by_engagement(ref text) RETURNS uuid
     LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
 $$ SELECT tenant_id FROM tenants WHERE engagement->>'escrow_ref' = btrim(ref) $$;
@@ -190,6 +206,7 @@ $$;
 GRANT USAGE ON SCHEMA public TO concierge_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON tenants, threads, receipts, gap_events TO concierge_app;
 GRANT EXECUTE ON FUNCTION resolve_tenant_by_inbound_address(text) TO concierge_app;
+GRANT EXECUTE ON FUNCTION resolve_tenant_by_a2a_job(text) TO concierge_app;
 GRANT EXECUTE ON FUNCTION resolve_tenant_by_engagement(text) TO concierge_app;
 GRANT EXECUTE ON FUNCTION public_receipt(uuid) TO concierge_app;
 GRANT EXECUTE ON FUNCTION current_tenant() TO concierge_app;

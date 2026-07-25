@@ -30,17 +30,19 @@ def create_tenant(
     inbound_address: str,
     profile: dict[str, Any] | None = None,
     engagement: dict[str, Any] | None = None,
+    a2a_job_id: str | None = None,
 ) -> Tenant:
     """The cursor must already be scoped to `tenant_id`; the RLS WITH CHECK clause enforces it."""
     cur.execute(
         """
         INSERT INTO tenants (tenant_id, owner_wallet, owner_email, business_name, vertical,
-                             inbound_address, profile, engagement)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                             inbound_address, profile, engagement, a2a_job_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING *
         """,
         (tenant_id, owner_wallet, owner_email, business_name, vertical,
-         inbound_address.lower().strip(), Jsonb(profile or {}), Jsonb(engagement or {})),
+         inbound_address.lower().strip(), Jsonb(profile or {}), Jsonb(engagement or {}),
+         a2a_job_id),
     )
     return Tenant.from_row(cur.fetchone())
 
@@ -54,6 +56,44 @@ def get_tenant(cur: Cursor) -> Tenant | None:
 
 def update_profile(cur: Cursor, profile: dict[str, Any]) -> Tenant | None:
     cur.execute("UPDATE tenants SET profile = %s RETURNING *", (Jsonb(profile),))
+    row = cur.fetchone()
+    return Tenant.from_row(row) if row else None
+
+
+def update_vertical(cur: Cursor, vertical: str) -> Tenant | None:
+    """Set once, when auto-provisioning learns the trade from the buyer's own description.
+
+    A hand-built tenant gets its vertical at insert time; one that arrived by subscription cannot,
+    because the row has to exist before there is anywhere RLS-fenced to hold the interview. See
+    `provision.py`.
+    """
+    cur.execute("UPDATE tenants SET vertical = %s RETURNING *", (vertical,))
+    row = cur.fetchone()
+    return Tenant.from_row(row) if row else None
+
+
+def update_owner_email(cur: Cursor, owner_email: str) -> Tenant | None:
+    cur.execute("UPDATE tenants SET owner_email = %s RETURNING *", (owner_email.strip(),))
+    row = cur.fetchone()
+    return Tenant.from_row(row) if row else None
+
+
+def update_business_name(cur: Cursor, business_name: str) -> Tenant | None:
+    cur.execute("UPDATE tenants SET business_name = %s RETURNING *", (business_name.strip(),))
+    row = cur.fetchone()
+    return Tenant.from_row(row) if row else None
+
+
+def update_inbound_address(cur: Cursor, inbound_address: str) -> Tenant | None:
+    """Only ever called during provisioning, before the address has been handed to anyone.
+
+    An auto-provisioned tenant is created before it has a name, so its first address is derived
+    from the job id; once the buyer tells us the business name we re-derive a sane one. The UNIQUE
+    constraint on the column is what settles a race with a simultaneous onboarding, exactly as it
+    does for `onboarding.allocate_inbound_address`.
+    """
+    cur.execute("UPDATE tenants SET inbound_address = %s RETURNING *",
+                (inbound_address.lower().strip(),))
     row = cur.fetchone()
     return Tenant.from_row(row) if row else None
 

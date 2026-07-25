@@ -1,0 +1,42 @@
+[Unit]
+# Auto-provisioning: turns an OKX marketplace subscription into a working tenant with nobody
+# watching. This is the service that makes "listed" mean "open for business" — before it existed,
+# a subscription produced a notification and a human had to build the account by hand.
+#
+# It is separate from concierge-a2a.service on purpose. That one is the XMTP transport and must
+# stay up to keep `onlineStatus: 1`; this one reads the events it delivers. A crash loop here
+# must not be able to take the listing offline.
+Description=CONCIERGE A2A auto-provisioning worker
+After=network-online.target concierge.service concierge-a2a.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=concierge
+Group=concierge
+WorkingDirectory=/opt/concierge
+
+# Same two environment facts the transport unit documents, for the same reasons: HOME locates the
+# daemon's own state on a box shared with the rwoo project, and PATH must put OUR copy of the CLI
+# ahead of the global one. The CLI also hard-requires Node 22+ (it imports `node:sqlite`) —
+# /usr/local/bin/node is v22 and /usr/bin/node is v20 and dies on import, so the order of those
+# two entries is load-bearing, not cosmetic.
+Environment=HOME=/opt/concierge
+Environment=PATH=/opt/concierge/a2a/node_modules/.bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/opt/concierge/.env
+
+ExecStart=/opt/concierge/.venv/bin/python -m concierge.provision_worker
+
+# Events are consumed only after their database transaction commits, so an unclean exit replays
+# rather than loses a buyer. Idempotency is enforced by the UNIQUE constraint on tenants.a2a_job_id.
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/opt/concierge
+
+[Install]
+WantedBy=multi-user.target

@@ -651,6 +651,34 @@ def comprehension() -> int:
     return r.render()
 
 
+def provisioning() -> int:
+    r = Report(
+        "provisioning",
+        "Auto-provisioning a marketplace buyer",
+        preamble=(
+            "\nThe provisioning suite closes the gap between 'listed on the marketplace' and 'a buyer who\n"
+            "subscribes at 3am gets a working business'. Check 1 proves a subscription event alone\n"
+            "creates a tenant; check 2 attacks the half-provisioned window and proves an empty\n"
+            "profile still cannot quote; check 3 runs the whole interview with no human step;\n"
+            "check 4 proves every stored value came from the buyer's own bytes; check 5 proves a\n"
+            "bad answer is refused rather than half-accepted; checks 6-7 are the replay and\n"
+            "isolation attacks; check 8 is the payoff — a real enquiry answered at the buyer's\n"
+            "own price.\n"
+        ),
+    )
+    try:
+        from concierge import verify_provisioning
+        verify_provisioning.run(r)
+    except Exception as e:
+        import traceback
+        r.check("the provisioning harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
 SUITES = {
     "foundations": foundations,
     "isolation": isolation,
@@ -666,6 +694,7 @@ SUITES = {
     "public-receipts": public_receipts,
     "scheduler": scheduler,
     "product-gaps": product_gaps,
+    "provisioning": provisioning,
 }
 
 

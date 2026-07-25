@@ -47,6 +47,7 @@ current. Summary:
 | 3b-3 Decaying floor (addendum Feature 5) | done | 4 pass / 1 info |
 | 3b-4 Safe Follow-Up (addendum) | done | 3 pass / 1 info |
 | 6b Public receipt verification (addendum Feature 3) | done | 6 pass / 1 info |
+| 10 A2A auto-provisioning | done | 9 pass / 0 fail / 1 info |
 
 Feature addendum (Product-Gap Intelligence, Confidence-Scored Autonomy, Public Receipt
 Verification, Cross-Tenant Benchmarking, Decaying Floor, Safe Follow-Up) attaches to the phases
@@ -147,6 +148,20 @@ section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real cred
   absent or invalid `LLM_API_KEY` it returns `None` and the summary shows the gap as raw, verbatim
   text — never a fabricated category, never silently dropped. the product-gaps suite proves all of this, and its
   check 5 proves the honest no-key degradation deterministically.
+- **An auto-provisioned tenant is created BEFORE its profile exists, and that window is safe by
+  construction — not by hurrying through it.** `provision.on_subscription` inserts the tenant row
+  with `profile = {}` so the interview has an RLS-fenced home; a second isolation mechanism for
+  in-flight onboarding state is exactly what this avoids. It is safe because Phase 3 already makes
+  an empty profile unquotable — the provisioning suite check 2 fires a real priced enquiry at that half-built
+  tenant and proves it ESCALATES with not one digit reaching the client. Do not "fix" the window
+  by inventing defaults to fill the profile early. Related: `tenants.a2a_job_id` is UNIQUE and
+  `resolve_tenant_by_a2a_job` is the fifth SECURITY DEFINER door, the same shape as the
+  inbound-address resolver — the constraint is what makes replayed subscription events idempotent,
+  not `provision.py`'s control flow, and check 6 proves it by forcing a duplicate insert.
+  The A2A interview asks the OPTIONAL questions too, unlike the human flow, because
+  `confidence.py` counts a missing lexicon against profile completeness — skip them and the tenant
+  queues every reply for an owner who subscribed in order not to be in the loop. `skip` is
+  accepted for optional fields and refused for required ones, or it becomes the stored answer.
 - **The summary is arithmetic over stored receipts, never a separate ledger that could drift.**
   `summary.build_summary` counts the same rows every other gate already writes and verifies — no
   parallel bookkeeping. `scheduler.anchor_pending`/`followup.process_tenant` calls, run on a

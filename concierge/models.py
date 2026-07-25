@@ -24,13 +24,17 @@ class Tenant:
     inbound_address: str
     profile: dict[str, Any] = field(default_factory=dict)
     engagement: dict[str, Any] = field(default_factory=dict)
+    # Set only for tenants that arrived by subscribing on the OKX marketplace; None for the
+    # hand-built ones. Nothing in pricing or the engine reads it — it is how the A2A transport
+    # finds its way back to the right tenant, and nothing more.
+    a2a_job_id: str | None = None
     created_at: datetime | None = None
 
     @classmethod
     def from_row(cls, row: dict[str, Any]) -> "Tenant":
         return cls(**{k: row[k] for k in (
             "tenant_id", "owner_wallet", "owner_email", "business_name", "vertical",
-            "inbound_address", "profile", "engagement", "created_at",
+            "inbound_address", "profile", "engagement", "a2a_job_id", "created_at",
         )})
 
 

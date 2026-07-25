@@ -1,0 +1,14 @@
+[Unit]
+Description=Poll the OKX marketplace for new subscriptions and advance onboarding
+# A buyer subscribing at 3am gets their first question within a minute. A tighter interval buys
+# nothing: the onboarding interview is a conversation, and the buyer's own reply latency dominates.
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+# If the box was down, run once on the way back up rather than skipping the missed buyers.
+Persistent=true
+Unit=concierge-a2a-provision.service
+
+[Install]
+WantedBy=timers.target

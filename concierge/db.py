@@ -96,6 +96,18 @@ def list_tenant_ids() -> list[uuid.UUID]:
             return [row["tenant_id"] for row in cur.fetchall()]
 
 
+def resolve_tenant_by_a2a_job(job_id: str) -> uuid.UUID:
+    """Map an OKX marketplace job id to a tenant. Same contract as the address resolver:
+    an id or an exception, never a default and never a guess."""
+    ref = (job_id or "").strip()
+    with unscoped_session() as cur:
+        cur.execute("SELECT resolve_tenant_by_a2a_job(%s) AS tenant_id", (ref,))
+        row = cur.fetchone()
+    if not row or not row["tenant_id"]:
+        raise TenantUnresolved(f"No tenant owns A2A job {ref!r}. Refusing to guess a recipient.")
+    return row["tenant_id"]
+
+
 def resolve_tenant_by_engagement(escrow_ref: str) -> uuid.UUID:
     with unscoped_session() as cur:
         cur.execute("SELECT resolve_tenant_by_engagement(%s) AS tenant_id", (escrow_ref.strip(),))

@@ -514,9 +514,69 @@ sufficient — keep service descriptions under 500 characters.
 chat session, the listing stays up without anyone's laptop being open — which is the failure mode
 that takes other listings offline.
 
-**Next, once approved:** auto-provisioning. On `sub_asp_selected`, create the tenant, issue
-`<slug>@inbox.quietdesks.com`, and run onboarding over A2A — the buyer is an agent, so it can
-answer the onboarding questions directly, no form. Until that is wired, onboard trial buyers by hand.
+**Auto-provisioning is BUILT** (2026-07-25, same day) — see the section below. Listing the agent
+opened a door that strangers walk through on their own schedule, and until this landed there was a
+human standing behind it. There no longer is.
+
+## Auto-provisioning — a subscription becomes a working tenant, unattended
+
+**GATE provisioning: 9 pass / 0 fail / 1 info** — `python3 verify.py --suite provisioning`.
+
+The gap this closed: before it, `sub_asp_selected` produced a notification and nothing else. A
+person had to create the tenant, issue the address and ask the onboarding questions by hand. For a
+product whose entire premise is that nobody's presence is load-bearing, that was the one place a
+human still was.
+
+    sub_asp_selected -> create tenant -> owner email -> business name -> description
+                     -> vertical interview -> profile written -> inbox handed back
+
+New: `concierge/provision.py` (state machine), `concierge/a2a.py` (CLI transport, the seam the
+suite stubs), `concierge/verify_provisioning.py`, `deploy/concierge-a2a-provision.service`.
+
+**Four decisions a later session must not "simplify":**
+
+1. **The tenant row is created FIRST, with an empty profile.** Interviewing first and inserting a
+   complete tenant at the end would be tidier, but in-flight onboarding state would then have
+   nowhere RLS-fenced to live and would need a second isolation mechanism. It is safe because an
+   empty profile is *already* unquotable — check 2 attacks that window with a real priced enquiry
+   and proves it escalates with not one digit reaching the client.
+2. **`resolve_tenant_by_a2a_job` is a fifth SECURITY DEFINER door**, deliberately the exact shape
+   of the inbound-address resolver: untrusted input in, one opaque uuid out. `tenants.a2a_job_id`
+   is UNIQUE, and *that constraint* — not `provision.py`'s control flow — is what makes replayed
+   events idempotent. Check 6 forces a rogue duplicate insert and is refused by the database.
+3. **The optional questions ARE asked over A2A**, unlike the human flow. Not thoroughness for its
+   own sake: `confidence.py` counts a missing lexicon against profile completeness, so a tenant
+   that skips its own vocabulary scores below the autonomy threshold and queues every reply for
+   an owner who subscribed precisely so as not to be in the loop. `skip` is accepted for optional
+   fields and **refused for required ones** — otherwise "skip" is stored as the literal answer.
+4. **A malformed answer is refused, never inferred.** `_parse_services` is strict and positional.
+   The buyer being a machine makes loose parsing tempting; a service parsed slightly wrong is a
+   wrong price sent to a real client under the tenant's name. Refusing costs one round trip.
+
+**The finding worth reading twice.** Check 8 runs a real enquiry through the auto-provisioned
+tenant. It quotes GBP 180 because the buying agent said 180 — and it is *held for the owner*
+rather than sent. The weighted score is 0.85 against a 0.55 threshold, comfortably autonomous;
+what stops it is the comprehension floor, because the client wrote "for my cat", a qualifier this
+profile has no rule for, so only 75% of their words are accounted for. Two defences built for the
+email path, holding on a channel neither was written for. A business set up entirely by machine
+does not start firing prices at strangers — its first uncertain answer goes to its owner.
+
+**Not yet proven, and honestly so:** the wire format of the live daemon's own event payloads. The
+suite stubs the CLI at the `a2a.send` seam (exactly as the email suite stubs Postmark), so
+everything above runs against the real database, real RLS and the real engine — but the actual
+JSON a real `sub_asp_selected` carries cannot be confirmed until a real buyer subscribes, and the
+listing is still under review. `a2a.Event.from_payload` therefore accepts several spellings of
+each field and keeps the whole payload in `raw`. **First real subscriber: watch
+`journalctl -u concierge-a2a-provision` and confirm the payload parsed before trusting it.**
+
+**Also fixed here:** the holding `business_name` no longer contains the job id. It is spoken aloud
+in escalation copy a client can receive, so a tenant escalating in its first five minutes would
+have read a marketplace job id out to their prospect. It is now `Pending business name`.
+
+**Environment tripwire found while wiring this:** the okx-a2a CLI hard-requires Node 22+ (it
+imports `node:sqlite`). `/usr/local/bin/node` is v22.22.0 and wins on the service PATH;
+`/usr/bin/node` is v20 and dies instantly on import. On a shared box that is a live hazard —
+pinned in the unit comments alongside the `npm install -g` one.
 
 ## OKX A2A — what is set up, and the shared-box rule that governs it
 
