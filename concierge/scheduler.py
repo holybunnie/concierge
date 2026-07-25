@@ -26,7 +26,7 @@ from typing import Any
 
 from psycopg import Cursor
 
-from . import config, db, followup, gaps, receipts, store, summary
+from . import config, db, followup, gaps, postmark, receipts, store, summary
 from .followup import FollowUpResult
 from .models import Receipt, Tenant
 from .postmark import Mailer, OutboundEmail
@@ -55,6 +55,13 @@ def anchor_pending(cur: Cursor, tenant: Tenant) -> list[Receipt]:
         return []
     pending = [rec for rec in store.list_receipts(cur) if not receipts.anchored(rec)]
     return [receipts.anchor(cur, rec) for rec in pending]
+
+
+@dataclass
+class TenantRunError:
+    """One tenant's run failed. Returned, not raised — see `run_all`."""
+    tenant_id: Any
+    error: str
 
 
 @dataclass
@@ -127,3 +134,70 @@ def dispatch(tenant_id, *, mailer: Mailer | None = None,
         for email in emails:
             mailer.send(email)
     return result
+
+
+def run_all(*, mailer: Mailer | None = None,
+            now: datetime | None = None) -> list[TenantRunResult | TenantRunError]:
+    """Every tenant, one timer tick. One tenant's failure never stops the rest.
+
+    A worker that dies partway through leaves some tenants processed and others silently not —
+    and because the summary's `last_sent_at` is only written by a run that completes, a tenant
+    skipped this tick is picked up on the next one rather than lost. Failures are returned (and
+    logged by `main`) rather than raised, so an unreachable Postmark for one tenant cannot stop
+    another tenant's receipts from anchoring.
+    """
+    results: list[TenantRunResult | TenantRunError] = []
+    for tenant_id in db.list_tenant_ids():
+        try:
+            results.append(dispatch(tenant_id, mailer=mailer, now=now))
+        except Exception as exc:  # one tenant's bad day is not every tenant's
+            results.append(TenantRunError(tenant_id=tenant_id, error=f"{type(exc).__name__}: {exc}"))
+    return results
+
+
+def main(argv: list[str] | None = None) -> int:
+    """The cron/systemd entry point: `python3 -m concierge.scheduler`.
+
+    Sends for real when a Postmark token is configured, and — consistent with the rest of this
+    codebase — runs every DB-side decision honestly without one rather than refusing to start.
+    `--dry-run` forces that no-send mode even when a token IS present.
+    """
+    import argparse
+    import json
+    import sys
+
+    parser = argparse.ArgumentParser(prog="concierge.scheduler", description=__doc__)
+    parser.add_argument("--tenant", help="run one tenant id instead of all of them")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="make every decision and write every DB row, but send no email")
+    args = parser.parse_args(argv)
+
+    token = config.postmark_token()
+    mailer = None if (args.dry_run or not token) else postmark.PostmarkMailer(token)
+
+    started = datetime.now(dt_timezone.utc)
+    if args.tenant:
+        results: list[Any] = [dispatch(args.tenant, mailer=mailer)]
+    else:
+        results = run_all(mailer=mailer)
+
+    errors = [x for x in results if isinstance(x, TenantRunError)]
+    ok = [x for x in results if isinstance(x, TenantRunResult)]
+    report = {
+        "started_at": started.isoformat(),
+        "finished_at": datetime.now(dt_timezone.utc).isoformat(),
+        "sending": mailer is not None,
+        "tenants": len(results),
+        "anchored": sum(len(x.anchored) for x in ok),
+        "follow_ups": sum(1 for x in ok for f in x.follow_up_results if f.email is not None),
+        "summaries": sum(1 for x in ok if x.summary_due),
+        "errors": [{"tenant_id": str(e.tenant_id), "error": e.error} for e in errors],
+    }
+    # One JSON line per run, to stdout — `journalctl -u concierge-scheduler` is then greppable
+    # and machine-readable, rather than prose a human has to read to find out what happened.
+    print(json.dumps(report), file=sys.stdout, flush=True)
+    return 1 if errors else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

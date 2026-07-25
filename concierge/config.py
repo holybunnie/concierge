@@ -57,6 +57,9 @@ class MissingCredential(RuntimeError):
 # only to run migrations, and never by request-handling code.
 APP_DATABASE_URL = "postgresql://concierge_app:concierge_app@localhost:5432/concierge"
 OWNER_DATABASE_URL = "postgresql://concierge:concierge@localhost:5432/concierge"
+# The scheduled worker's enumeration-only role (Phase 8). It holds no table grants at all — see
+# the worker-role block in schema.sql for why it is separate from concierge_app.
+WORKER_DATABASE_URL = "postgresql://concierge_worker:concierge_worker@localhost:5432/concierge"
 
 
 def app_database_url() -> str:
@@ -65,6 +68,10 @@ def app_database_url() -> str:
 
 def owner_database_url() -> str:
     return get("DATABASE_URL") or OWNER_DATABASE_URL
+
+
+def worker_database_url() -> str:
+    return get("WORKER_DATABASE_URL") or WORKER_DATABASE_URL
 
 
 # ---------------------------------------------------------------- email (Phase 4)

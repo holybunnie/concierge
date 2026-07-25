@@ -1,0 +1,30 @@
+[Unit]
+# Phase 8's scheduled worker: anchors unanchored receipts, sends due follow-ups, mails the
+# periodic owner summary. Separate from concierge.service (the inbound webhook) on purpose —
+# a long anchoring sweep must never make a prospect wait for a reply.
+Description=CONCIERGE scheduled worker (anchoring, follow-ups, summaries)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=concierge
+Group=concierge
+WorkingDirectory=/opt/concierge
+EnvironmentFile=/opt/concierge/.env
+ExecStart=/opt/concierge/.venv/bin/python -m concierge.scheduler
+
+# One JSON line per run to the journal: `journalctl -u concierge-scheduler`.
+StandardOutput=journal
+StandardError=journal
+
+# The worker reads credentials and talks to Postmark, X Layer and Postgres. It has no reason to
+# write anywhere on disk, so it does not get to.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=
+
+[Install]
+WantedBy=multi-user.target

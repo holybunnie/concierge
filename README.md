@@ -34,9 +34,9 @@ receipts anchored on X Layer **mainnet**, and a per-tenant summary driven by a s
 finally calls the receipt-anchoring and follow-up jobs on a timer instead of never. On top of
 that, a full follow-on feature addendum is also built and gated: **confidence-scored autonomy**,
 **the decaying floor**, **Safe Follow-Up**, and **public receipt verification** (all described
-below). Phase 7 (A2A escrow) is blocked on an unresolved API shape; the two remaining addendum
-features (product-gap intelligence — unblocked now that Phase 8 exists, not yet started; cross-
-tenant benchmarking — blocked on Phase 7) are what's left. Full state, per phase and per feature,
+below), plus **product-gap intelligence**. Phase 7 (A2A escrow) is blocked on an unresolved API
+shape, and cross-tenant benchmarking is blocked behind it — those two are what's left, along with
+Phase 9 (submission). Full state, per phase and per feature,
 in [`docs/HANDOFF.md`](docs/HANDOFF.md).
 
 ```bash

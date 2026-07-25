@@ -23,7 +23,7 @@ python3 verify.py --phase 4        # expect 8 pass / 0 fail / 3 info
 python3 verify.py --phase 5        # expect 5 pass / 0 fail / 2 info — makes+cancels a real booking
 python3 verify.py --phase 6        # expect 8 pass / 0 fail / 1 info — anchors 2 real receipts on X Layer mainnet
 python3 verify.py --phase 6b       # expect 6 pass / 0 fail / 1 info — anchors 2 more real receipts; public verify page
-python3 verify.py --phase 8        # expect 7 pass / 0 fail / 0 info — summary + scheduled actions, no new gas spent
+python3 verify.py --phase 8        # expect 9 pass / 0 fail / 0 info — summary + scheduled worker, no new gas spent
 python3 verify.py --phase 8b-1     # expect 5 pass / 0 fail / 0 info — Feature 1, product-gap intelligence
 ```
 
@@ -88,7 +88,7 @@ git config --local --add credential.helper \
 | 3b-3 Decaying floor (Feature 5) | **4 pass / 1 info** | 5 real negotiation rounds tracked the curve exactly, 6 rounds past it the absolute floor still never broke, flat-floor tenant regression re-proved |
 | 3b-4 Safe Follow-Up | **3 pass / 1 info** | real stalled thread nudged once from its own history, second stall marks it DEAD, a thread with no genuine prior contact never triggers one however far the clock is pushed |
 | 6b Public receipt verification (Feature 3) | **6 pass / 1 info** | real anchored receipt reads back correctly on the public page; nonexistent id, malformed id, and a real internal-only (floor-breach) receipt all render the identical clean 404; two tenants' pages never cross |
-| 8 Summary + scheduled actions | **7 pass / 0 fail** | real conversation numbers counted exactly, escalation text carried verbatim, scheduler's anchor/follow-up/summary jobs all read+write the same real rows, no new mainnet gas spent proving it |
+| 8 Summary + scheduled actions | **9 pass / 0 fail** | worker entry point + enumeration-role split (checks 8-9, 2026-07-25); real conversation numbers counted exactly, escalation text carried verbatim, scheduler's anchor/follow-up/summary jobs all read+write the same real rows, no new mainnet gas spent proving it |
 | 8b-1 Product-gap intelligence (Feature 1) | **5 pass / 0 fail** | an unquotable inquiry writes one verbatim GapEvent and surfaces word-for-word in the owner summary; a floor breach writes none; a second tenant's summary never contains it; with no LLM key the gap shows as raw text, never a fabricated category |
 
 ## Feature addendum (Phases 3b/6b/8b/7b) — status
@@ -447,8 +447,17 @@ once per period, not every run). GATE 8 proves the numbers against real conversa
 runs, and proves the anchoring job's honest no-credentials skip *without* spending any new real
 mainnet gas — GATE 6/6b already prove the anchoring mechanism itself, repeatedly.
 
-Not yet built: actually installing `scheduler.dispatch` on a cron/systemd timer on the VPS (a
-deploy action, same as `app.py`'s webhook — §12) and end-to-end proof against live Phase 4 email
+**The worker entry point now exists (2026-07-25).** `scheduler.run_all()` +
+`python3 -m concierge.scheduler` (`--tenant`, `--dry-run`; one JSON line per run to stdout, so
+`journalctl -u concierge-scheduler` is greppable), with `deploy/concierge-scheduler.{service,timer}`
+(oneshot, every 15min, `Persistent=true`). Enumerating tenants needed a fourth deliberate door —
+`scheduler_tenant_ids()`, granted to a new enumeration-only `concierge_worker` role and REVOKEd
+from `concierge_app`; see CLAUDE.md for why the split is load-bearing. GATE 8 is now **9 pass**
+(checks 8 and 9 are new). **Still a deploy action: installing the timer on the VPS** — that needs
+`WORKER_DATABASE_URL` in `/opt/concierge/.env` and a real password for `concierge_worker` (the
+schema creates it with a literal dev password, same known gap as `concierge_app`).
+
+Not yet built: end-to-end proof against live Phase 4 email
 + Phase 7 A2A data, which is blocked on those phases the same way it always was. Feature 1
 (product-gap intelligence) attached here and is **done** (GATE 8b-1) — see the Feature addendum
 section above for what it added and the invalid-LLM-key finding.

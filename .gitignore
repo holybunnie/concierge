@@ -12,3 +12,5 @@ artifacts/
 cache/
 contracts/out/
 contracts/cache/
+.env.bak*
+.env.*.bak

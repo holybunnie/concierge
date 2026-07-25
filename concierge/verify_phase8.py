@@ -201,3 +201,60 @@ def run(r) -> None:
         f"| receipt id overlap: {len(spa_ids & other_ids)}\n"
         f"| barrister summary quotes_sent: {s_other.quotes_sent}",
     )
+
+    # ---- 8. the worker runs every tenant on one tick, and one failure doesn't stop the rest
+    import psycopg
+    from . import config as cfg
+
+    enumerated = db.list_tenant_ids()
+    mailer3 = p4.RecordingMailer()
+    with _NoXLayerCreds():
+        all_results = scheduler.run_all(mailer=mailer3)
+    ran_ids = {str(x.tenant_id) for x in all_results}
+    errors = [x for x in all_results if isinstance(x, scheduler.TenantRunError)]
+    r.check(
+        "`run_all` enumerates every tenant and processes each one under its own scoped session",
+        (len(enumerated) >= 3 and len(all_results) == len(enumerated)
+         and {str(spa_id), str(digest_id), str(other_id)} <= ran_ids and not errors),
+        "This is what closes the gap the module docstring named: the jobs existed as callable\n"
+        "functions with nothing calling them on a schedule. `run_all` is that caller —\n"
+        "`python3 -m concierge.scheduler` on a systemd timer (deploy/concierge-scheduler.timer).\n"
+        "It cannot use an ordinary session to find its work: RLS means an unscoped read returns\n"
+        "zero rows (GATE 1), so enumeration goes through `scheduler_tenant_ids()` as the\n"
+        "enumeration-only `concierge_worker` role, and each tenant is then processed through the\n"
+        "same RLS-fenced `tenant_session` as every other read in the system. Failures are\n"
+        "returned per-tenant, never raised, so one unreachable Postmark cannot stop another\n"
+        "tenant's receipts from anchoring.",
+        f"| tenants enumerated: {len(enumerated)}, dispatched: {len(all_results)}, errors: {len(errors)}\n"
+        f"| this gate's three tenants all present in the run: "
+        f"{ {str(spa_id), str(digest_id), str(other_id)} <= ran_ids }",
+    )
+
+    # ---- 9. ATTACK — the webhook role cannot enumerate tenants
+    with psycopg.connect(cfg.app_database_url()) as conn:
+        try:
+            conn.execute("SELECT scheduler_tenant_ids()").fetchall()
+            app_refused, detail = False, "app role ENUMERATED — the fence is broken"
+        except psycopg.errors.InsufficientPrivilege as exc:
+            app_refused, detail = True, str(exc).splitlines()[0]
+    with psycopg.connect(cfg.worker_database_url()) as conn:
+        try:
+            conn.execute("SELECT business_name FROM tenants").fetchall()
+            worker_refused, worker_detail = False, "worker role READ tenant rows — fence broken"
+        except psycopg.errors.InsufficientPrivilege as exc:
+            worker_refused, worker_detail = True, str(exc).splitlines()[0]
+    r.check(
+        "ATTACK — `concierge_app` cannot enumerate, and `concierge_worker` cannot read a row",
+        app_refused and worker_refused,
+        "The worker needs a list of tenants; the webhook must never have one. `concierge_app`\n"
+        "can set `app.tenant_id` to any value it likes — that is how scoping works — so if it\n"
+        "could ALSO enumerate, a compromise of the public webhook would yield every tenant's\n"
+        "data instead of one guessed address's. So EXECUTE on `scheduler_tenant_ids()` is granted\n"
+        "to `concierge_worker` alone and explicitly REVOKEd from `concierge_app` and PUBLIC. The\n"
+        "worker role is the mirror image: it holds no table grants at all, so the uuids it can\n"
+        "list are the only thing it can ever obtain. Neither role alone can both list tenants\n"
+        "and read their rows.",
+        f"| concierge_app SELECT scheduler_tenant_ids() -> {detail}\n"
+        f"| concierge_worker SELECT business_name FROM tenants -> {worker_detail}\n"
+        f"| concierge_worker scheduler_tenant_ids() -> {len(enumerated)} opaque uuids, no other column",
+    )

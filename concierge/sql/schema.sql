@@ -161,6 +161,22 @@ $$ SELECT receipt_id, action, decision, rule_checked, within_rules, content_hash
           xlayer_tx, created_at
    FROM receipts WHERE receipt_id = rid $$;
 
+-- Phase 8's scheduled worker has the opposite problem to the resolvers above: it is not answering
+-- an inbound message, so nothing hands it a tenant to scope to. It must ask "which tenants exist"
+-- before it can open a scoped session for each.
+--
+-- That IS the list this block's comment says a door must never return, so it is fenced differently
+-- rather than waved through. It returns ONLY opaque uuids — no address, no business name, no
+-- profile — and EXECUTE is granted to `concierge_worker` alone, NEVER to `concierge_app`. That
+-- split is the point: `concierge_app` is the role the internet-facing webhook runs as, and it can
+-- set `app.tenant_id` to any value it likes, so handing IT enumeration would turn a compromise of
+-- the web app into "read every tenant". The worker role, in exchange, is granted no table access
+-- at all (see the grants below) — it can enumerate ids and do nothing else with them. Neither
+-- role alone can both list tenants and read their rows.
+CREATE OR REPLACE FUNCTION scheduler_tenant_ids() RETURNS SETOF uuid
+    LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS
+$$ SELECT tenant_id FROM tenants ORDER BY created_at $$;
+
 -- ---------------------------------------------------------------- the application role
 
 DO $$
@@ -182,3 +198,28 @@ GRANT EXECUTE ON FUNCTION current_tenant() TO concierge_app;
 -- ownership, `SET row_security = off` does not help concierge_app: Postgres raises
 -- "query would be affected by row-level security policy" instead of returning rows.
 ALTER ROLE concierge_app NOBYPASSRLS;
+
+-- Note what concierge_app is NOT granted: scheduler_tenant_ids(). The webhook role cannot
+-- enumerate tenants. GATE 8 check 9 proves this by trying it and being refused.
+
+-- ---------------------------------------------------------------- the worker role
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'concierge_worker') THEN
+        CREATE ROLE concierge_worker LOGIN PASSWORD 'concierge_worker';
+    END IF;
+END
+$$;
+
+-- The whole grant list for this role, deliberately: it may call one function that returns opaque
+-- uuids. No SELECT, no INSERT, no UPDATE, no DELETE, on any table. The scheduler uses this
+-- connection ONLY to learn which tenants exist, then opens a normal RLS-scoped `tenant_session`
+-- as concierge_app to do the actual per-tenant work. Stealing this credential yields a list of
+-- uuids and no data whatsoever.
+GRANT USAGE ON SCHEMA public TO concierge_worker;
+GRANT EXECUTE ON FUNCTION scheduler_tenant_ids() TO concierge_worker;
+ALTER ROLE concierge_worker NOBYPASSRLS;
+
+REVOKE EXECUTE ON FUNCTION scheduler_tenant_ids() FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION scheduler_tenant_ids() FROM concierge_app;

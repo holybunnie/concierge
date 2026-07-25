@@ -40,7 +40,7 @@ current. Summary:
 | 5 Booking (Cal.com) | done | 5 pass / 2 info |
 | 6 Receipts on X Layer **mainnet** | done | 8 pass / 1 info |
 | 7 A2A escrow + settlement | blocked | operator item 5, ledger U3 |
-| 8 Summary + scheduled actions | done | 7 pass / 0 fail |
+| 8 Summary + scheduled actions | done | 9 pass / 0 fail |
 | 9 Hardening + submission | not started | deadline 2026-07-27 22:59 UTC |
 | 3b-2 Confidence-scored autonomy (addendum Feature 2) | done | 7 pass / 2 info |
 | 3b-3 Decaying floor (addendum Feature 5) | done | 4 pass / 1 info |
@@ -74,6 +74,17 @@ section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real cred
 - **Isolation is Postgres RLS, not application predicates.** `store.py` deliberately contains no
   `WHERE tenant_id = ?` clause. Do not "fix" that by adding them — the absence is the proof.
   Never grant the app role table ownership or `BYPASSRLS`.
+- **Enumeration and reading are split across two DB roles, and must stay split.** The scheduled
+  worker needs a tenant list (nothing hands it one — no inbound message to scope to), so
+  `schema.sql` has a fourth deliberate door, `scheduler_tenant_ids()`, returning opaque uuids and
+  nothing else. EXECUTE is granted to `concierge_worker` ONLY and explicitly REVOKEd from
+  `concierge_app` and PUBLIC, because `concierge_app` — the internet-facing webhook role — can pin
+  `app.tenant_id` to any value, so enumeration in that role would turn a web-app compromise into
+  "read every tenant". In exchange `concierge_worker` holds **no table grants at all**; it can list
+  ids and do nothing with them, and per-tenant work goes back through the normal RLS-fenced
+  `tenant_session` as `concierge_app`. Neither role alone can both list tenants and read rows —
+  do not "simplify" this by granting the app role EXECUTE or the worker role SELECT. GATE 8
+  checks 8 and 9 prove both halves.
 - **Mainnet only for receipts** (X Layer 196). A testnet receipt proves nothing to a customer or
   an arbitrator. Ledger §9 records the measurement that settles the cost argument: one anchor is
   ~$0.0001, so testnet was never buying anything but a weaker proof.

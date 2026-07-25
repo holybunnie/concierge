@@ -81,6 +81,21 @@ def resolve_tenant_by_inbound_address(address: str) -> uuid.UUID:
     return row["tenant_id"]
 
 
+def list_tenant_ids() -> list[uuid.UUID]:
+    """Every tenant id, for the scheduled worker — the ONLY enumerating read in the system.
+
+    Connects as `concierge_worker`, not `concierge_app`: the webhook role is deliberately not
+    granted EXECUTE on `scheduler_tenant_ids()`, because it can pin `app.tenant_id` to any value
+    and enumeration would therefore hand a web-app compromise every tenant's data. This role can
+    enumerate but holds no table grants, so the ids are all it can ever obtain. Per-tenant work
+    still goes through `tenant_session`, RLS-fenced exactly like every other read.
+    """
+    with psycopg.connect(config.worker_database_url(), row_factory=dict_row) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT scheduler_tenant_ids() AS tenant_id")
+            return [row["tenant_id"] for row in cur.fetchall()]
+
+
 def resolve_tenant_by_engagement(escrow_ref: str) -> uuid.UUID:
     with unscoped_session() as cur:
         cur.execute("SELECT resolve_tenant_by_engagement(%s) AS tenant_id", (escrow_ref.strip(),))
