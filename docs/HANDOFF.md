@@ -470,8 +470,42 @@ Not yet built: end-to-end proof against live Phase 4 email
 section above for what it added and the invalid-LLM-key finding.
 
 ### Phase 9 — hardening + submission
-Public repo ✓, OSI licence ✓, CREDITS ✓, ledger ✓, operator-provides ✓. Still needed: ~90s demo
-video, architecture diagram, "reproduce every claim" README pass, Google form before the deadline.
+Public repo ✓, OSI licence ✓, CREDITS ✓, ledger ✓, operator-provides ✓, **architecture diagram ✓**,
+**README "reproduce every claim" pass ✓** (both 2026-07-25).
+
+`docs/ARCHITECTURE.md` is three mermaid diagrams — the system, the isolation boundary on its own
+(the five SECURITY DEFINER doors + the two-role split vanish inside a whole-system picture), and one
+stranger's email as a sequence, drawn stopping at `AWAITING_OWNER_APPROVAL` because that is the
+honest outcome for that message. All three were parsed against the real mermaid parser before
+committing, not eyeballed. The README's claim table now leads with four live systems a stranger can
+hit without cloning anything; the OKLink **address** URL was checked live (200, no redirect) rather
+than pattern-matched off the tx URL — the ledger's Feature 3 note records what guessing that pattern
+cost the first time.
+
+**Still needed:** the ~90s demo video and the Google form (both operator), and the items below.
+
+#### Deploy + hardening backlog — BLOCKED on SSH access (2026-07-25)
+
+The VPS is still running the **pre-Phase-10** copy. `https://app.quietdesks.com/healthz` is green,
+so email is unaffected, but auto-provisioning is not on the box and neither timer is installed.
+
+**The codespace no longer has any credential for `38.49.216.59`.** The root password was in `.env`
+before the rebuild; the current `.env` holds only `CAL_*`, `DATABASE_URL`, `LLM_API_KEY`, `XLAYER_*`,
+`POSTMARK_SERVER_TOKEN`, `DKIM`. A deploy keypair has been generated at `~/.ssh/concierge_deploy`
+(ed25519, `concierge-deploy@codespace`) — install its `.pub` in the box's `authorized_keys` and the
+whole list below is unblocked. Doing it that way also retires the leaked-password item rather than
+re-exposing it.
+
+1. rsync the Phase 10 code to `/opt/concierge`, `chown -R concierge`, `systemctl restart concierge`.
+2. Install `deploy/concierge-scheduler.{service,timer}`. Needs `WORKER_DATABASE_URL` in
+   `/opt/concierge/.env` and a **real** password for `concierge_worker` — `schema.sql` creates it
+   with a literal dev password, the same known gap as `concierge_app`.
+3. Install `deploy/concierge-a2a-provision.service`. Mind the two tripwires already pinned in the
+   unit comments: **never** `npm install -g @okxweb3/a2a-node@latest` (it would replace the binary
+   rwoo's running daemon executes), and the PATH must put `/opt/concierge/a2a/node_modules/.bin`
+   first; the CLI also hard-requires Node 22+, and `/usr/bin/node` on that box is v20.
+4. Rotate the leaked root password; move to SSH-key auth for a dedicated deploy user.
+5. Rotate the `cal_live_` Cal.com key — exposed in chat.
 
 ---
 
