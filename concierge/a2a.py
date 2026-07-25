@@ -67,6 +67,10 @@ _EVENT_IN_TEXT = re.compile(r'\\*"event\\*"\s*:\s*\\*"([a-z_]+)')
 # Everything outside the brackets is the platform's own chrome, addressed to a human reader.
 _QUOTED = re.compile(r"「(.+?)」", re.S)
 
+# The daemon echoes our own sent messages back into the same notification queue. Matched on the
+# bracketed word rather than the emoji, which is decoration and may not survive every renderer.
+_SENT_MARKER = re.compile(r"\[Sent\]")
+
 
 @dataclass
 class Event:
@@ -112,6 +116,22 @@ class Event:
         for text in _strings(self.raw):
             found |= {m for m in _EVENT_IN_TEXT.findall(text) if m in KNOWN_EVENTS}
         return found
+
+    def is_own_outbound(self) -> bool:
+        """Is this notification an echo of a message WE sent?
+
+        The daemon reports our own outbound traffic back through the same `user list` queue that
+        carries inbound messages, distinguished only by a marker in the rendered header:
+
+            📤 [Sent] CONCIERGE#9274 (you) → SandboxAgent#1791
+            📥 [Received] SecAgent#1791 → CONCIERGE#9274 (you)
+
+        Without this check every reply the worker sends is a message it will read next tick and
+        try to answer — a loop with the buyer copied in on every turn. Today that would fail
+        closed rather than loop, because an echo carries no sender for `xmtp-send` to address, but
+        relying on a missing field to prevent a reply-storm is relying on an accident.
+        """
+        return bool(_SENT_MARKER.search(self.content))
 
     def is_platform_internal(self) -> bool:
         """Is this the platform talking to US, rather than a buyer talking to us?

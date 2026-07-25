@@ -480,9 +480,18 @@ def process_pending() -> dict[str, int]:
     rather than duplicated.
     """
     counts = {"seen": 0, "provisioned": 0, "advanced": 0,
-              "unserved": 0, "internal": 0, "skipped": 0, "failed": 0}
+              "unserved": 0, "echo": 0, "internal": 0, "skipped": 0, "failed": 0}
     for event in a2a.pending_events():
         counts["seen"] += 1
+
+        # Our own outbound message, echoed back through the same queue. Consumed rather than left
+        # pending: there is nothing to decide, and a queue that fills with our own sent mail
+        # buries the next real buyer in it.
+        if event.is_own_outbound():
+            counts["echo"] += 1
+            if event.todo_id:
+                a2a.consume(event.todo_id)
+            continue
 
         # The platform asking US something — a failed AI dispatch offering "retry / don't retry",
         # for instance. Deliberately left unconsumed rather than answered: choosing on the
