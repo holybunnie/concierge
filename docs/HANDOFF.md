@@ -19,7 +19,7 @@ python3 verify.py --phase 3        # expect 16 pass / 0 fail / 3 info
 python3 verify.py --phase 3b-2     # expect 7 pass / 0 fail / 2 info — Feature 2, confidence-scored autonomy
 python3 verify.py --phase 3b-3     # expect 4 pass / 0 fail / 1 info — Feature 5, the decaying floor
 python3 verify.py --phase 3b-4     # expect 3 pass / 0 fail / 1 info — Safe Follow-Up
-python3 verify.py --phase 3c       # expect 5 pass / 0 fail / 1 info — comprehension (0 wrong prices, 96% autonomy)
+python3 verify.py --phase 3c       # expect 6 pass / 0 fail / 1 info — comprehension (0 wrong prices; policies buy +55% autonomy)
 python3 verify.py --phase 4        # expect 8 pass / 0 fail / 3 info
 python3 verify.py --phase 5        # expect 5 pass / 0 fail / 2 info — makes+cancels a real booking
 python3 verify.py --phase 6        # expect 8 pass / 0 fail / 1 info — anchors 2 real receipts on X Layer mainnet
@@ -90,7 +90,12 @@ git config --local --add credential.helper \
 | 3b-4 Safe Follow-Up | **3 pass / 1 info** | real stalled thread nudged once from its own history, second stall marks it DEAD, a thread with no genuine prior contact never triggers one however far the clock is pushed |
 | 6b Public receipt verification (Feature 3) | **6 pass / 1 info** | real anchored receipt reads back correctly on the public page; nonexistent id, malformed id, and a real internal-only (floor-breach) receipt all render the identical clean 404; two tenants' pages never cross |
 | 8 Summary + scheduled actions | **9 pass / 0 fail** | worker entry point + enumeration-role split (checks 8-9, 2026-07-25); real conversation numbers counted exactly, escalation text carried verbatim, scheduler's anchor/follow-up/summary jobs all read+write the same real rows, no new mainnet gas spent proving it |
-| 3c Comprehension (answering the question asked) | **5 pass / 0 fail / 1 info** | 103 generated questions per run across 3 tenants: 0 sent a price they should not have (was 70), 96% of answerable questions handled without a human |
+| 3c Comprehension (answering the question asked) | **6 pass / 0 fail / 1 info** | 103 generated questions per run across 3 tenants: 0 sent a price they should not have (was 70), 96% of answerable questions handled without a human; check 6 proves the four optional onboarding policy questions take the SAME tenant from 27.5% to 82.5% autonomy with no code change |
+
+**Local DB hygiene:** gates create tenants and never clean up, and the inbound-address allocator
+gives up after 99 same-name collisions — at ~227 tenants GATE 4 began failing to onboard at all.
+`TRUNCATE tenants, threads, receipts, gap_events CASCADE` on the LOCAL container fixes it (checked
+first that no receipt carried a real `xlayer_tx`). Do this before a long gate session.
 | 8b-1 Product-gap intelligence (Feature 1) | **5 pass / 0 fail** | an unquotable inquiry writes one verbatim GapEvent and surfaces word-for-word in the owner summary; a floor breach writes none; a second tenant's summary never contains it; with no LLM key the gap shows as raw text, never a fabricated category |
 
 ## Feature addendum (Phases 3b/6b/8b/7b) — status

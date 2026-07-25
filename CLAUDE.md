@@ -41,7 +41,7 @@ current. Summary:
 | 6 Receipts on X Layer **mainnet** | done | 8 pass / 1 info |
 | 7 A2A escrow + settlement | blocked | operator item 5, ledger U3 |
 | 8 Summary + scheduled actions | done | 9 pass / 0 fail |
-| 3c Comprehension + qualifier safety | done | 5 pass / 1 info |
+| 3c Comprehension + qualifier safety | done | 6 pass / 1 info |
 | 9 Hardening + submission | not started | deadline 2026-07-27 22:59 UTC |
 | 3b-2 Confidence-scored autonomy (addendum Feature 2) | done | 7 pass / 2 info |
 | 3b-3 Decaying floor (addendum Feature 5) | done | 4 pass / 1 info |

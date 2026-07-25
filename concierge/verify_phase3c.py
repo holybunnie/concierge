@@ -202,6 +202,46 @@ def run(r) -> None:
         f"|   judgements, services not offered, explicit human requests, low comprehension",
     )
 
+    # ---- 6. the payoff: answering the onboarding policy questions buys autonomy back
+    policies = {
+        "group_pricing": "Two people at the same time: both prices, plus £15 for the room.",
+        "travel_policy": "I can come to you within 10 miles — add £25 for the visit.",
+        "availability_policy": "Evenings until 8pm at no extra charge. Sundays are +20%.",
+        "duration_options": "Everything is available at 60 or 90 minutes; the 90 adds £30.",
+    }
+    stocked_id = p3._onboard(p3.SPA)
+    with db.tenant_session(stocked_id) as cur:
+        tenant = store.get_tenant(cur)
+        profile = dict(tenant.profile)
+        profile.update(policies)
+        store.update_profile(cur, profile)
+    stocked = _run_corpus(stocked_id, _profile(stocked_id), corpus.service_names(legal_p))
+
+    # The same tenant, the same trade, the same generated questions — the only difference is
+    # whether the owner answered four optional questions at onboarding.
+    gained = stocked["autonomy"] - spa["autonomy"]
+    r.check(
+        "Answering the optional policy questions converts directly into autonomy, with no new code",
+        gained > 0 and len(stocked["wrong_confident"]) == 0,
+        "`verticals._qualifier_policies` asks four optional questions — more than one person,\n"
+        "travelling to the client, out-of-hours, different lengths — and each maps onto a key\n"
+        "`comprehension.QUALIFIER_COVERAGE` already reads. This check proves the loop closes:\n"
+        "two tenants in the same trade with the same menu and the same questions, one of whom\n"
+        "filled those four in, and the difference is measured rather than asserted.\n"
+        "Crucially the answer is the tenant's OWN sentence, quoted verbatim into the reply\n"
+        "beside the figure — never paraphrased and never folded into a new number. A policy\n"
+        "reading '+£25 for the visit' would otherwise be silently dropped while the base price\n"
+        "went out alone, which is the same confidently-wrong answer in a new costume. And the\n"
+        "wrong-price count stays at zero, so the autonomy was bought with real stored answers\n"
+        "rather than by loosening the bar.",
+        f"| identical tenant WITHOUT the four policies: {spa['autonomy']:.1%} autonomous\n"
+        f"| identical tenant WITH them:                 {stocked['autonomy']:.1%} autonomous\n"
+        f"| gained: {gained:+.1%}, wrong prices either way: "
+        f"{len(spa['wrong_confident'])} / {len(stocked['wrong_confident'])}\n"
+        f"| policies answered (the tenant's own words, quoted verbatim in replies):\n"
+        + "\n".join(f"|    {k}: {v!r}" for k, v in policies.items()),
+    )
+
     r.note(
         "What this gate deliberately does not do",
         "It does not check phrasing, tone or helpfulness — only whether a figure was sent for a\n"

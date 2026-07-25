@@ -124,6 +124,9 @@ class Assessment:
     intent: str
     qualifiers: dict[str, tuple[str, ...]] = field(default_factory=dict)
     uncovered: tuple[str, ...] = ()
+    # class -> the tenant's own policy text, stated verbatim in the reply. Never paraphrased,
+    # never turned into a new figure.
+    covered: dict[str, str] = field(default_factory=dict)
     unconsumed: tuple[str, ...] = ()
     comprehension: float = 1.0
 
@@ -171,12 +174,21 @@ def classify_intent(text: str) -> str:
     return PRICE
 
 
-def _covered_by(profile: dict[str, Any], cls: str) -> bool:
+def covers(profile: dict[str, Any], cls: str) -> str | None:
+    """The tenant's OWN words for this qualifier class, or None if they never gave any.
+
+    Returns the text rather than a boolean on purpose. "Covered" cannot mean "proceed and quote
+    the base price as though the qualifier were not there" — a tenant whose travel policy is
+    "+£40 outside the city" would have that answer silently dropped, which is the same class of
+    wrong-but-confident answer this whole module exists to prevent. So coverage produces the
+    policy text, and the caller states it verbatim alongside the figure.
+    """
     pricing_rules = profile.get("pricing_rules") or {}
     for key in QUALIFIER_COVERAGE.get(cls, ()):
-        if profile.get(key) or pricing_rules.get(key):
-            return True
-    return False
+        value = profile.get(key) or pricing_rules.get(key)
+        if value:
+            return str(value).strip()
+    return None
 
 
 def assess(profile: dict[str, Any], text: str, *, service_name: str,
@@ -201,9 +213,19 @@ def assess(profile: dict[str, Any], text: str, *, service_name: str,
     # A duration question is not an uncovered duration qualifier — it is a question this profile
     # may well be able to answer outright (`services[].duration_min`). The caller decides that;
     # counting it here as "uncovered" would escalate a question we can answer.
-    uncovered = tuple(cls for cls in found
-                      if not _covered_by(profile, cls)
-                      and not (cls == "duration" and intent == DURATION))
+    covered: dict[str, str] = {}
+    uncovered_list = []
+    for cls in found:
+        if cls == "duration" and intent == DURATION:
+            # Not an uncovered qualifier — it is a duration question this profile may be able to
+            # answer outright from `services[].duration_min`. The caller decides.
+            continue
+        policy = covers(profile, cls)
+        if policy:
+            covered[cls] = policy
+        else:
+            uncovered_list.append(cls)
+    uncovered = tuple(uncovered_list)
 
     # Comprehension: the share of what the client actually said that we accounted for. Feeds
     # Feature 2's fourth signal — see `confidence.py`. Deliberately blunt: it does not need to
@@ -212,5 +234,5 @@ def assess(profile: dict[str, Any], text: str, *, service_name: str,
                  or any(t in vocab for vocab in QUALIFIERS.values())]
     score = len(explained) / len(asked) if asked else 1.0
 
-    return Assessment(intent=intent, qualifiers=found, uncovered=uncovered,
+    return Assessment(intent=intent, qualifiers=found, uncovered=uncovered, covered=covered,
                       unconsumed=leftover, comprehension=round(score, 3))

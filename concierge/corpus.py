@@ -30,6 +30,8 @@ import re
 from dataclasses import dataclass
 from typing import Any, Iterator
 
+from . import comprehension
+
 # What the harness expects CONCIERGE to do with a question. Deliberately coarse: this corpus
 # measures comprehension, not phrasing.
 QUOTE = "quote"                # a figure may be sent — the question is unambiguous
@@ -97,8 +99,15 @@ def generate(profile: dict[str, Any], *, foreign_services: list[str] | None = No
         # --- the dangerous family: a real service PLUS a qualifier the profile may not cover.
         # A system that ignores the qualifier answers the wrong question with a real figure.
         for cls, phrasings in QUALIFIER_CLASSES.items():
+            # Whether a qualified question is answerable is a property of THIS tenant's profile,
+            # not of the question. A tenant who recorded a travel policy can and should answer
+            # "can you come to me?" — with their own sentence beside the figure. A tenant who
+            # recorded nothing must send it to a human. Same question, same code, opposite
+            # correct outcomes, so the expectation is computed per tenant rather than fixed.
+            covered = comprehension.covers(profile, cls) is not None
             for phrasing in phrasings:
-                yield Question(f"How much is {name} {phrasing}?", NO_CONFIDENT_QUOTE,
+                yield Question(f"How much is {name} {phrasing}?",
+                               QUOTE if covered else NO_CONFIDENT_QUOTE,
                                f"qualifier_{cls}", name)
 
         # --- a question ABOUT the service that is not a price question at all. Answering these

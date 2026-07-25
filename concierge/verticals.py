@@ -134,6 +134,84 @@ def _timezone() -> Field:
     )
 
 
+# ---------------------------------------------------------------- the qualifier policies
+#
+# GATE 3c measured what clients actually ask and CONCIERGE could not answer. The four classes
+# below were not chosen in the abstract — they are the qualifier classes that made up nearly
+# every escalation in that sweep: how many people, how long, where, and when.
+#
+# Each maps onto a key `comprehension.QUALIFIER_COVERAGE` already looks for, which makes this the
+# one place in the product where answering an onboarding question converts DIRECTLY into
+# autonomy. Leave them blank and a client asking "can you come to us?" goes to the owner's inbox,
+# forever, correctly. Fill one in and that same question is answered in the tenant's own words —
+# quoted verbatim, never paraphrased, never averaged into a new figure.
+#
+# All four are `required=False` on purpose. A gap here is a real, working state (escalate), not a
+# broken profile, and marking them required would block onboarding on questions many businesses
+# genuinely have no policy for. They are advisory gaps: named out loud, with the cost stated.
+#
+# They are also trade-neutral, which is why they live here as shared builders rather than inside
+# any one template. "Do you travel to clients?" is a question for a barrister, a mobile groomer
+# and a drone surveyor alike. Only the EXAMPLE differs per template, and an example is never data.
+
+def _group_policy(example: str) -> Field:
+    return Field(
+        key="group_policy", label="More than one person",
+        question="If someone asks for more than one person at once — a couple, a group, a whole "
+                 "team — what do you charge? (Leave blank if you have no set rule.)",
+        why="'How much for two of us?' is one of the most common questions there is, and your "
+            "list price answers a different question. With this I answer in your words; without "
+            "it I send it to you.",
+        maps_to="group_pricing", kind="text", required=False, example=example,
+        gap_consequence="Any question about more than one person goes to you rather than being "
+                        "answered. Nothing is guessed and no per-person price is invented.",
+    )
+
+
+def _travel_policy(example: str) -> Field:
+    return Field(
+        key="travel_policy", label="Travelling to the client",
+        question="Do you go to the client, and does that change the price or the area you cover? "
+                 "(Leave blank if you only work from your own place.)",
+        why="'Can you come to us?' is either a yes with terms or a no, and only you know which. "
+            "I will not assume either.",
+        maps_to="travel_policy", kind="text", required=False, example=example,
+        gap_consequence="Anyone asking you to travel to them gets passed to you instead of an "
+                        "answer.",
+    )
+
+
+def _hours_policy(example: str) -> Field:
+    return Field(
+        key="hours_policy", label="Evenings, weekends and short notice",
+        question="Do you work outside your normal hours — evenings, weekends, bank holidays, "
+                 "urgent jobs — and does it cost more? (Leave blank if you never do.)",
+        why="These arrive constantly and the honest answer is usually a rule you already have in "
+            "your head. Written down once, I can give it.",
+        maps_to="availability_policy", kind="text", required=False, example=example,
+        gap_consequence="Every out-of-hours or urgent request escalates, even the ones you would "
+                        "have happily said yes to.",
+    )
+
+
+def _length_policy(example: str) -> Field:
+    return Field(
+        key="length_policy", label="Different lengths",
+        question="Do you offer the same thing at more than one length or size, at different "
+                 "prices? (Leave blank if there is only one version.)",
+        why="Otherwise someone asking for a longer version gets quoted the standard one, which "
+            "is the wrong answer given confidently — the thing I most want to avoid.",
+        maps_to="duration_options", kind="text", required=False, example=example,
+        gap_consequence="A request for a longer or larger version of something goes to you.",
+    )
+
+
+def _qualifier_policies(group: str, travel: str, hours: str, length: str) -> tuple[Field, ...]:
+    """The four shared policy questions, in the order a client is most likely to ask them."""
+    return (_group_policy(group), _travel_policy(travel),
+            _hours_policy(hours), _length_policy(length))
+
+
 # ---------------------------------------------------------------- real estate
 
 REAL_ESTATE = VerticalTemplate(
@@ -199,6 +277,12 @@ REAL_ESTATE = VerticalTemplate(
         _sample("Hi Sarah — thanks for getting in touch about 14 Elm Road. It's still available. "
                 "The asking price is £625,000. I have viewings free Thursday afternoon and "
                 "Saturday morning — would either suit?"),
+        *_qualifier_policies(
+            group="Block viewings on Saturdays for 3+ interested parties, same fee.",
+            travel="I cover the whole of the postcode area; anything outside it I refer on.",
+            hours="Viewings until 7pm on weekdays and Saturday mornings. No Sundays.",
+            length="Standard viewings are 30 minutes; a second, longer viewing is free.",
+        ),
     ),
 )
 
@@ -277,6 +361,15 @@ LEGAL = VerticalTemplate(
         _sample("Dear Mr Patel — thank you for your enquiry. Employment matters of this kind are "
                 "within my practice. I'd need to complete a short conflict check before advising "
                 "further. My initial consultation is £250 + VAT for the first hour."),
+        *_qualifier_policies(
+            group="Multiple claimants in one matter are quoted individually — the fee depends on "
+                  "whether the claims are heard together.",
+            travel="Conferences in chambers or by video. I attend tribunal wherever it sits; "
+                   "travel outside London is charged at cost.",
+            hours="Papers are read in the evenings as a matter of course. Instructions inside 48 "
+                  "hours of a hearing carry a 25% uplift.",
+            length="A conference is either the standard hour or a half-day, quoted separately.",
+        ),
     ),
 )
 
@@ -344,6 +437,13 @@ SPA_BEAUTY = VerticalTemplate(
                      "Group bookings over 4 people", "Complaints about a treatment"]),
         _sample("Hi Nadia — yes, we do hot stone, it's 75 minutes at £95. I've got Saturday 2pm "
                 "and Sunday 11am free this week. Shall I hold one for you?"),
+        *_qualifier_policies(
+            group="Two people side by side in the double room: the two treatments, plus £15 for "
+                  "the room. Parties of 4+ are quoted individually.",
+            travel="We don't travel — everything happens at the studio.",
+            hours="Evenings until 8pm on weekdays at no extra charge. Sundays are +20%.",
+            length="Most treatments come as 60 or 90 minutes; the 90 is the listed price plus £30.",
+        ),
     ),
 )
 
@@ -390,6 +490,13 @@ GENERIC = VerticalTemplate(
         _escalation(["Anything involving a contract or SOW", "Any existing client"]),
         _sample("Hi Tom — thanks for reaching out. A strategy day is £2,400 and runs 9–5 at your "
                 "offices. I have the 14th and the 21st free."),
+        *_qualifier_policies(
+            group="Additional attendees beyond 8 are £120 each.",
+            travel="I work on site anywhere in the UK; travel and accommodation at cost, agreed "
+                   "up front.",
+            hours="Weekday hours only. Weekend work is possible at +50%, agreed case by case.",
+            length="A strategy day is a full day; half-days are £1,400.",
+        ),
     ),
 )
 

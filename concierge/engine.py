@@ -69,6 +69,7 @@ PROSE: dict[str, str] = {
     "quote":
         "Thanks for getting in touch about {service}.\n\n"
         "{service}{duration} is {price}.\n\n"
+        "{policy_line}"
         "{verify_line}"
         "Would you like to go ahead and get a {engagement} booked in?",
 
@@ -634,6 +635,11 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
             "service": quote.service_name, "unit": quote.unit, "amount": quote.amount,
             "rendered": quote.render(),
             "derivation": [str(d) for d in quote.derivation],
+            # The tenant's stored answer to a qualifier the client actually raised. Rendered
+            # verbatim into the reply and persisted on the receipt, so what was promised about
+            # travel/group/hours is auditable alongside the figure rather than lost.
+            "covered_policies": dict(read.covered),
+            "comprehension": read.comprehension,
         },
         reply_body=PROSE["quote"], derivation=tuple(str(d) for d in quote.derivation),
         quote=quote, offer=offer, confidence=conf)
@@ -799,6 +805,14 @@ def render(tenant: Tenant, decision: Decision, thread: Thread, *,
     elif q.get("rendered"):
         terms_line = f"{q.get('service', '')} at {q['rendered']}.\n\n"
 
+    # The tenant's own words for a qualifier the client raised, quoted verbatim. Never a
+    # paraphrase and never a recomputed figure: if their policy says "+£40 outside the city",
+    # that sentence goes out as they wrote it and the arithmetic stays theirs.
+    policy_line = ""
+    covered = (decision.detail or {}).get("covered_policies") or {}
+    if covered:
+        policy_line = "".join(f"{text}\n\n" for text in covered.values())
+
     verify_line = ""
     if receipt_id is not None and decision.action in receipts.PUBLIC_ACTIONS:
         base = config.public_base_url()
@@ -821,6 +835,7 @@ def render(tenant: Tenant, decision: Decision, thread: Thread, *,
         slots=slots,
         when=when,
         terms_line=terms_line,
+        policy_line=policy_line,
         verify_line=verify_line,
     )
     disclosure = PROSE["disclosure"].format(
