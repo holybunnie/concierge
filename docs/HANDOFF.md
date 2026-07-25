@@ -475,6 +475,39 @@ video, architecture diagram, "reproduce every claim" README pass, Google form be
 
 ---
 
+## Listing on OKX AI — decided pricing and the reasoning
+
+**Price (operator decision, 2026-07-25):** 2 USDT/week with 10 trials, then 5 USDT/week or
+20 USDT/month. The intro rate is deliberately below cost — see below — and exists so the OKX team
+can evaluate the build before the real price applies. Trials are native to the platform
+(`trialType`, `sub_trial_into_active`, `sub_failed_notify`), so evaluation does not require
+discounting the listed price and then editing it back up.
+
+**What CONCIERGE sells here is a subscription to handle a business's inbound.** Note the two
+different prices, which are easy to conflate and must not be:
+
+  * **The tenant's quote to their client** (a spa's £85). Deterministic, derived from the stored
+    profile by arithmetic, anchored in a receipt. This is the invariant the whole build defends.
+  * **CONCIERGE's own subscription fee** (2 USDT/week). Ordinary commerce, negotiated through the
+    marketplace like any other listing. Nothing about it is anchored as a tenant commitment, so an
+    LLM negotiating it breaks nothing.
+
+The rule is therefore narrower than "no LLM near a price": negotiate our own fee however the
+marketplace likes; never let anything but the engine set a tenant's quote.
+
+**Unit economics at the intro price.** VPS $7/mo (shared with the rwoo project on the same box).
+Postmark is free to 100 emails/month and then **hard-stops with no overage** — $15/mo for 10,000
+after that. X Layer gas is ~$0.0001 per receipt. One conversation is 4-6 emails (reply, each
+negotiation turn, owner alert, follow-up, weekly summary), so the free tier is roughly 15-25
+conversations a month across ALL tenants. At 8.7 USDT/month per subscriber, break-even is ~3
+subscribers; at 20 USDT/month, ~1.5.
+
+**Operational risk worth naming: the Postmark hard stop is an invisible outage.** Past 100 emails
+the app stays healthy, keeps quoting correctly and keeps writing receipts, while nothing is
+delivered — and `/healthz` still reports ok, because the app is fine and the mail provider is not.
+For a listing whose whole promise is being reliably online, upgrade to Basic before listing, and
+surface remaining quota in `/healthz` and the weekly summary.
+
 ## The critical path is not code
 
 **7 of 8 operator items are now in: 1 (VPS, deployed), 2 (domain+DNS), 3 (Postmark, live), 4
