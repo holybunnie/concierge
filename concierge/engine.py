@@ -49,7 +49,7 @@ from zoneinfo import ZoneInfo, available_timezones
 
 from psycopg import Cursor
 
-from . import config, confidence, guardrails, lexicon, pricing, receipts, store
+from . import comprehension, config, confidence, guardrails, lexicon, pricing, receipts, store
 from .models import Receipt, Tenant, Thread
 from .pricing import Quote, Unquotable
 
@@ -118,6 +118,13 @@ PROSE: dict[str, str] = {
     "closed":
         "{business} has this one directly now, so I'll leave it with them rather than "
         "reply over the top of a colleague.",
+
+    # A duration question, answered from `services[].duration_min` — the profile already held
+    # this and the engine used to reply with a price instead. No figure is quoted here on
+    # purpose: they asked how long, not how much.
+    "duration_answer":
+        "{service} takes {duration_plain}.\n\n"
+        "{verify_line}Would you like me to get a {engagement} booked in?",
 
     "awaiting_approval_hold":
         "Thanks for the follow-up — {business} is reviewing the last reply before it goes "
@@ -559,6 +566,52 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
             e.reason, action="unquotable", rule="profile.services + pricing_rules",
             detail={"considered": e.considered}, product_gap=text.strip())
 
+    # We know WHICH service. Layers 1-2 (GATE 3c) now ask the two questions the match itself
+    # cannot: what did the client say that we did not consume, and what are they actually
+    # asking about it? Both reads are deterministic and both fail toward the owner.
+    read = comprehension.assess(profile, text, service_name=quote.service_name,
+                                matched_on=quote.matched_on)
+
+    # A duration question the profile CAN answer — answer it, rather than escalating something
+    # the owner already told us at onboarding. This is where layer 2 buys autonomy back.
+    if read.intent == comprehension.DURATION and not read.uncovered:
+        if quote.duration_min:
+            return Decision(
+                state_after="AWAITING_REPLY", action="answered_duration",
+                rule_checked="profile.services[].duration_min", within_rules=True,
+                detail={"service": quote.service_name, "duration_min": quote.duration_min,
+                        "comprehension": read.comprehension},
+                reply_body=PROSE["duration_answer"],
+                offer={"quote": _offer_from_quote(quote), "awaiting": "reply"},
+            )
+        return escalate(
+            f"Asked how long {quote.service_name} takes, and the profile records no duration "
+            f"for it. Inventing one would be a commitment {tenant.business_name} never made.",
+            action="unanswerable_duration", rule="profile.services[].duration_min",
+            detail={"service": quote.service_name})
+
+    # Suitability is never answered autonomously even when the profile looks like it could. A
+    # wrong "yes, that's fine for you" is a different order of harm from a wrong price, and no
+    # stored field makes a business qualified to give that answer through an agent.
+    if read.intent == comprehension.SUITABILITY:
+        return escalate(
+            f"Asked whether {quote.service_name} is suitable for them personally. That is a "
+            f"judgement about a person, not a fact about a service — it goes to you.",
+            action="suitability_question", rule="§comprehension — never advise",
+            detail={"service": quote.service_name})
+
+    # Layer 1: the client qualified the request in a way the profile does not cover. The figure
+    # we hold is real, but it answers a different question than the one asked.
+    if not read.answerable:
+        return escalate(
+            read.reason(quote.service_name),
+            action="uncovered_qualifier", rule="profile — no rule covers this qualifier",
+            detail={"service": quote.service_name, "qualifiers": dict(read.qualifiers),
+                    "uncovered": list(read.uncovered)},
+            # A qualifier the tenant has no rule for IS unmet demand, in the same sense Feature 1
+            # already records: the client asked for something this business has not defined.
+            product_gap=text.strip())
+
     offer = {
         "quote": _offer_from_quote(quote),
         "awaiting": "reply",
@@ -572,7 +625,7 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
         conf = confidence.score(
             profile=profile, service=quote.service_name, amount=quote.amount,
             agreed=quote.amount, floor=floor_bound.limit if floor_bound else None,
-            receipts=precedent,
+            receipts=precedent, comprehension=read.comprehension,
         ).as_dict()
     return Decision(
         state_after="AWAITING_REPLY", action="quoted",
@@ -761,6 +814,9 @@ def render(tenant: Tenant, decision: Decision, thread: Thread, *,
         engagement=words.engagement,
         client=words.client,
         duration=f" ({duration} minutes)" if duration else "",
+        # The same figure without the parenthetical dress, for prose that states it outright
+        # rather than appending it to a service name.
+        duration_plain=f"{duration} minutes" if duration else "",
         tz=decision.client_timezone or thread.client_timezone or "",
         slots=slots,
         when=when,

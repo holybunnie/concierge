@@ -51,6 +51,10 @@ WEIGHT_COMPLETENESS = 0.40
 WEIGHT_PROXIMITY = 0.45
 WEIGHT_PRECEDENT = 0.15
 
+# Layer 3 (GATE 3c): the share of the client's own words a decision must account for before it
+# may send autonomously. Not a weight — a floor. See `score()` for why it caps rather than votes.
+COMPREHENSION_FLOOR = 0.85
+
 # "Defaults conservative" per the spec, calibrated against two real scenarios rather than
 # picked in the abstract:
 #   - a complete profile (completeness=1.0) making a COMFORTABLE offer well clear of its floor
@@ -197,7 +201,7 @@ def _precedent(receipts: list[Receipt], *, service: str, agreed: float | None) -
 
 def score(
     *, profile: dict[str, Any], service: str, amount: float | None, agreed: float | None,
-    floor: float | None, receipts: list[Receipt],
+    floor: float | None, receipts: list[Receipt], comprehension: float | None = None,
 ) -> Confidence:
     """Score one pricing/negotiation decision. Pure arithmetic over stored facts.
 
@@ -206,15 +210,44 @@ def score(
     guardrail limit in the same unit, or None when nothing constrains this figure. `receipts`
     is this tenant's own history, already RLS-scoped by the caller — never fetched here.
     """
-    signals = (
+    signals = [
         _completeness(profile),
         _proximity(amount=amount, agreed=agreed, floor=floor),
         _precedent(receipts, service=service, agreed=agreed),
-    )
+    ]
     total = sum(s.value * s.weight for s in signals)
     key = service_key(service)
     threshold = threshold_for(profile, key)
+    autonomous = total >= threshold
+
+    # Layer 3 (GATE 3c). Comprehension enters as a CAP, not as a fourth weighted term, and the
+    # distinction is deliberate twice over.
+    #
+    # Arithmetically: re-weighting three signals to make room for a fourth would move every
+    # existing decision, and this formula is calibrated against two named scenarios that GATE
+    # 3b-2, GATE 3 and GATE 5 all depend on — the last recalibration broke both of them. A cap
+    # leaves every score in this codebase exactly where it was and can only ever withhold a
+    # send, never authorise one.
+    #
+    # In principle: the other three signals answer "how safe is this figure?". Comprehension
+    # answers "is this the right question?" — and no amount of confidence in a price rescues an
+    # answer to a question nobody asked. That is not a term to be outvoted by a strong floor
+    # position; it is a precondition. Layers 1 and 2 catch the qualifiers we anticipated. This
+    # catches the ones we did not, in a trade we have never seen, without needing to know what
+    # the unrecognised words MEAN — only that the client spent words we cannot account for.
+    if comprehension is not None:
+        signals.append(Signal(
+            "comprehension", round(comprehension, 3), 0.0,
+            f"{comprehension:.0%} of the client's own words were accounted for by the service "
+            f"match and known qualifiers"
+            + ("" if comprehension >= COMPREHENSION_FLOOR else
+               f" — below the {COMPREHENSION_FLOOR:.0%} floor, so this queues for the owner "
+               f"however strong the other signals are"),
+        ))
+        if comprehension < COMPREHENSION_FLOOR:
+            autonomous = False
+
     return Confidence(
-        score=total, threshold=threshold, autonomous=total >= threshold,
-        service_key=key, signals=signals,
+        score=total, threshold=threshold, autonomous=autonomous,
+        service_key=key, signals=tuple(signals),
     )

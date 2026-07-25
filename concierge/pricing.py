@@ -59,6 +59,11 @@ they thing things this those time times use used want wanted was were what when 
 who will with would you your yours
 """.split())
 
+# Public alias: `comprehension` reads the same list rather than keeping a second copy. Two
+# stopword lists that are supposed to agree will eventually disagree, and the failure is silent —
+# a word missing from one of them scores a perfectly ordinary question as half-understood.
+STOPWORDS = _STOPWORDS
+
 _WORD = re.compile(r"[a-z0-9]+")
 
 # A quote is only issued when the best-matching service clearly wins. Both numbers are
@@ -292,6 +297,32 @@ def match_service(profile: dict[str, Any], inquiry: str) -> ServiceMatch:
 
     scored.sort(key=lambda s: s[2], reverse=True)
     names = [s[1] for s in scored]
+
+    # A distinctive word that belongs to exactly ONE service on this menu identifies it, even
+    # when it is a small share of that service's own name. "How much for a {word}?" scores only
+    # 1/3 against a three-word service and used to escalate — but if no other service on the
+    # menu contains that word, there is nothing to confuse it with and no coin flip to lose.
+    # Ambiguity is still handled below: a word appearing in two services matches neither here.
+    if not scored or scored[0][2] < MIN_SERVICE_SCORE:
+        unique = [s for s in scored if s[3] and
+                  sum(1 for other in scored if set(s[3]) & set(other[3])) == 1]
+        # The client must have contributed NO other distinctive word. This condition is the whole
+        # safety of the shortcut, and it separates two questions a word-overlap score cannot tell
+        # apart:
+        #
+        #   "how much for a massage?"       -> asked {massage}; nothing left over; exactly one
+        #                                      thing on this menu it can mean.
+        #   "do you do hot stone massage?"  -> asked {hot, stone, massage}; 'hot' and 'stone' are
+        #                                      left over, and they are precisely the words that
+        #                                      make it a DIFFERENT service. Refuse.
+        #
+        # Without it the shortcut re-opens the exact hole GATE 3's central attack exists to keep
+        # shut: a real price quoted for work the business does not perform.
+        leftover = set(asked) - {w for _, name, _, _ in scored for w in _tokens(name)}
+        if len(unique) == 1 and not leftover:
+            best = unique[0]
+            return ServiceMatch(service=best[0], name=best[1], score=best[2], matched_on=best[3], runner_up=None)
+
     if not scored or scored[0][2] < MIN_SERVICE_SCORE:
         raise Unquotable(
             "Nothing in this inquiry matches a service in the profile, so there is no price to "

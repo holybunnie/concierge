@@ -135,22 +135,40 @@ def generate(profile: dict[str, Any], *, foreign_services: list[str] | None = No
                    "unknown_logistics", None)
 
 
-def summarise(results: list[tuple[Question, str, bool]]) -> dict[str, Any]:
+def summarise(results: list[tuple[Question, str, bool, bool]]) -> dict[str, Any]:
     """Fold per-question outcomes into the numbers the gate judges.
 
-    `results` is (question, action_taken, a_figure_was_sent). The headline number is
-    `wrong_confident` — questions where a figure went out that should never have carried one.
+    `results` is (question, action_taken, a_price_was_sent, answered_autonomously). Two numbers
+    matter and they pull against each other, which is the point of reporting both:
+
+      * `wrong_confident` — a price sent for a question it does not answer. Target: ZERO. This
+        is the number that costs money, because the figure is anchored as a commitment.
+      * `autonomy` — the share answered without pulling in a human. Target: high. A system that
+        escalated everything would score a perfect zero on the first number and be worthless.
+
+    Autonomy is reported over the ANSWERABLE subset as well as overall. This corpus is an
+    adversarial sweep, not a sample of real traffic — it deliberately loads in questions no
+    stored profile could answer, so overall autonomy here understates what a real inbox would
+    see. The answerable-subset figure is the honest one to hold to a target.
     """
-    wrong_confident = [(q, a) for q, a, sent in results if sent and q.is_dangerous_if_quoted]
-    missed = [(q, a) for q, a, sent in results if not sent and q.expect == QUOTE]
+    wrong_confident = [(q, a) for q, a, sent, _ in results if sent and q.is_dangerous_if_quoted]
+    missed = [(q, a) for q, a, sent, _ in results if not sent and q.expect == QUOTE]
+    autonomous = [r for r in results if r[3]]
+    answerable = [r for r in results if r[0].expect == QUOTE
+                  or r[0].kind in ("intent_duration", "partial_name_unique")]
+    answerable_auto = [r for r in answerable if r[3]]
     by_kind: dict[str, dict[str, int]] = {}
-    for q, _, sent in results:
-        bucket = by_kind.setdefault(q.kind, {"total": 0, "figure_sent": 0})
+    for q, _, sent, auto in results:
+        bucket = by_kind.setdefault(q.kind, {"total": 0, "price_sent": 0, "autonomous": 0})
         bucket["total"] += 1
-        bucket["figure_sent"] += 1 if sent else 0
+        bucket["price_sent"] += 1 if sent else 0
+        bucket["autonomous"] += 1 if auto else 0
     return {
         "total": len(results),
         "wrong_confident": wrong_confident,
         "missed_quotes": missed,
+        "autonomy": len(autonomous) / len(results) if results else 0.0,
+        "answerable_total": len(answerable),
+        "answerable_autonomy": (len(answerable_auto) / len(answerable)) if answerable else 0.0,
         "by_kind": by_kind,
     }

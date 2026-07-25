@@ -41,6 +41,7 @@ current. Summary:
 | 6 Receipts on X Layer **mainnet** | done | 8 pass / 1 info |
 | 7 A2A escrow + settlement | blocked | operator item 5, ledger U3 |
 | 8 Summary + scheduled actions | done | 9 pass / 0 fail |
+| 3c Comprehension + qualifier safety | done | 5 pass / 1 info |
 | 9 Hardening + submission | not started | deadline 2026-07-27 22:59 UTC |
 | 3b-2 Confidence-scored autonomy (addendum Feature 2) | done | 7 pass / 2 info |
 | 3b-3 Decaying floor (addendum Feature 5) | done | 4 pass / 1 info |
@@ -98,6 +99,21 @@ section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real cred
   the owner. It never touches the price, the rule, or the state the pricing/guardrail decision
   already produced. GATE 3b-2 proves both directions (thin profile queues, complete + precedent-
   rich profile sends) and re-proves GATE 3's own NEW→BOOKED journey is unaffected.
+- **A price is never sent for a question the profile cannot answer.** `comprehension.py` (GATE 3c)
+  adds the two reads `pricing.match_service` never had: which words the client spent that the
+  service match did NOT consume (`QUALIFIERS` — quantity/duration/location/timing, generic
+  commercial English, never trade vocabulary), and what is being asked ABOUT the service
+  (`INTENT_CUES` — price/duration/suitability/logistics). A qualifier the profile has no rule for
+  escalates and is recorded as a product gap; a suitability question ALWAYS escalates, even when
+  the profile looks like it could answer; a duration question is answered from
+  `services[].duration_min` rather than with a price. Layer 3 is the backstop for the qualifiers
+  nobody enumerated: `confidence.COMPREHENSION_FLOOR` caps autonomy when the share of the client's
+  own words we can account for falls below 85% — a CAP, never a fourth weighted term, so Feature
+  2's calibration is untouched and comprehension can only ever withhold a send. Do not "fix" a
+  queued reply by lowering that floor. GATE 3c proves 0 wrong prices AND >=85% autonomy on
+  answerable questions — both directions, because escalating everything would pass the first
+  trivially and be worthless.
+
 - **A decaying floor (`pricing_rules.floor_curve`) is OPTIONAL and never inferred.** Absent, a
   tenant negotiates on the flat floor exactly as before. Set, the curve only controls how fast
   CONCIERGE may move toward the absolute floor as rounds/days pass — the absolute floor itself is

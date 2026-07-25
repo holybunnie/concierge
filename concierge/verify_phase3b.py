@@ -176,7 +176,13 @@ def run(r) -> None:
         (quoted_receipt.confidence is not None
          and quoted_receipt.confidence["score"] == thin_conf["score"]
          and quoted_receipt.confidence["autonomous"] is False
-         and len(quoted_receipt.confidence["signals"]) == 3),
+         # The three WEIGHTED signals are this feature's formula and must all be persisted.
+         # `comprehension` (GATE 3c, layer 3) rides along at weight 0.0 — it caps autonomy
+         # rather than voting on the score, so asserting the weighted three by name is the
+         # honest test here, not a count that changes whenever a cap is added.
+         and {s["name"] for s in quoted_receipt.confidence["signals"]}
+             >= {"profile_completeness", "floor_proximity", "precedent"}
+         and sum(s["weight"] for s in quoted_receipt.confidence["signals"]) == 1.0),
         "A fresh cursor, a fresh query, no reference to the Outcome object from check 1 — this\n"
         "reads the same value back out of PostgreSQL by the receipt's own id. §8 already treats\n"
         "receipts as the audit trail for within_rules; this is the same discipline applied to\n"

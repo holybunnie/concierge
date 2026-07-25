@@ -31,28 +31,41 @@ from . import corpus, db, engine, store
 from . import verify_phase3 as p3
 
 
-def _ask(tenant_id, question: str) -> tuple[str, bool, str]:
-    """One question, one fresh thread. Returns (action, a_figure_was_sent, reply_body).
+def _ask(tenant_id, question: str) -> tuple[str, bool, bool, str]:
+    """One question, one fresh thread. Returns (action, a_price_was_sent, autonomous, body).
 
     A fresh thread per question is deliberate: this gate measures how a question is understood
     on its own, not how a negotiation evolves — Phase 3 and 3b-3 already prove the latter.
+
+    "A price was sent" is deliberately narrower than "the reply contains a digit". Answering
+    "X takes 60 minutes" to a duration question is the CORRECT behaviour and contains a digit;
+    counting it as a price would score the fix as the defect it repairs. The harm this gate
+    exists to measure is specifically a *monetary commitment* reaching a prospect, so the test
+    is whether the rendered price from the decision's own quote appears in the message body.
     """
-    _, _, outs = p3._converse(tenant_id, [question], p3.FixtureCalendar())
+    _, thread, outs = p3._converse(tenant_id, [question], p3.FixtureCalendar())
     out = outs[-1]
     body = p3._body(out.reply or "")
-    # "A figure was sent" is judged on the message the client actually receives, not on internal
-    # state: the harm is a number in front of a prospect. Digits inside the disclosure line (the
-    # owner's address) are excluded by `_body`.
-    sent_figure = bool(re.search(r"\d", body))
-    return out.action, sent_figure, body
+    # `quote.amount is not None` would be the wrong test: a prose rule ("£250 + VAT for the
+    # first hour, fixed") carries no parsed amount and is quoted back verbatim, but it is every
+    # bit as much a monetary commitment. Judging on the rendered text catches both kinds.
+    rendered = out.quote.render() if out.quote else None
+    price_sent = bool(rendered and rendered in body)
+    # Autonomy: the client got a real answer without a human being pulled in. Queued-for-owner
+    # (Feature 2) and escalated both count as "needed a human", because both mean the owner has
+    # to spend attention before the prospect hears anything useful.
+    autonomous = out.action not in ("unquotable", "uncovered_qualifier", "suitability_question",
+                                    "unanswerable_duration", "human_requested", "hold",
+                                    "escalated", "spam") and thread.state != "AWAITING_OWNER_APPROVAL"
+    return out.action, price_sent, autonomous, body
 
 
 def _run_corpus(tenant_id, profile, foreign):
     questions = list(corpus.generate(profile, foreign_services=foreign))
     results = []
     for q in questions:
-        action, sent, _body = _ask(tenant_id, q.text)
-        results.append((q, action, sent))
+        action, price_sent, autonomous, _body = _ask(tenant_id, q.text)
+        results.append((q, action, price_sent, autonomous))
     return corpus.summarise(results)
 
 
@@ -107,9 +120,9 @@ def run(r) -> None:
 
     def _evidence(label, res):
         lines = [f"| {label}: {res['total']} questions, "
-                 f"{len(res['wrong_confident'])} answered with a figure that should not have been"]
+                 f"{len(res['wrong_confident'])} answered with a PRICE that should not have been"]
         for q, action in res["wrong_confident"][:6]:
-            lines.append(f"|    [{q.kind}] {q.text!r} -> action={action}, a figure was sent")
+            lines.append(f"|    [{q.kind}] {q.text!r} -> action={action}, a price was sent")
         return "\n".join(lines)
 
     # ---- 2. the headline: a figure is never sent for a question the profile cannot answer
@@ -157,8 +170,36 @@ def run(r) -> None:
         "the failure mode the whole trade-neutral design exists to prevent.",
         f"| template-less tenant: {vet['total']} questions, {vet_wrong} wrongly answered\n"
         f"| per-question-kind (kind: figure_sent/total):\n"
-        + "\n".join(f"|    {k}: {v['figure_sent']}/{v['total']}"
+        + "\n".join(f"|    {k}: price_sent={v['price_sent']}/{v['total']}, autonomous={v['autonomous']}/{v['total']}"
                     for k, v in sorted(vet["by_kind"].items())),
+    )
+
+    # ---- 5. autonomy — safety must not have been bought by escalating everything
+    AUTONOMY_TARGET = 0.85
+    answerable = spa["answerable_total"] + legal["answerable_total"] + vet["answerable_total"]
+    answerable_auto = sum(res["answerable_autonomy"] * res["answerable_total"]
+                          for res in (spa, legal, vet))
+    rate = answerable_auto / answerable if answerable else 0.0
+    overall = sum(res["autonomy"] * res["total"] for res in (spa, legal, vet)) / (
+        spa["total"] + legal["total"] + vet["total"])
+    r.check(
+        f"At least {AUTONOMY_TARGET:.0%} of answerable questions are handled without a human",
+        rate >= AUTONOMY_TARGET,
+        "Check 2 alone is trivially passable by escalating every question ever asked, which\n"
+        "would be a safe and useless product. This is the counterweight that makes check 2 mean\n"
+        "something: of the questions a tenant's stored profile genuinely CAN answer, the great\n"
+        "majority must be answered by the agent alone.\n"
+        "The denominator is the answerable subset on purpose. This corpus is an adversarial\n"
+        "sweep, not a sample of real traffic — roughly half of it is questions deliberately\n"
+        "constructed so that no stored profile could answer them (a qualifier the tenant never\n"
+        "priced, a service they do not sell, a request for a human). Measuring autonomy against\n"
+        "that denominator would report a number no real inbox would ever produce. Both figures\n"
+        "are shown so neither can flatter the other.",
+        f"| answerable questions across three tenants: {answerable}\n"
+        f"| answered autonomously: {answerable_auto:.0f} ({rate:.1%}) — target {AUTONOMY_TARGET:.0%}\n"
+        f"| autonomy over the FULL adversarial corpus (incl. the unanswerable half): {overall:.1%}\n"
+        f"| what a human is pulled in for, by design: uncovered qualifiers, suitability\n"
+        f"|   judgements, services not offered, explicit human requests, low comprehension",
     )
 
     r.note(
