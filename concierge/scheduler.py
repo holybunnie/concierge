@@ -105,10 +105,6 @@ def process_tenant(cur: Cursor, tenant: Tenant, *,
         text = summary.render_summary_text(tenant, s)
         result.summary_text = text
 
-        profile = dict(tenant.profile or {})
-        profile["summary_policy"] = {"period_days": period_days, "last_sent_at": now.isoformat()}
-        store.update_profile(cur, profile)
-
         if tenant.owner_email:
             emails.append(OutboundEmail(
                 from_address=tenant.inbound_address, to_address=tenant.owner_email,
@@ -133,6 +129,20 @@ def dispatch(tenant_id, *, mailer: Mailer | None = None,
     if mailer is not None:
         for email in emails:
             mailer.send(email)
+        # `summary_policy.last_sent_at` is written HERE — after the send actually happened, in a
+        # second transaction — and never in `process_tenant`. Writing it alongside the decision
+        # looked tidier and was wrong in two ways that both silently lose a summary the owner is
+        # entitled to: a `--dry-run` consumed the due summary without sending it, and so did a
+        # box with no Postmark token configured, which then never sent one again. Marking work
+        # as done is a claim about the outside world, so it waits for the outside world.
+        if result.summary_text is not None:
+            with db.tenant_session(tenant_id) as cur:
+                tenant = store.get_tenant(cur)
+                profile = dict(tenant.profile or {})
+                period_days, _ = _summary_policy(profile)
+                profile["summary_policy"] = {"period_days": period_days,
+                                             "last_sent_at": (now or datetime.now(dt_timezone.utc)).isoformat()}
+                store.update_profile(cur, profile)
     return result
 
 

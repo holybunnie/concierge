@@ -202,6 +202,38 @@ def run(r) -> None:
         f"| barrister summary quotes_sent: {s_other.quotes_sent}",
     )
 
+    # ---- 7b. a run that sends nothing does not mark the summary as sent
+    nosend_id = p3._onboard(p3.SPA)
+    p3._converse(nosend_id, ["Hi, how much is a deep tissue massage?"])
+    with _NoXLayerCreds():
+        dry = scheduler.dispatch(nosend_id, mailer=None)      # e.g. --dry-run, or no token yet
+    with db.tenant_session(nosend_id) as cur:
+        after_dry = store.get_tenant(cur).profile.get("summary_policy")
+    mailer_real = p4.RecordingMailer()
+    with _NoXLayerCreds():
+        wet = scheduler.dispatch(nosend_id, mailer=mailer_real)
+    with db.tenant_session(nosend_id) as cur:
+        after_send = store.get_tenant(cur).profile.get("summary_policy")
+    r.check(
+        "A run that sends nothing does not consume the summary — only a real send marks it sent",
+        (dry.summary_due is True and after_dry is None
+         and wet.summary_due is True and len(mailer_real.sent) == 1
+         and after_send is not None and bool(after_send.get("last_sent_at"))),
+        "Found in production, on the live box, minutes after the timer was armed: a `--dry-run`\n"
+        "had already written `last_sent_at`, so the first real run found nothing due and the\n"
+        "owner's summary was silently swallowed. The same hole swallowed it FOREVER on a box\n"
+        "with no Postmark token configured — `mailer=None` is that path too, and it would have\n"
+        "marked every summary sent without ever sending one.\n"
+        "`last_sent_at` is now written only after `mailer.send` actually returns, in its own\n"
+        "transaction. Marking work as done is a claim about the outside world, so it waits for\n"
+        "the outside world.",
+        f"| dry run (mailer=None): summary_due={dry.summary_due}, "
+        f"summary_policy after={after_dry}\n"
+        f"| real run (mailer set):  summary_due={wet.summary_due}, "
+        f"emails sent={len(mailer_real.sent)}\n"
+        f"| summary_policy after the real send: {after_send}",
+    )
+
     # ---- 8. the worker runs every tenant on one tick, and one failure doesn't stop the rest
     import psycopg
     from . import config as cfg
