@@ -81,7 +81,7 @@ git config --local --add credential.helper \
 | 1 Tenant model + isolation | **11 pass**, 9 of them attacks | Postgres RLS, not app predicates |
 | 2 Vertical-aware onboarding | **11 pass / 1 info** | real estate, legal, spa + generic |
 | 3 State machine + guardrails | **16 pass / 3 info** | 10 of them attacks |
-| 4 Email connector (Postmark) | **8 pass / 3 info** | code complete; live inbox delivery pending items 1-3 |
+| 4 Email connector (Postmark) | **8 pass / 3 info + LIVE** | GATE 4 harness green; **live round-trip proven 2026-07-25** — real inbound email → Postmark → webhook on the VPS → tenant resolved → AI reply delivered to Gmail (2 replies `Sent`, not spam) |
 | 5 Booking (live Cal.com) | **5 pass / 2 info** | real booking created + cancelled against live Cal.com |
 | 6 Receipts on X Layer mainnet | **8 pass / 1 info** | ReceiptAnchor deployed, 2 real receipts anchored, tamper + forgery attacks caught |
 | 3b-2 Confidence-scored autonomy (Feature 2) | **7 pass / 2 info** | thin profile queues, complete profile auto-sends, precedent moves a marginal figure over the line, GATE 3 regression re-proved |
@@ -232,20 +232,53 @@ deployed on the VPS (item 1). See the Phase 4 go-live checklist below.
 
 ### Phase 4 go-live checklist (operator + deploy)
 
-1. Postmark account **approval** (submitted; "still reviewing" as of last check).
-2. In Postmark, add and verify the **sending domain `inbox.quietdesks.com`** → paste its DKIM
-   TXT + Return-Path CNAME into Cloudflare DNS. (Replies are FROM `<slug>@inbox.quietdesks.com`,
-   so the *inbox* subdomain is the sending domain, not the apex.)
-3. DNS at Cloudflare: **MX** on `inbox.quietdesks.com` → `inbound.postmarkapp.com` (pri 10);
-   a **DMARC** TXT; the DKIM/Return-Path from step 2; and **A** `app.quietdesks.com` → the VPS.
-4. Deploy the webhook on the VPS: own dir + own user, `uvicorn concierge.app:app` under systemd,
-   nginx vhost `app.quietdesks.com` → 127.0.0.1:8000 with TLS. (Shared box — see repo notes; a
-   free port is 8000; do not reuse another project's Postgres.)
-5. `.env` on the VPS: `CONCIERGE_DOMAIN=quietdesks.com`, `POSTMARK_SERVER_TOKEN=…`,
-   `POSTMARK_INBOUND_WEBHOOK_SECRET=…`, `APP_DATABASE_URL`/`DATABASE_URL` for CONCIERGE's own PG.
-6. Point Postmark's inbound webhook at
-   `https://<user>:<secret>@app.quietdesks.com/inbound/postmark`.
-7. Live test: onboard a tenant, email its address, confirm the reply lands and is not in spam.
+**✅ COMPLETE — Phase 4 is LIVE (2026-07-25).** The app runs at `https://app.quietdesks.com` and a
+real email round-trip was proven end to end (see the Phase 4 section above). All steps below are done.
+
+1. ✅ Postmark account **approval** — approved 2026-07-24 (ticket `[NVXMEE-2Z5W7]`).
+   `POSTMARK_SERVER_TOKEN` is in the VPS `.env`. Default **Transactional** stream (not Broadcast).
+2. ✅ Sending domain **`inbox.quietdesks.com`** added in Postmark and **DKIM + Return-Path VERIFIED**.
+   (Replies are FROM `<slug>@inbox.quietdesks.com` — the *inbox* subdomain, not the apex.)
+3. ✅ DNS at Cloudflare: **MX** `inbox` → `inbound.postmarkapp.com` (pri 10, comma-bug fixed);
+   DKIM TXT (`…pm._domainkey.inbox`) + Return-Path CNAME (`pm-bounces.inbox` → `pm.mtasv.net`);
+   **A** `app.quietdesks.com` → `38.49.216.59` (grey/DNS-only) with TLS issued. (DMARC still optional
+   — not required for delivery; add later for monitoring.)
+4. ✅ Webhook deployed on the VPS: dedicated `concierge` user, `uvicorn concierge.app:app` under
+   systemd (`concierge.service`), nginx vhost `app.quietdesks.com` → `127.0.0.1:8000` with Let's
+   Encrypt TLS (auto-renew). CONCIERGE's own Postgres runs in a dedicated container `concierge-pg`
+   on `127.0.0.1:5433` (NOT the shared system cluster — full isolation from `concrete_edu` etc.).
+5. ✅ `/opt/concierge/.env` (chmod 600, owned by `concierge`) has `CONCIERGE_DOMAIN`,
+   `POSTMARK_SERVER_TOKEN`, `POSTMARK_INBOUND_WEBHOOK_SECRET`, `XLAYER_*`, `CAL_*`, `LLM_API_KEY`, and
+   `DATABASE_URL`/`APP_DATABASE_URL` on port 5433 with strong generated passwords.
+6. ✅ Postmark inbound webhook set to
+   `https://postmark:<POSTMARK_INBOUND_WEBHOOK_SECRET>@app.quietdesks.com/inbound/postmark` **and**
+   `InboundDomain = inbox.quietdesks.com` set on the server. Webhook checks the **password half**
+   only. Proven live: no-auth → 401, wrong secret → 401, correct secret → 200.
+7. ✅ Live test PASSED: real Gmail → `halcyon-rooms@inbox.quietdesks.com` → webhook → tenant resolved
+   → AI reply delivered to the Gmail inbox (2 replies `Sent`, not spam). GATE 4 requirement met.
+
+### VPS deployment (live) — `38.49.216.59`
+
+Deployed 2026-07-24 via SSH from the codespace (root password from `.env`, box is the shared
+`Jennycruzy` box — see the `vps-shared-box` note). Layout:
+- **User:** `concierge` (system user, home `/opt/concierge`). Code rsynced there (Feature 1
+  included — the local commit, not `origin/main`, which hasn't been pushed). `.venv` with
+  requirements installed.
+- **Service:** `systemctl status concierge` (uvicorn on `127.0.0.1:8000`, `Restart=always`).
+  `journalctl -u concierge` for logs. Reload after a code change: `systemctl restart concierge`.
+- **DB:** container `concierge-pg` (`postgres:16-alpine`, `--restart unless-stopped`) on
+  `127.0.0.1:5433`, volume `concierge-pgdata`. Migrated; RLS proven (app connects as
+  `concierge_app`, unscoped → 0 rows). Both DB passwords are strong/generated, in `/opt/concierge/.env`.
+- **nginx:** vhost `/etc/nginx/sites-enabled/app.quietdesks.com` → `127.0.0.1:8000`, TLS via
+  certbot (cert `/etc/letsencrypt/live/app.quietdesks.com/`, expires 2026-10-22, auto-renew set).
+- **Health:** `curl https://app.quietdesks.com/healthz` →
+  `{"status":"ok","sending_configured":true,"inbound_auth_configured":true,"inbound_domain":"inbox.quietdesks.com"}`.
+- **To redeploy code:** rsync `/workspaces/concierge/` → `root@38.49.216.59:/opt/concierge/`
+  (exclude `.git .env __pycache__ .venv`), `chown -R concierge`, `systemctl restart concierge`.
+
+**Security TODO (hardening, Phase 9):** the box root password is the leaked one — rotate it and move
+to SSH-key auth for a dedicated deploy user. Postgres and the app port are localhost-only, which
+bounds the exposure for now, but the root password is the outstanding item.
 
 ### What Phase 6 added
 
@@ -303,15 +336,41 @@ than inventing times — check 12.
 
 ## What is left
 
-### Phase 4 — email connector (Postmark) · CODE COMPLETE, live delivery pending items 1, 2, 3
+### Phase 4 — email connector (Postmark) · DONE + LIVE, proven 2026-07-25
 Built and passing GATE 4 (8/0/3): inbound parse, tenant resolution from the recipient address,
 outbound send with the AI disclosure as the first line, webhook authenticity, email threading.
 Two reality corrections from the build spec, both in the ledger: **Postmark inbound has no HMAC
 signature** — authenticity is HTTP Basic Auth carried in the webhook URL, which `mail.check_webhook_auth`
-verifies; and the sending domain is **`inbox.quietdesks.com`** (replies come FROM the inbox
-subdomain), so that is the domain to verify in Postmark, not the apex. Remaining to go live:
-items 1-3 and the go-live checklist above. Domain (item 2) is bought (quietdesks.com); Postmark
-(item 3) is in approval.
+verifies (it checks the **password half** only; username is ignored); and the sending domain is
+**`inbox.quietdesks.com`** (replies come FROM the inbox subdomain), so that is the domain to verify
+in Postmark, not the apex.
+
+**LIVE round-trip proven 2026-07-25.** A real email from `jennyoliver630@gmail.com` to the test
+tenant `halcyon-rooms@inbox.quietdesks.com` was received by Postmark, POSTed to the webhook on the
+VPS (`POST /inbound/postmark → 200`, twice), resolved to the tenant, and answered — Postmark
+outbound shows 2 replies `Sent` from `halcyon-rooms@inbox.quietdesks.com` to the Gmail, landing in
+the inbox (not spam, because DKIM + Return-Path on `inbox.quietdesks.com` are verified). All
+operator items for Phase 4 are in: item 1 (VPS) deployed, item 2 (domain+DNS) done, item 3
+(Postmark) approved + configured.
+
+**Two go-live gotchas worth remembering** (both cost time on 2026-07-25):
+1. **Postmark needs `InboundDomain` set** to `inbox.quietdesks.com` on the server (not just the MX +
+   webhook). Without it Postmark rejects mail to `<slug>@inbox.quietdesks.com` and `TotalCount` of
+   received messages stays 0. Set via the API: `PUT https://api.postmarkapp.com/server` with
+   `{"InboundDomain":"inbox.quietdesks.com"}` and `X-Postmark-Server-Token`, or in the Inbound
+   Stream → Settings UI. It 610s until the MX is clean (next point).
+2. **The MX value had a trailing comma** (`inbound.postmarkapp.com,`) — pasted from Postmark's
+   instruction sentence. Postmark's `InboundDomain` check failed with error 610 until the comma was
+   removed so the MX target is exactly `inbound.postmarkapp.com`.
+
+Diagnosing inbound is fastest via the Postmark API with the server token, not the UI:
+`GET /server` (shows `InboundHookUrl`, `InboundDomain`), `GET /messages/inbound?count=5&offset=0`
+(did mail arrive), `GET /messages/outbound?count=5&offset=0` (did a reply send — `offset` is
+required). Box-side: `journalctl -u concierge | grep inbound/postmark`.
+
+The **test tenant** `halcyon-rooms@inbox.quietdesks.com` (Halcyon Rooms spa, owner
+`jennyoliver630@gmail.com`, services deep-tissue massage £85 / signature facial £70) lives on the
+live DB — reuse it for demo footage, or onboard a fresh one.
 
 ### Phase 5 — booking (Cal.com) · DONE, GATE 5 passed 2026-07-23
 `calcom.py` fills the `engine.Calendar` seam with live Cal.com v2 calls; `verify_phase5.py`
@@ -339,6 +398,44 @@ U3 (the OKX escrow API call signatures) is unresolved — the OnchainOS docs cov
 but not the escrow credentials. **No escrow code may be written against a guessed API shape.**
 Resolve U3 first.
 
+**Two different on-chain identities — do not conflate them.** (a) The **X Layer signer** (operator
+item 6, `XLAYER_PRIVATE_KEY` in `.env`, addr `0x69eb…`) is a plain key holding ~0.01 OKB of gas
+that signs and anchors *receipts* — **already provided**, which is why GATE 6 passes live. (b) "The
+wallet" that Phase 7 waits on is the **OKX Agentic Wallet** (operator item 5) — the *A2A identity*
+that funds/receives escrow and settles USDT/USDG, created via `npx skills add okx/onchainos-skills`
++ a creation email, keys in a TEE. **Missing.** The receipts wallet is done; the escrow wallet is not.
+
+**U3 breaks into two unknowns, and the doc-research half is UNBLOCKED (needs no wallet):** (1) where
+`OKX_API_KEY`/`OKX_SECRET_KEY`/`OKX_PASSPHRASE` come from (likely the OKX developer portal —
+unconfirmed), and (2) the exact `a2a-pay` call signatures + USDT-vs-USDG settlement + dispute
+mechanics. *Installing and reading* the skills package (`npx skills add okx/onchainos-skills`, then
+its `SKILL.md` files for `okx-agent-payments-protocol` / `okx-ai`) needs no wallet — only *running*
+an escrow CLI does — so the shape can be verified from the vendor's own shipped docs (not guessed,
+which Phase 7 forbids) and the escrow module written ready-to-test. A second live source: the shared
+VPS already has `okx-a2a` installed and running (`/usr/local/bin/okx-a2a`). What still needs the
+wallet + credentials + funded USDT: any live call, and therefore the whole GATE 7 round-trip.
+
+### VPS deploy — move NOW, don't wait for Postmark (operator item 1)
+Nothing is deployed yet; everything runs locally in the codespace. **Almost none of the deploy
+depends on Postmark** — waiting compresses all the risk into the final hours. Candidate box on
+record: `38.49.216.59` (`Jennycruzy`, shared — see the `vps-shared-box` note: dedicated non-root
+user, CONCIERGE's OWN RLS Postgres not kitchen-copilot's :5432, free port 8000, and rotate the
+leaked root password first).
+
+- **Deployable and health-checkable today (no Postmark):** the dedicated user + own RLS Postgres,
+  the FastAPI app under systemd, nginx vhost + TLS for `app.quietdesks.com` (needs only one
+  Cloudflare A record `app.quietdesks.com → 38.49.216.59`, which the operator controls — not
+  Postmark), and the scheduler timer (follow-ups, anchoring sweep, summaries) against the live
+  X Layer creds.
+- **The ONLY step that waits for Postmark:** the inbound-email round-trip — paste
+  `POSTMARK_SERVER_TOKEN`, add MX/DKIM DNS, point the webhook, run the "email lands, not spam" test.
+
+So: deploy the infrastructure now so go-live is 3 steps (token + MX/DKIM + webhook) when Postmark
+approves. Blocker on the agent side: no SSH access from the codespace — the operator either grants a
+key or runs the deploy commands via `! <cmd>`. The full go-live gate runs are deferred to when
+Postmark is live (operator's stated plan), but the deploy itself is not. Steps: the Phase 4 go-live
+checklist above.
+
 ### Phase 8 — summary + scheduled actions · DONE, GATE 8 passed 2026-07-24
 `concierge/summary.py` (pure arithmetic over `store.list_threads`/`list_receipts` — inquiries,
 quotes, negotiations, bookings + value, escalations with verbatim text, Feature-2 queued-for-
@@ -364,15 +461,23 @@ video, architecture diagram, "reproduce every claim" README pass, Google form be
 
 ## The critical path is not code
 
-**3 of 8 operator credentials have arrived: items 4 (Cal.com), 6 (funded X Layer signer), 7 (LLM
-key).** Phases 5 and 6 are proven live because of them. Items 1, 2 (partial), 3, 5 remain — full
-instructions in `docs/OPERATOR_PROVIDES.md`.
+**7 of 8 operator items are now in: 1 (VPS, deployed), 2 (domain+DNS), 3 (Postmark, live), 4
+(Cal.com), 6 (X Layer signer), 7 (LLM key — fixed 2026-07-25; the old value was truncated and 401'd,
+the full `sk-ant-…` now works, so Feature 1's optional gap categorization is live).** Only **item 5
+(OKX Agentic Wallet)** remains, which — with ledger U3 — is what still blocks Phase 7. Item 8
+(web-search) stays optional/skipped. Full instructions in `docs/OPERATOR_PROVIDES.md`.
 
-The binding constraint is **Postmark**: it manually reviews new accounts before they may send
-outside domains you own — stated at under 24h on weekdays, longer at weekends. The domain
-(`quietdesks.com`) is bought; DNS and the Postmark approval are still the gate on Phase 4 going
-live, and Phase 7 is gated separately on the OKX wallet plus resolving ledger U3. Phase 4 is what
-the rest of the demo video needs — booking and receipts already have their real footage.
+**Phase 4 is LIVE as of 2026-07-25** — Postmark approved, the app deployed on the VPS, DNS + DKIM +
+Return-Path + MX + InboundDomain all set, and a real email round-trip proven end to end (see the
+Phase 4 section for the evidence and the two go-live gotchas). Booking, receipts, and now email all
+have real live footage for the demo. **Phase 7** is the only remaining blocked phase — gated on the
+OKX Agentic Wallet (item 5) plus resolving ledger U3 (the doc-research half of U3 is unblocked — see
+the Phase 7 section).
+
+**What's left is now mostly Phase 9 (submission):** the ~90s demo video, architecture diagram, the
+"reproduce every claim" README pass, and the Google form before the deadline — plus the security
+hardening TODO (rotate the VPS root password, move to SSH-key auth) and rotating the exposed
+`cal_live_` Cal.com key. Phase 7 (+ Feature 4) only if item 5 + U3 land in time.
 
 Mitigation if approval runs late: while pending you can still configure inbound, use the API, and
 send to your own verified domain — so Phase 4 is buildable and demoable provided the test

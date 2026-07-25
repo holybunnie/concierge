@@ -3,29 +3,31 @@
 What CONCIERGE needs from you, what each thing unblocks, and what stays broken until it arrives.
 Nothing here is faked, stubbed, or simulated. A missing credential is reported as missing.
 
-**Status as of 2026-07-23: 2 of 8 provided; 1 in progress.**
-- Item 2 (domain): **PROVIDED** — `quietdesks.com`, registered at Cloudflare, DNS there.
-- Item 3 (Postmark): **IN APPROVAL** — account created, approval requested, "still reviewing".
-  Sending domain to verify is `inbox.quietdesks.com` (replies are FROM the inbox subdomain).
-- Item 4 (Cal.com): **PROVIDED** — key `cal_live_…` + event type `6433300`. GATE 5 passed with a
-  real booking. **Key was exposed in chat — rotate before submission.**
-- Everything else below is still MISSING.
+**Status as of 2026-07-25: 7 of 8 provided. Only item 5 (OKX wallet) remains; item 8 optional.**
+- Item 1 (VPS): **PROVIDED + DEPLOYED** — `38.49.216.59`; CONCIERGE live at `https://app.quietdesks.com`.
+- Item 2 (domain+DNS): **PROVIDED** — `quietdesks.com` at Cloudflare; all Phase 4 DNS records set.
+- Item 3 (Postmark): **PROVIDED + LIVE** — approved, token in VPS `.env`, inbound round-trip proven.
+- Item 4 (Cal.com): **PROVIDED** — key `cal_live_…` + event type `6433300`. GATE 5 passed live.
+  **Key was exposed in chat — rotate before submission.**
+- Item 6 (X Layer signer): **PROVIDED** — GATE 6 live.
+- Item 7 (LLM key): **PROVIDED (fixed 2026-07-25)** — the earlier value was truncated and 401'd; the
+  full `sk-ant-…` now works; Feature 1 categorization is live.
+- Item 5 (OKX Agentic Wallet): **MISSING** — blocks Phase 7 + ledger U3. Item 8 optional/skipped.
 
-**Deadline 2026-07-27 22:59 UTC — 4 days 20 hours remain.**
+**Deadline 2026-07-27 22:59 UTC.**
 
-Phases 0–3 and 5–6 are done. **Items 4, 6 and 7 have arrived** and Phases 5 and 6 are proven live
-against real Cal.com and real X Layer mainnet. **Phase 4 go-live and Phase 7 remain blocked** —
-Phase 4 on items 1–3, Phase 7 on item 5 and ledger U3 (the OKX escrow API shape).
+Phases 0–6 and 8 are done; **Phase 4 is LIVE** (real email round-trip proven 2026-07-25). Feature 1
+is done. **Only Phase 7 remains blocked** — on item 5 and ledger U3 (the OKX escrow API shape).
 
 | # | Item | Status | Blocks | Notes |
 |---|---|---|---|---|
-| 1 | VPS — 2 vCPU / 4GB / 40GB, Ubuntu 24.04, 24/7 | ❌ MISSING | P4, P7, P8 | Inbound webhook must be publicly reachable and always up. Workers run follow-ups + progress monitor. |
-| 2 | Domain + DNS access | 🟡 PARTIAL | P4 | `quietdesks.com` bought. MX on `inbox.quietdesks.com` + SPF/DKIM/DMARC not yet set at Cloudflare — see HANDOFF's go-live checklist. |
-| 3 | Postmark server API token (inbound + outbound) | ❌ MISSING | P4 | Account submitted, in manual approval as of last check. SendGrid Inbound Parse remains a documented alternative — **say the word and I'll switch.** |
+| 1 | VPS — 2 vCPU / 4GB / 40GB, Ubuntu 24.04, 24/7 | ✅ PROVIDED + DEPLOYED | ~~P4~~, P7, P8 | `38.49.216.59` (shared `Jennycruzy` box). CONCIERGE deployed 2026-07-24 under a dedicated `concierge` user, own Postgres container on `127.0.0.1:5433`, systemd + nginx + TLS. Live at `https://app.quietdesks.com`. **Hardening TODO:** rotate the leaked root password, move to SSH-key auth. |
+| 2 | Domain + DNS access | ✅ PROVIDED | ~~P4~~ | `quietdesks.com` at Cloudflare. All Phase 4 records set: A `app` → VPS (grey), MX `inbox` → inbound.postmarkapp.com, DKIM TXT + Return-Path CNAME (both verified). DMARC still optional. |
+| 3 | Postmark server API token (inbound + outbound) | ✅ PROVIDED + LIVE | ~~P4~~ | Approved 2026-07-24 (ticket `[NVXMEE-2Z5W7]`). Token in VPS `.env`; server "Concierge" configured with `InboundHookUrl` + `InboundDomain=inbox.quietdesks.com`; sending domain DKIM + Return-Path verified. **Live round-trip proven 2026-07-25** (inbound email → webhook → tenant → reply Sent, not spam). Default **Transactional** stream. |
 | 4 | Cal.com account + API key (`cal_...`) + event type ID | ✅ PROVIDED | P5 | In `.env`. **GATE 5 passed live 2026-07-23** — real booking created and cancelled against event type 6433300. Key is `cal_live_` — rotate before submission, it was exposed in chat. |
 | 5 | OKX Agentic Wallet + creation email; `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE` | ❌ MISSING | P7 | Also blocks verifying the escrow API shape at all (ledger U3). |
 | 6 | Funded OKB on X Layer **mainnet (196)** | ✅ PROVIDED | ~~P6~~, P7 | In `.env` as `XLAYER_PRIVATE_KEY`. **GATE 6 passed live 2026-07-24** — `ReceiptAnchor` deployed at `0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587`, two real receipts anchored, ~0.0103 OKB left (~9,900 more anchors at the measured 51,849 gas/anchor). |
-| 7 | LLM API key | ⚠️ PROVIDED BUT INVALID | P2, P3 drafting; Feature 1 categorization | In `.env`, but a live call returns **401 "API key is invalid"** (real-format `sk-ant-…`, length 100 — expired, revoked, or mistyped). **Rotate it.** GATE 2's classifier and GATE 3's drafting are deterministic by design (see `classify.py`) and need no key. The first code path that actually consumes it is **Feature 1's optional gap categorization** (`concierge/gaps.py`), which degrades honestly to raw-text gaps when the key is absent or invalid — so nothing is broken, but the coarse category labels ("service not offered", etc.) stay off until a working key is supplied. |
+| 7 | LLM API key | ✅ PROVIDED (fixed 2026-07-25) | P2, P3 drafting; Feature 1 categorization | Earlier value was **truncated** (missing the last chars → 401); the full `sk-ant-…` now works — verified with a live `gaps.classify_gap` call returning `service_not_offered`. GATE 2/GATE 3 are deterministic and need no key; the one consumer is **Feature 1's optional gap categorization** (`concierge/gaps.py`), which is now live (and still degrades honestly to raw text if the key is ever absent). |
 | 8 | Web-search / retrieval API key | ❌ MISSING | P2 enrichment | **Optional.** Without it, onboarding uses built-in vertical templates and says so out loud. |
 
 ---

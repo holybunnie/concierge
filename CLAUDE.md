@@ -36,7 +36,7 @@ current. Summary:
 | 1 Tenant model + isolation | done | 11 pass, 9 of them attacks |
 | 2 Vertical-aware onboarding | done | 11 pass / 1 info |
 | 3 State machine + guardrails | done | 16 pass / 3 info, 10 of them attacks |
-| 4 Email (Postmark) | code complete, go-live blocked | operator items 1-3 |
+| 4 Email (Postmark) | **done + LIVE** (2026-07-25) | 8 pass / 3 info + real inbound→reply round-trip on the VPS |
 | 5 Booking (Cal.com) | done | 5 pass / 2 info |
 | 6 Receipts on X Layer **mainnet** | done | 8 pass / 1 info |
 | 7 A2A escrow + settlement | blocked | operator item 5, ledger U3 |
