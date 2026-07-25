@@ -25,11 +25,20 @@ Anyone can say their agent "quotes intelligently." The interesting question is w
  whether the action stayed inside it. Tampering is detectable; "within rules" is verifiable by a
  third party who trusts neither the tenant nor us.
 
+Three diagrams of how that is arranged — the system, the isolation boundary, and what happens to one
+stranger's email — are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 ## Status
 
-Everything below is built and verified except **A2A escrow**, which is blocked on an unresolved
-vendor API shape, and **cross-tenant benchmarking**, which needs real escrow data to exist first.
-No part of this repo simulates a capability it has not built.
+**Live.** CONCIERGE runs at `https://app.quietdesks.com` — a real email from a stranger reaches a
+real tenant, is answered from that tenant's own inbox, and the commitment is anchored on X Layer
+mainnet. It is listed on the OKX A2A marketplace as agent **#9274**, and a buying agent that
+subscribes gets a working business with nobody in the room.
+
+Everything is built and verified except **A2A escrow**, which is blocked on a vendor API shape no
+document we can reach actually specifies (ledger U3) plus the OKX Agentic Wallet, and
+**cross-tenant benchmarking**, which needs real escrow data to exist first. No part of this repo
+simulates a capability it has not built.
 
 ```bash
 pip install -r requirements.txt
@@ -49,17 +58,22 @@ python3 verify.py --suite receipts # X Layer mainnet — spends real (tiny) gas
 python3 verify.py --suite public-receipts # public receipt verification, anchors 2 more receipts
 python3 verify.py --suite scheduler # summary + scheduled worker, 10 checks
 python3 verify.py --suite product-gaps # unmet demand captured from real escalations, 5 checks
+python3 verify.py --suite provisioning # a subscription becomes a working tenant, 9 checks
 ```
 
 Each suite is named for the capability it proves, and prints the raw evidence behind every pass.
-Full state in [`docs/HANDOFF.md`](docs/HANDOFF.md).
+How the pieces fit together: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Full state in
+[`docs/HANDOFF.md`](docs/HANDOFF.md).
 
-Neither harness contains a mock or a fixture response, with two narrowly declared exceptions,
-named as such in every check that touches them: the engine suite's calendar (a fixture that lives in the
-harness, not the package — the booking suite replaces it with live Cal.com calls) and the email suite's recording
-mailer (replaced by a real Postmark client once the operator's account is approved). The foundations suite makes real network calls and reports FAIL if the network is down rather
-than falling back to a cached answer. Every other suite runs real SQL against a real PostgreSQL 16
-server as the real unprivileged application role.
+No harness contains a mock or a fixture response, with three narrowly declared exceptions, named
+as such in every check that touches them: the engine suite's calendar (a fixture that lives in the
+harness, not the package — the booking suite replaces it with live Cal.com calls), the email
+suite's recording mailer (production sends through `postmark.PostmarkMailer`, which refuses to run
+without a real token, and the live round-trip is proven separately), and the provisioning suite's
+okx-a2a CLI, stubbed at the `a2a.send` seam because the live daemon's own event payloads cannot be
+confirmed until a real buyer subscribes. The foundations suite makes real network calls and reports
+FAIL if the network is down rather than falling back to a cached answer. Every other suite runs
+real SQL against a real PostgreSQL 16 server as the real unprivileged application role.
 
 ### How isolation is actually enforced (the isolation suite)
 
@@ -99,8 +113,10 @@ The failure onboarding exists to prevent is a business quoting £85 because the 
  asked; a wrong guess collects the wrong profile entirely.
 
 Classification is a weighted lexicon that returns the exact terms behind its decision — no LLM.
-That is partly auditability and partly that the LLM key hasn't arrived, and a classifier that
-needs a credential we don't have is a classifier that doesn't exist.
+It began that way because the LLM key hadn't arrived and a classifier that needs a credential we
+don't have is a classifier that doesn't exist. The key has since arrived, and it stayed that way
+anyway: a classification you can read the reasoning of, and which abstains when two verticals score
+too close, is worth more here than one you have to trust.
 
 ### Confidence-scored autonomy — not every reply earns the right to send itself (the autonomy suite)
 
@@ -208,19 +224,68 @@ receipt (`receipts.anchor()` existed; nothing ran it automatically), and Safe Fo
  prove the scheduled wrapper picks the right rows and degrades exactly as honestly as every
  other missing-credential path in this codebase when there's no signer configured.
 
+### Unmet demand, in the prospect's own words (the product-gaps suite)
+
+Every time CONCIERGE escalates because a business's profile cannot answer something, that is a
+customer asking for a thing the business doesn't sell. Those escalations were already happening and
+were already being thrown away. Now they're counted and quoted back to the owner.
+
+- **It is instrumentation on an existing decision, never a new one.** A `gap_events` row is written
+  as one side effect of the "unknown query → escalate" transition that Phase 3 already proved — and
+  only that one. A floor breach, a request for a human, or a tripped escalation trigger writes
+  nothing, because recording "too cheap" or "wants a person" as unmet market demand would be a lie.
+- **The prospect's words are carried verbatim into the owner's summary.** Clustering them into
+  coarse categories is optional enrichment that runs later on a schedule; with no LLM key it returns
+  nothing at all and the summary shows the raw text — never a fabricated label, never silently
+  dropped. The harness proves that degradation deterministically rather than describing it.
+
+### Auto-provisioning — a subscription becomes a working business, unattended (the provisioning suite)
+
+Listing on a marketplace opens a door strangers walk through on their own schedule. Until this
+landed, a subscription produced a notification and a human created the tenant, issued the address
+and asked the onboarding questions by hand — the one place a person was still load-bearing in a
+product whose entire premise is that nobody's presence is.
+
+- **The tenant row is created first, with an empty profile**, so in-flight onboarding state has an
+  RLS-fenced home rather than needing a second isolation mechanism. That window is safe because an
+  empty profile is *already* unquotable — the harness fires a real priced enquiry at the half-built
+  tenant and proves it escalates without one digit reaching the client.
+- **A replayed subscription event is idempotent because of a database constraint**, not because of
+  control flow: `tenants.a2a_job_id` is UNIQUE, and the harness forces a duplicate insert to watch
+  Postgres refuse it.
+- **A malformed answer is refused, never inferred.** The buyer being a machine makes loose parsing
+  tempting; a service parsed slightly wrong is a wrong price sent to a real client under the
+  tenant's name. Refusing costs one round trip.
+- **The finding worth reading twice:** the first real enquiry to the auto-provisioned tenant is
+  *held for its owner*, scoring 0.85 against a 0.55 threshold — stopped not by the price but by the
+  comprehension floor, because the client wrote "for my cat" and 75% of their words could be
+  accounted for. Two defences built for the email path, holding on a channel neither was written
+  for. A business set up entirely by machine does not start firing prices at strangers.
+
 ## Reproduce every claim
+
+Nothing here asks you to take the repo's word for it. The first four are live systems you can hit
+right now; the rest are commands in this repo that print their own evidence.
 
 | Claim | How to check it yourself |
 |---|---|
+| It is actually running | `curl https://app.quietdesks.com/healthz` |
+| A commitment is publicly verifiable | `GET https://app.quietdesks.com/r/{receipt_id}` — the id from any quote CONCIERGE has sent. A receipt that isn't a public commitment, a malformed id and a nonexistent id all render the identical "not found" page |
+| The receipt contract is real, on mainnet | `0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587` on [OKLink](https://www.oklink.com/x-layer/evm/address/0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587), chain 196. Deploy tx `0xda15e052…3f95b0`, 224,160 gas; each anchor measured at 51,849 |
+| X Layer is chain 196 | `curl -X POST https://rpc.xlayer.tech -d '{"jsonrpc":"2.0","method":"eth_chainId","id":1}' -H 'Content-Type: application/json'` |
 | Cal.com slots contract | `curl "https://api.cal.com/v2/slots?eventTypeId=1&start=2026-07-23&end=2026-07-30" -H "cal-api-version: 2024-09-04"` |
 | Cal.com bookings contract | `curl -X POST https://api.cal.com/v2/bookings -H "cal-api-version: 2026-02-25" -H "Content-Type: application/json" -d '{}'` — it will tell you its own rules |
-| X Layer is chain 196 | `curl -X POST https://rpc.xlayer.tech -d '{"jsonrpc":"2.0","method":"eth_chainId","id":1}' -H 'Content-Type: application/json'` |
-| Everything else | [`docs/VERIFICATION_LEDGER.md`](docs/VERIFICATION_LEDGER.md) — every external fact with its live proof and date, including the four places reality differed from the build spec |
+| `store.py` has no tenant predicate | `grep -rniE 'where +tenant_id' concierge/store.py` — the only hit is the docstring line saying so. Isolation lives in `concierge/sql/schema.sql`, not here |
+| No trade vocabulary in the engine's prose | `python3 verify.py --suite engine` check 3 greps `engine.PROSE` against `engine.TRADE_NOUNS` and fails on a hit |
+| No price comes from a language model | `grep -rln "LLM_API_KEY\|anthropic" concierge/*.py` returns exactly one file, `gaps.py`, which runs after the fact and touches no price |
+| Everything else | [`docs/VERIFICATION_LEDGER.md`](docs/VERIFICATION_LEDGER.md) — every external fact with its live proof and date, including the places reality differed from the build spec |
 
 ## What is missing
 
-[`docs/OPERATOR_PROVIDES.md`](docs/OPERATOR_PROVIDES.md) — 8 items, currently 0 provided. Each one
-lists exactly which capability it blocks. Absent credentials are reported as absent; none are stubbed.
+[`docs/OPERATOR_PROVIDES.md`](docs/OPERATOR_PROVIDES.md) — 8 items, **7 provided**. What remains:
+the OKX Agentic Wallet, which with ledger U3 is what still blocks A2A escrow, and an optional
+web-search key that onboarding says out loud it doesn't have. Each item lists exactly which
+capability it blocks. Absent credentials are reported as absent; none are stubbed.
 
 ## Disclosure
 
