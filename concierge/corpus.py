@@ -41,14 +41,22 @@ HUMAN = "human"                # the human-request path, checked before everythi
 
 _WORD = re.compile(r"[a-z0-9]+")
 
-# Generic commercial qualifiers. Each of these changes what an answer should be, in ANY trade:
-# a quantity changes who it is for, a duration changes how long, a location changes where. None
-# of them names a trade, a service or a profession — that is the invariant this module keeps.
-QUALIFIER_CLASSES: dict[str, tuple[str, ...]] = {
+# How a client phrases each qualifier class. The classes themselves are NOT redefined here — they
+# are `comprehension.QUALIFIERS`, the same four the engine acts on — so a class added there
+# without phrasings written for it here shows up as an untested class rather than passing
+# silently. `verify_comprehension` check 1 asserts that correspondence in both directions.
+#
+# The phrasings are generic commercial English: a quantity changes who it is for, a duration how
+# long, a location where. None names a trade, a service or a profession.
+_PHRASINGS: dict[str, tuple[str, ...]] = {
     "quantity": ("for two people", "for a group of six", "for both of us"),
     "duration": ("for two hours", "as a 90 minute session", "for the whole day"),
     "location": ("at my home", "at our offices", "if you travel to me"),
     "timing": ("on a Sunday", "late in the evening", "on a bank holiday"),
+}
+
+QUALIFIER_CLASSES: dict[str, tuple[str, ...]] = {
+    cls: _PHRASINGS.get(cls, ()) for cls in comprehension.QUALIFIERS
 }
 
 

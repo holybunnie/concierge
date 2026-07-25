@@ -20,6 +20,10 @@ send — decide and persist first, then send, exactly like `mail.handle_inbound`
 
 from __future__ import annotations
 
+import argparse
+import json
+import sys
+
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Any
@@ -172,10 +176,6 @@ def main(argv: list[str] | None = None) -> int:
     codebase — runs every DB-side decision honestly without one rather than refusing to start.
     `--dry-run` forces that no-send mode even when a token IS present.
     """
-    import argparse
-    import json
-    import sys
-
     parser = argparse.ArgumentParser(prog="concierge.scheduler", description=__doc__)
     parser.add_argument("--tenant", help="run one tenant id instead of all of them")
     parser.add_argument("--dry-run", action="store_true",
