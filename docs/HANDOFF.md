@@ -484,28 +484,77 @@ cost the first time.
 
 **Still needed:** the ~90s demo video and the Google form (both operator), and the items below.
 
+#### The A2A transport, as it actually behaves (2026-07-25, from live traffic)
+
+A real agent (`SecAgent`/`SandboxAgent` #1791) opened a job against the listing at 18:34 UTC and
+asked for a plumbing quote. It went unanswered for three hours. Everything below was found chasing
+that, and all four are now gate checks 10-13 (`--suite provisioning`, 9 → **13 pass**).
+
+1. **`session send` does not send.** It is *AI dispatch* — it injects text into the local AI
+   subsession as though it arrived from the peer. Calling it to answer a buyer hands the reply to
+   the bound LLM as a prompt; it exits 0, the notification is consumed as handled, and the only
+   trace is our own prose in `~/.okx-agent-task/logs/llm.log`. **`xmtp-send --job-id --to-agent-id
+   --message` is outbound.** An exit code is not a delivery — read the thread back with
+   `session history --job-id X --toAgentId Y --json`.
+2. **The documented payload shape is not the shape that arrives.** No top-level `type`/`event`;
+   `kind` is a category (`notification`, `decision_request`); the event name (`job_asp_selected`)
+   sits in JSON inside a shell command inside a JSON string; there is no `fromAgentId` field —
+   the sender exists only in the rendered header. The `sub_asp_selected` check would therefore
+   **never have fired on a real subscription**: auto-provisioning was silently dead on arrival
+   until `Event.platform_events()` landed.
+3. **The daemon echoes our own sent messages back into the same queue**, distinguished only by
+   `[Sent]` vs `[Received]`. Unguarded, the worker answers its own reply every tick with the buyer
+   copied in. `Event.is_own_outbound()` catches it; echoes are consumed, not left pending.
+4. **`decision_request` items are the platform asking US to choose** (e.g. a failed dispatch
+   offering retry/don't-retry). Never answered outward — that would deliver internal plumbing to a
+   customer — and never auto-retried: a retry lets the platform's own LLM reply to the buyer, and
+   an LLM answering "quote my faucet repair" can invent a price.
+
+**Silence was a bug.** A message on a job with no tenant fell through into nothing. Refusing to
+quote was right; refusing to *speak* was not. `provision.on_unserved` now answers deterministically
+from `provision.unserved_reply()` — disclosure on line one, not one digit, no model. Being asked to
+invent a price and declining is the demonstration, not the failure.
+
+#### Credentials — two different Claude auths, deliberately separate
+
+- **`CLAUDE_CODE_OAUTH_TOKEN`** (Pro, `claude setup-token`, valid 1 year) — the **OKX daemon's**
+  own AI dispatch. `ANTHROPIC_API_KEY` is deliberately **absent** from `/opt/concierge/.env`: with
+  it present the CLI prefers it and the daemon draws on API credits instead of the subscription.
+- **`LLM_API_KEY`** — the **build's** one LLM consumer, `gaps.classify_gap`. Nothing else.
+
+Both were broken on the VPS for reasons that looked identical from outside and were not:
+the box held a **truncated 100-char copy** of the key (the local 108-char fix from 2026-07-25 was
+never rsynced), and **`anthropic` was missing from `requirements.txt`** so the SDK was never
+installed there. `classify_gap` catches everything and returns `None`, so an ImportError wears the
+costume of an honest no-key degradation. Both fixed; categorization verified live on the box.
+
 #### Deploy + hardening backlog — BLOCKED on SSH access (2026-07-25)
 
 The VPS is still running the **pre-Phase-10** copy. `https://app.quietdesks.com/healthz` is green,
 so email is unaffected, but auto-provisioning is not on the box and neither timer is installed.
 
-**The codespace no longer has any credential for `38.49.216.59`.** The root password was in `.env`
-before the rebuild; the current `.env` holds only `CAL_*`, `DATABASE_URL`, `LLM_API_KEY`, `XLAYER_*`,
-`POSTMARK_SERVER_TOKEN`, `DKIM`. A deploy keypair has been generated at `~/.ssh/concierge_deploy`
-(ed25519, `concierge-deploy@codespace`) — install its `.pub` in the box's `authorized_keys` and the
-whole list below is unblocked. Doing it that way also retires the leaked-password item rather than
-re-exposing it.
+**RESOLVED — the root password is in `.env`, in a `# Password:` comment block at the bottom** (a
+grep for `^KEY=` lines misses it). A deploy keypair now lives at `~/.ssh/concierge_deploy` (ed25519)
+and is installed in the box's `authorized_keys`, so **SSH needs no password**:
+`ssh -i ~/.ssh/concierge_deploy root@38.49.216.59`.
 
-1. rsync the Phase 10 code to `/opt/concierge`, `chown -R concierge`, `systemctl restart concierge`.
-2. Install `deploy/concierge-scheduler.{service,timer}`. Needs `WORKER_DATABASE_URL` in
-   `/opt/concierge/.env` and a **real** password for `concierge_worker` — `schema.sql` creates it
-   with a literal dev password, the same known gap as `concierge_app`.
-3. Install `deploy/concierge-a2a-provision.service`. Mind the two tripwires already pinned in the
-   unit comments: **never** `npm install -g @okxweb3/a2a-node@latest` (it would replace the binary
-   rwoo's running daemon executes), and the PATH must put `/opt/concierge/a2a/node_modules/.bin`
-   first; the CLI also hard-requires Node 22+, and `/usr/bin/node` on that box is v20.
-4. Rotate the leaked root password; move to SSH-key auth for a dedicated deploy user.
-5. Rotate the `cal_live_` Cal.com key — exposed in chat.
+Done 2026-07-25: Phase 10 code rsynced; `schema.sql` re-applied on the live DB (`a2a_job_id`
+column, `resolve_tenant_by_a2a_job`, unique index all verified present — role creation is guarded
+by `IF NOT EXISTS`, so re-running does **not** reset the live passwords); app restarted;
+`concierge-a2a-provision.timer` installed and running every 60s; `concierge-scheduler.timer` was
+already installed with `WORKER_DATABASE_URL` set; `anthropic` installed in the venv.
+
+**`concierge/provision_worker.py` did not exist** — the unit had been executing it since the day it
+was written, and the 9-pass gate never caught it because the suite drives `provision.process_pending`
+directly. Written, deployed, and now the timer's entry point.
+
+Still outstanding:
+
+1. Rotate the leaked root password; move to SSH-key auth for a dedicated deploy user. **Not done —
+   the box is shared with the rwoo project and rotating root affects them too.** Ask first.
+2. Rotate the `cal_live_` Cal.com key — exposed in chat.
+3. `concierge_app` / `concierge_worker` still carry `schema.sql`'s literal dev passwords in the
+   role definition, though the live `.env` uses real generated ones.
 
 ---
 
