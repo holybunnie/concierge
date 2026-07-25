@@ -475,6 +475,49 @@ video, architecture diagram, "reproduce every claim" README pass, Google form be
 
 ---
 
+## The listing — CONCIERGE is Agent #9274, submitted 2026-07-25
+
+| | |
+|---|---|
+| Agent ID | **#9274**, chain 196 |
+| Owner wallet (escrow payee) | `0x45818399a3e0f756cb26ff2fcd13a4824313df94` |
+| XMTP communication address | `0xb48eDa9d210dc9a36457aB5aB61799e5607C10ae` |
+| Login | `melindacharles82@gmail.com` (TEE keys, no seed phrase) |
+| Service | Inbound enquiry handling — A2A, **20 USDT/month, 3-day free trial** |
+| State | `approvalLabel: "Listing under review"`, `onlineStatus: 1` |
+| Register tx | `0xdaaaedb1de705e05edb4d45dc6a488b80c2b160f6c5ca86496a536975714d2dd` |
+
+**Weekly pricing does not exist on this platform.** A2A supports per-call, monthly, or monthly +
+a **fixed 72h** trial — nothing else, and any other trial length is rejected outright. The
+operator's "2 USDT/week with 10 trials" was therefore published as 20 USDT/month with the 3-day
+trial, which was the intended real price anyway.
+
+**`validate-listing` is not the whole gate.** It returned `pass: true` on a `serviceDescription`
+the API then rejected with `code=81001: exceeds max length 500`. QA passing is necessary, not
+sufficient — keep service descriptions under 500 characters.
+
+**Two things gate `activate`, and one is a trap:**
+1. `onchainos` shells out to `okx-a2a doctor` **by PATH lookup**. Against the global 0.1.9 it
+   fails and instructs you to `npm install -g @okxweb3/a2a-node@latest` — which would upgrade the
+   binary underneath rwoo's running daemon. The fix is PATH precedence
+   (`/opt/concierge/a2a/node_modules/.bin` first), now pinned in the service unit. **Never run the
+   suggested global install.**
+2. A bound AI provider whose CLI is logged in. `ai-provider set --provider claude` plus
+   `ANTHROPIC_API_KEY` (appended to `/opt/concierge/.env`, carried into the unit via
+   `EnvironmentFile`) satisfies it. That binding lets the platform open an assistant subsession
+   for A2A message handling; **it has no part in pricing** — a tenant's quote is computed by
+   `engine.step` from their stored profile exactly as on the email path.
+
+**The heartbeat is the online signal, and it is now supervised.** The daemon logs
+`heartbeat sent` / `sync tick agents=1` on a timer, and `onlineStatus` is a field buyers see in
+`agent search` results. Because it runs under systemd with `Restart=always` rather than inside a
+chat session, the listing stays up without anyone's laptop being open — which is the failure mode
+that takes other listings offline.
+
+**Next, once approved:** auto-provisioning. On `sub_asp_selected`, create the tenant, issue
+`<slug>@inbox.quietdesks.com`, and run onboarding over A2A — the buyer is an agent, so it can
+answer the onboarding questions directly, no form. Until that is wired, onboard trial buyers by hand.
+
 ## OKX A2A — what is set up, and the shared-box rule that governs it
 
 **The box is shared. `38.49.216.59` also hosts the `rwoo` project, which runs its OWN okx-a2a

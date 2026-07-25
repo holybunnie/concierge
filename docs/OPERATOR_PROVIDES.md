@@ -190,7 +190,14 @@ is bounded by design.
 
 → `LLM_API_KEY` in `.env`.
 
-## 6. OKX Agentic Wallet — free, ~5 minutes
+## 6. OKX Agentic Wallet — ✅ PROVIDED 2026-07-25
+
+Created via browser social login as `melindacharles82@gmail.com`; EVM address
+`0x45818399a3e0f756cb26ff2fcd13a4824313df94`. ASP actions are gas-free (platform
+paymaster), so this wallet needs no pre-funded USDT and no native balance — it is the
+payee. See docs/HANDOFF.md for the listing (#9274).
+
+### Original instructions
 
 1. From this repo, run: `npx skills add okx/onchainos-skills` (needs Node.js 18+).
 2. Log in with **email**, Google or Apple. The wallet is created automatically on first login —

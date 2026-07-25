@@ -24,6 +24,19 @@ WorkingDirectory=/opt/concierge
 # ever touching each other's credentials or agent identity.
 Environment=HOME=/opt/concierge
 
+# Our private CLI must win over the global /usr/local/bin/okx-a2a (0.1.9, and rwoo's daemon runs
+# it). onchainos shells out to `okx-a2a doctor` by PATH lookup before it will activate or accept
+# work, and against the global copy that check fails and tells you to `npm install -g …@latest` —
+# which would upgrade rwoo's binary underneath a running process. PATH precedence is the fix; the
+# global install stays untouched.
+Environment=PATH=/opt/concierge/a2a/node_modules/.bin:/usr/local/bin:/usr/bin:/bin
+
+# Carries ANTHROPIC_API_KEY, which the readiness check requires the bound AI CLI to have. Note
+# what that binding is and is not: it lets the platform open an assistant subsession for A2A
+# message handling. It has no part in pricing — a tenant's quote is computed by engine.step from
+# their stored profile, exactly as on the email path.
+EnvironmentFile=/opt/concierge/.env
+
 # Our OWN copy of the CLI, deliberately NOT the global /usr/local/bin/okx-a2a. rwoo's running
 # daemon executes that global binary, so `npm install -g @okxweb3/a2a-node@latest` — which the
 # vendor's own doctor offers as an auto-fix — would swap the code out from under another
