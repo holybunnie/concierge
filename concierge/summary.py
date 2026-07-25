@@ -1,4 +1,4 @@
-"""Phase 8 — the tenant activity summary.
+"""the scheduler — the tenant activity summary.
 
 Every number here is a count or a sum over receipts and threads already in Postgres — arithmetic
 over the tenant's own real history, the same Deterministic-Decision Law that governs pricing,

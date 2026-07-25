@@ -1,10 +1,10 @@
-"""GATE 4 — the email connector (Postmark).
+"""the email suite — the email connector (Postmark).
 
-What this gate can prove today, and what it honestly cannot:
+What this suite can prove today, and what it honestly cannot:
 
   PROVABLE NOW (real Postgres, real Postmark payload schema, production code path):
     a real inbound email document is parsed, routed to the one tenant that owns the address it
-    was sent to, run through the Phase 3 engine, and turned into an outbound reply that comes
+    was sent to, run through the engine, and turned into an outbound reply that comes
     FROM the tenant's own inbox, TO whoever wrote in, disclosure on the first line. Cross-tenant
     routing, unknown-recipient refusal, address normalisation, webhook authenticity and email
     threading are all exercised as attacks.
@@ -15,7 +15,7 @@ What this gate can prove today, and what it honestly cannot:
     webhook deployed on the VPS (item 1). The live send object is built and shown here; only the
     final `PostmarkMailer.send` is stubbed by a declared recorder.
 
-The one stand-in — the recording mailer — plays the role GATE 3's FixtureCalendar played: it
+The one stand-in — the recording mailer — plays the role the engine suite's FixtureCalendar played: it
 lives in the harness, not the package, and it is named as a fixture in every check that uses it.
 The production sender (`postmark.PostmarkMailer`) refuses to run without a real token.
 """
@@ -138,7 +138,7 @@ def _inbound_payload(*, to_address: str, text: str, subject: str = "Enquiry",
     return payload
 
 
-# ---------------------------------------------------------------- the gate
+# ---------------------------------------------------------------- the suite
 
 def run(r) -> None:
     db.migrate()
@@ -333,7 +333,7 @@ def run(r) -> None:
     domain = config.get("CONCIERGE_DOMAIN")
     r.note(
         "Live delivery is not yet provable — and nothing here pretends it is",
-        "GATE 4's final requirement — a real reply landing in a real inbox, not spam — is the one\n"
+        "the email suite's final requirement — a real reply landing in a real inbox, not spam — is the one\n"
         "thing this run cannot demonstrate, because it needs credentials that have not arrived:\n"
         f"  - Postmark server token (item 3): {'PRESENT' if token else 'MISSING — build the send, cannot send'}\n"
         f"  - Domain for inbox.<domain> (item 2): {'PRESENT (' + domain + ')' if domain else 'MISSING'}\n"
@@ -346,7 +346,7 @@ def run(r) -> None:
     )
     r.note(
         "The recording mailer is the only stand-in, and it is not in the shipped package",
-        "Exactly as GATE 3 declared its calendar: RecordingMailer lives in this harness file and\n"
+        "Exactly as the engine suite declared its calendar: RecordingMailer lives in this harness file and\n"
         "is named a fixture in every check that touches it. Production sends through\n"
         f"postmark.PostmarkMailer. Fixture module: {RecordingMailer.__module__}",
     )

@@ -106,7 +106,7 @@ def resolve_tenant_by_engagement(escrow_ref: str) -> uuid.UUID:
 
 
 def get_public_receipt(receipt_id: str) -> dict[str, Any] | None:
-    """Feature 3 (GATE 6b): the one public, unauthenticated read in the system.
+    """Feature 3 (the public-receipt suite): the one public, unauthenticated read in the system.
 
     Scoped by `receipt_id` alone via the `public_receipt` SECURITY DEFINER function — no tenant
     context is ever resolved or needed. A malformed id (not even a UUID) is exactly as "not

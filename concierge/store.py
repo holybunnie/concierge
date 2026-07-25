@@ -140,7 +140,7 @@ def insert_receipt(
     confidence: dict[str, Any] | None = None,
     receipt_id: uuid.UUID | None = None,
 ) -> Receipt:
-    """`receipt_id` is normally left to generate here. Feature 3 (public verification, GATE 6b)
+    """`receipt_id` is normally left to generate here. Feature 3 (public verification, the public-receipt suite)
     is the one caller that pre-generates it — the verify link has to be embedded in the same
     outbound email the receipt describes, which is rendered before the row exists — so the
     engine mints the id first and this just uses it instead of a fresh one."""
@@ -161,7 +161,7 @@ def insert_receipt(
 def mark_anchored(
     cur: Cursor, *, receipt_id: uuid.UUID, signature: str, xlayer_tx: str,
 ) -> Receipt:
-    """Fill in the two columns Phase 6 exists to fill. Never called with a fabricated value —
+    """Fill in the two columns receipt anchoring exists to fill. Never called with a fabricated value —
     both arguments come from a confirmed on-chain transaction (see concierge/xlayer.py)."""
     cur.execute(
         "UPDATE receipts SET signature = %s, xlayer_tx = %s WHERE receipt_id = %s RETURNING *",

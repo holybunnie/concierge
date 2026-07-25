@@ -1,7 +1,7 @@
-"""GATE 6 — receipts signed and anchored on X Layer mainnet (196), for real.
+"""the receipts suite — receipts signed and anchored on X Layer mainnet (196), for real.
 
 The receipts anchored here are not hand-built for the harness — they are `Outcome.receipt` as
-`engine.step` actually writes it in production (same as GATE 3), so what gets anchored is
+`engine.step` actually writes it in production (same as the engine suite), so what gets anchored is
 exactly what a real conversation produces. Two independent proofs are then checked: an offline
 signature over the content hash (verifiable by anyone who knows the operator's address, no RPC
 needed), and an on-chain transaction anchoring the same hash in `ReceiptAnchor` (verifiable by
@@ -55,7 +55,7 @@ def _onboard() -> uuid.UUID:
 
 
 def _converse(tenant_id, messages):
-    """Same helper as GATE 3 — a real conversation through the real engine, real DB, real RLS."""
+    """Same helper as the engine suite — a real conversation through the real engine, real DB, real RLS."""
     outcomes = []
     with db.tenant_session(tenant_id) as cur:
         tenant = store.get_tenant(cur)
@@ -106,7 +106,7 @@ def run(r) -> None:
         live_chain_id == 196 and balance > 0 and bool(contract),
         "docs/VERIFICATION_LEDGER.md §9 recorded the decision: a testnet receipt proves nothing\n"
         "to a customer disputing a quote or an arbitrator ruling on an escrow, so CONCIERGE\n"
-        "anchors on chain 196 only, from Phase 6 onward. Re-checked live at the start of this\n"
+        "anchors on chain 196 only, from receipt anchoring onward. Re-checked live at the start of this\n"
         "run, not cached from the deploy.",
         f"| eth_chainId (live) = {live_chain_id}\n"
         f"| signer = {xlayer.address()}\n"
@@ -206,7 +206,7 @@ def run(r) -> None:
         and breach_anchored.decision["within_rules"] is False
         and receipts.verify(breach_anchored),
         "The chain does not know or care what the decision was — it anchors whatever hash it is\n"
-        "given. GATE 3 already proved the £55 ask against a £70 floor is refused with no\n"
+        "given. The engine suite already proved the £55 ask against a £70 floor is refused with no\n"
         "counter-offer; this proves that refusal is now provably on the record, immutable, not\n"
         "just sitting in a database a rogue insider could edit.",
         f"| action = {breach_anchored.action}, within_rules = {breach_anchored.decision['within_rules']}\n"

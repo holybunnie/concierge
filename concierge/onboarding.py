@@ -9,7 +9,7 @@ questions; the extractor supplies *candidates the tenant must confirm*; neither 
 
 That is stricter than §2 requires — §2 forbids the LLM from producing prices — but the failure
 mode is identical whether a wrong price comes from a model, from a template's example, or from
-a regex that read "£85" out of a sentence about something else. The profile is what Phase 3
+a regex that read "£85" out of a sentence about something else. The profile is what the engine
 quotes from, so it may contain only confirmed facts.
 """
 
@@ -161,7 +161,7 @@ class OnboardingSession:
 
         Note what is not referenced anywhere in this method: `Field.example`. The examples are
         not reachable from here, so a template example cannot become a tenant's price even if
-        every field is left blank — a blank field yields a missing key, which Phase 3 escalates.
+        every field is left blank — a blank field yields a missing key, which the engine escalates.
         """
         profile: dict[str, Any] = {}
         for f in self.template.fields:
@@ -195,7 +195,7 @@ class OnboardingSession:
     # ---- step 5: read the rules back for confirmation
 
     def read_back(self) -> str:
-        """Plain-English restatement of the rules Phase 3 will actually enforce.
+        """Plain-English restatement of the rules the engine will actually enforce.
 
         Rendered from the built profile, not from the answers, so what the tenant confirms is
         literally what the engine will read. A read-back generated from a different source than

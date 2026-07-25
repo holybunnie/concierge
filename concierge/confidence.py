@@ -1,6 +1,6 @@
-"""Confidence-scored autonomy (Feature 2, GATE 3b-2).
+"""Confidence-scored autonomy (Feature 2, the autonomy suite).
 
-Phase 2's vertical classifier already refuses to guess when a score is too close to call
+onboarding's vertical classifier already refuses to guess when a score is too close to call
 ("5 vs 4, too close — ask instead"). This module extends that same discipline from onboarding
 into every pricing/negotiation decision the engine makes: a number, arithmetic over concrete,
 named, stored facts, never an LLM's self-reported certainty and never a factor in what price is
@@ -28,14 +28,14 @@ be sent, or must be held for the tenant to approve.
   **precedent** — has this exact service, at a price within `PRECEDENT_BAND_PCT` of this one,
   been quoted and successfully booked before, for this tenant? A brand-new tenant has none yet.
   Weighted lowest, deliberately: it is a nudge that lets a proven price point clear the bar even
-  when it sits close to the floor, never a gate a new tenant is blocked behind — a complete
+  when it sits close to the floor, never a suite a new tenant is blocked behind — a complete
   profile making a comfortable, non-marginal offer must still clear the threshold with zero
   precedent, or the feature would make every brand-new tenant's very first real negotiation
   wait on the owner, which is not what "conservative" is meant to buy.
 
 Every signal that fired, and the score itself, is attached to the `Decision` and written into
-the receipt (`receipts.record(..., confidence=...)`) — never just rendered for a screen. GATE
-3b-2 proves this by reading the score back out of the database row, not off a transcript.
+the receipt (`receipts.record(..., confidence=...)`) — never just rendered for a screen. The
+autonomy suite proves this by reading the score back out of the database row, not off a transcript.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ WEIGHT_COMPLETENESS = 0.40
 WEIGHT_PROXIMITY = 0.45
 WEIGHT_PRECEDENT = 0.15
 
-# Layer 3 (GATE 3c): the share of the client's own words a decision must account for before it
+# Layer 3 (the comprehension suite): the share of the client's own words a decision must account for before it
 # may send autonomously. Not a weight — a floor. See `score()` for why it caps rather than votes.
 COMPREHENSION_FLOOR = 0.85
 
@@ -60,7 +60,7 @@ COMPREHENSION_FLOOR = 0.85
 #   - a complete profile (completeness=1.0) making a COMFORTABLE offer well clear of its floor
 #     (proximity >= ~0.35) must clear this with ZERO precedent — a brand-new tenant's first
 #     real negotiation should not need the owner's sign-off just for being new, or the feature
-#     would block the exact autonomy Phase 3 already proved. 0.40 + 0.45*0.35 ≈ 0.56.
+#     would block the exact autonomy the engine already proved. 0.40 + 0.45*0.35 ≈ 0.56.
 #   - a complete profile making a MARGINAL offer sitting close to its floor (proximity <= ~0.22)
 #     does NOT clear this without precedent (0.40 + 0.45*0.22 ≈ 0.50) — that is the case this
 #     feature exists to catch, and precedent (built from prior successful bookings at the same
@@ -220,12 +220,12 @@ def score(
     threshold = threshold_for(profile, key)
     autonomous = total >= threshold
 
-    # Layer 3 (GATE 3c). Comprehension enters as a CAP, not as a fourth weighted term, and the
+    # Layer 3 (the comprehension suite). Comprehension enters as a CAP, not as a fourth weighted term, and the
     # distinction is deliberate twice over.
     #
     # Arithmetically: re-weighting three signals to make room for a fourth would move every
-    # existing decision, and this formula is calibrated against two named scenarios that GATE
-    # 3b-2, GATE 3 and GATE 5 all depend on — the last recalibration broke both of them. A cap
+    # existing decision, and this formula is calibrated against two named scenarios that the
+    # autonomy, engine and booking suites all depend on — the last recalibration broke both of them. A cap
     # leaves every score in this codebase exactly where it was and can only ever withhold a
     # send, never authorise one.
     #

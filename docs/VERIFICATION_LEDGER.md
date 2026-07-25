@@ -69,7 +69,7 @@ HTTP 200
   will need `Authorization: Bearer cal_...`.
 - Rate limit — **UNVERIFIED**. The spec claims 60/min/key. Not observed and not found in a doc.
   Treated as an assumption: the slot client is written with a conservative limiter and backoff, and
-  the number is flagged rather than trusted. Re-verify at GATE 5 against response headers.
+  the number is flagged rather than trusted. Re-verify at the booking suite against response headers.
 
 ---
 
@@ -77,7 +77,7 @@ HTTP 200
 
 | Field | Value |
 |---|---|
-| Needed for | Phase 6 (receipt anchoring), Phase 7 (settlement gas) |
+| Needed for | Phase 6 (receipt anchoring), A2A escrow (settlement gas) |
 | Verified where | Live JSON-RPC |
 | Date | 2026-07-22 |
 
@@ -102,7 +102,7 @@ $ curl -X POST https://testrpc.xlayer.tech ... eth_chainId
 
 | Field | Value |
 |---|---|
-| Needed for | Phase 7 (engagement, escrow, settlement, progress monitor) |
+| Needed for | A2A escrow (engagement, escrow, settlement, progress monitor) |
 | Verified where | `github.com/okx/onchainos-skills` (repo + CLAUDE.md), OKX APP whitepaper v1.0 |
 | Date | 2026-07-22 |
 
@@ -119,12 +119,12 @@ $ curl -X POST https://testrpc.xlayer.tech ... eth_chainId
 - Progress monitor activation: `task watch` / `monitor task progress` / `outstanding decisions`.
   Documented platform note: *"Claude Code / Codex only for the monitor half (`CLAUDECODE=1` or
   `CODEX_THREAD_ID`)"* — **material for §12**: the monitor is not a plain daemon we can systemd on
-  the VPS the way the spec assumes. Resolve at GATE 7 before promising "never offline."
+  the VPS the way the spec assumes. Resolve at the escrow suite before promising "never offline."
 - Credentials: `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE`.
 - **UNVERIFIED:** exact escrow call signatures, USDT/USDG settlement currencies, dispute mechanics.
   The repo directs you to read each skill's `SKILL.md` before running any CLI command, and okx.ai
   returned **HTTP 403** to our fetch. These get verified by installing the skill with real
-  credentials — blocked on operator item #5. **Nothing in Phase 7 will be built on assumption.**
+  credentials — blocked on operator item #5. **Nothing in A2A escrow will be built on assumption.**
 
 ---
 
@@ -152,9 +152,9 @@ $ curl -X POST https://testrpc.xlayer.tech ... eth_chainId
 >    the email forever. This is a real data-loss bug the spec would have walked us into.
 > 4. The spec says "verify signature." The inbound parse doc documents **no HMAC signature header.**
 >    Postmark's actual mechanism is HTTP Basic auth embedded in the webhook URL plus IP allowlisting.
->    **UNVERIFIED / must confirm at GATE 4** before writing any signature-checking code. Do not
+>    **UNVERIFIED / must confirm at the email suite** before writing any signature-checking code. Do not
 >    implement a signature check against a header that may not exist.
-- Outbound SPF/DKIM/DMARC/Return-Path: standard Postmark sending-domain setup. Verified at GATE 4
+- Outbound SPF/DKIM/DMARC/Return-Path: standard Postmark sending-domain setup. Verified at the email suite
   against live DNS, not before.
 
 ---
@@ -229,7 +229,7 @@ $ curl -X POST https://testrpc.xlayer.tech ... eth_chainId
 | Date | 2026-07-23 |
 
 Isolation is only as good as the database behaviour it assumes, so each assumption was attacked
-rather than trusted. Full output: `python3 verify.py --phase 1`.
+rather than trusted. Full output: `python3 verify.py --suite isolation`.
 
 - **An unset scope yields nothing, not everything.** `current_setting('app.tenant_id', true)`
   returns NULL when unset; `tenant_id = NULL` is NULL, not true; the policy therefore matches no
@@ -268,7 +268,7 @@ rather than trusted. Full output: `python3 verify.py --phase 1`.
 
 | Field | Value |
 |---|---|
-| Needed for | Phase 6 (receipt anchoring), Phase 7 (settlement) |
+| Needed for | Phase 6 (receipt anchoring), A2A escrow (settlement) |
 | Verified where | Live `eth_gasPrice` on `https://rpc.xlayer.tech`, chain 196, block 66,000,249 |
 | Date | 2026-07-23 |
 | OKB price | $82.42 — live `OKX /api/v5/market/ticker?instId=OKB-USDT`, same timestamp |
@@ -286,7 +286,7 @@ eth_gasPrice  -> 20,000,001 wei = 0.020000001 gwei
 | **1 OKB** | — | 1.0 | **~909,000 receipt anchors** |
 
 The gas *price* and the OKB price are live readings. The gas *amounts* are conservative estimates
-of our own contract's cost and must be re-measured at GATE 6 against the deployed contract's real
+of our own contract's cost and must be re-measured at the receipts suite against the deployed contract's real
 receipts — an estimate is not a verified fact and is not treated as one here.
 
 > **DECISION RECORDED — SUPERSEDES THE PHASE 0 PLAN.** Phase 0 proposed proving Phase 6 against
@@ -316,7 +316,7 @@ receipts — an estimate is not a verified fact and is not treated as one here.
   hold different record types (MX vs DKIM TXT at a selector vs Return-Path CNAME) and coexist.
 - **Domain provided:** `quietdesks.com` (Cloudflare Registrar). Item 2 satisfied.
 - Live delivery (a reply landing in a real inbox, not spam) remains unproven pending Postmark
-  approval + the DNS above + the VPS webhook. GATE 4 passes 8/0/3 on everything not gated on those;
+  approval + the DNS above + the VPS webhook. the email suite passes 8/0/3 on everything not gated on those;
   it reports the live step as pending, never as a pass.
 
 ---
@@ -329,7 +329,7 @@ receipts — an estimate is not a verified fact and is not treated as one here.
 - **A real booking round trip succeeded** against event type `6433300`: POST `/v2/bookings`
   (version `2026-02-25`) with a UTC `start`, nested `attendee{name,email,timeZone}`, returned
   `status: "accepted"` and a booking uid. The booking was then cancelled via
-  `/v2/bookings/{uid}/cancel`. Because GATE 0 proved the same server rejects a non-ISO start and
+  `/v2/bookings/{uid}/cancel`. Because the foundations suite proved the same server rejects a non-ISO start and
   a missing nested attendee, a successful create is itself proof the request was correctly shaped.
 - The 24-hour notice window applied correctly: with the tenant's "minimum 24 hours" rule the
   engine skipped this weekend and offered the following Monday.
@@ -351,13 +351,13 @@ receipts — an estimate is not a verified fact and is not treated as one here.
   hash (`eth_account.Account.unsafe_sign_hash`, recoverable with no RPC call via `eth_keys`), and
   the same hash anchored on-chain via `anchorReceipt`, confirmed by polling
   `eth_getTransactionReceipt` for `status: 0x1` — never assumed from a broadcast being accepted.
-  `python3 verify.py --phase 6` anchors one real quote receipt and one real floor-breach
+  `python3 verify.py --suite receipts` anchors one real quote receipt and one real floor-breach
   (ESCALATED) receipt, reads both back independently via `eth_call`, and runs two tamper attacks:
   an edited decision fails hash re-verification, and a forged signature (a real signature paired
   with an unrelated hash) recovers to the wrong address rather than validating.
 - **A public multi-node RPC (`https://rpc.xlayer.tech`) is eventually consistent** across nodes:
   an `eth_call` issued immediately after a confirmed write can hit a node that has not seen it
-  yet. `verify_phase6.py` polls (`xlayer._wait_for_receipt`) rather than reading once and trusting
+  yet. `verify_receipts.py` polls (`xlayer._wait_for_receipt`) rather than reading once and trusting
   it — not disclosed in any doc, found by the harness failing on the first run.
 - Signer: `0x69eb1bAA26BffCD0fA9089aa2187F6Ca3e2A54f6`, funded 2026-07-24, ~0.0103 OKB (~$0.85) —
   enough for the deploy plus several thousand anchors at the measured cost.
@@ -376,7 +376,7 @@ receipts — an estimate is not a verified fact and is not treated as one here.
   200, and the page's own `<title>` echoes the exact transaction hash back — confirmed against a
   real anchor from this repo's own Phase 6 run, not a hash picked at random. **CONCIERGE links to
   `https://www.oklink.com/x-layer/evm/tx/{txhash}` — the resolved path, not the guessed one** —
-  so the public verification page (GATE 6b) never sends a client through an extra redirect hop to
+  so the public verification page (the public-receipts suite) never sends a client through an extra redirect hop to
   a domain neither the tenant nor CONCIERGE controls.
 
 ---
@@ -386,8 +386,8 @@ receipts — an estimate is not a verified fact and is not treated as one here.
 | # | Fact | Blocks | Resolve at |
 |---|---|---|---|
 | U1 | Cal.com slots rate limit (spec claims 60/min/key) — not stress-tested; one call per offer/re-fetch stays well under | slot-client tuning | not blocking |
-| U2 | ~~Postmark inbound auth mechanism~~ **RESOLVED at GATE 4** — Basic Auth in URL, no HMAC | — | done |
-| U3 | OKX a2a-pay escrow call signatures + settlement currencies | all of Phase 7 | GATE 7 |
-| U4 | Whether the progress monitor can run headless on a VPS | "never offline" claim | GATE 7 |
-| U5 | okx.ai ASP listing steps (site returned 403 to fetch) | submission | GATE 7 |
-| U6 | Live DNS/SPF/DKIM/DMARC for the operator's domain | outbound deliverability | GATE 4 |
+| U2 | ~~Postmark inbound auth mechanism~~ **RESOLVED at the email suite** — Basic Auth in URL, no HMAC | — | done |
+| U3 | OKX a2a-pay escrow call signatures + settlement currencies | all of A2A escrow | the escrow suite |
+| U4 | Whether the progress monitor can run headless on a VPS | "never offline" claim | the escrow suite |
+| U5 | okx.ai ASP listing steps (site returned 403 to fetch) | submission | the escrow suite |
+| U6 | Live DNS/SPF/DKIM/DMARC for the operator's domain | outbound deliverability | the email suite |

@@ -1,6 +1,6 @@
-"""The Cal.com v2 adapter (Phase 5) — the real thing behind the `engine.Calendar` seam.
+"""The Cal.com v2 adapter (booking) — the real thing behind the `engine.Calendar` seam.
 
-GATE 3 built the booking logic against a declared fixture. This fills the same seam with live
+the engine suite built the booking logic against a declared fixture. This fills the same seam with live
 Cal.com calls, so the slot-race re-fetch, the prospect-timezone rendering and the "confirm via
 the API response, never assume" rule all now run against a real calendar.
 
@@ -11,10 +11,10 @@ Verified live before this was written (see docs/VERIFICATION_LEDGER.md):
            a dict keyed by date, each value a list of {start} in UTC (trailing Z).
 
   bookings POST /v2/bookings  cal-api-version: 2026-02-25
-           → start as ISO-8601 UTC, attendee{name,email,timeZone} NESTED. Confirmed at GATE 0
+           → start as ISO-8601 UTC, attendee{name,email,timeZone} NESTED. Confirmed at the foundations suite
            by the server stating its own contract on an empty body.
 
-Both versions are pinned. GATE 0 proved a stale pin silently downgrades to a different schema
+Both versions are pinned. The foundations suite proved a stale pin silently downgrades to a different schema
 rather than erroring, so the versions live in one place and are asserted, never assumed.
 
 Standard library only, like postmark.py: this signs commitments, so every dependency is weighed.

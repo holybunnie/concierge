@@ -20,7 +20,7 @@ Each is a `rule` dict — `{kind, value, currency, basis, raw, label}` — built
 the template's declared `Field.kind`, not from the trade. Adding a vertical is therefore a
 matter of writing questions and pointing their `maps_to` at these three names; no code here
 changes. A trade with no template at all falls to the generic template and quotes exactly as
-well, which the Phase 3 harness proves with a business no template has ever heard of.
+well, which the engine harness proves with a business no template has ever heard of.
 
 A rule resolves to one of three `kind`s, all of them tenant-supplied:
 
@@ -316,7 +316,7 @@ def match_service(profile: dict[str, Any], inquiry: str) -> ServiceMatch:
         #                                      left over, and they are precisely the words that
         #                                      make it a DIFFERENT service. Refuse.
         #
-        # Without it the shortcut re-opens the exact hole GATE 3's central attack exists to keep
+        # Without it the shortcut re-opens the exact hole the engine suite's central attack exists to keep
         # shut: a real price quoted for work the business does not perform.
         leftover = set(asked) - {w for _, name, _, _ in scored for w in _tokens(name)}
         if len(unique) == 1 and not leftover:

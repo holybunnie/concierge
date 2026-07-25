@@ -1,9 +1,9 @@
-"""GATE 8 — the tenant summary and the scheduled-worker jobs.
+"""the scheduler suite — the tenant summary and the scheduled-worker jobs.
 
 Every number in the summary is read back from real threads and receipts that real conversations
-in this gate actually wrote — never seeded or hand-built to look right. Check 5 is deliberately
+in this suite actually wrote — never seeded or hand-built to look right. Check 5 is deliberately
 careful about cost: `anchor_pending`'s mechanism (`receipts.anchor()`) already spends real,
-tiny mainnet gas and is proven twice over by GATE 6 and GATE 6b, so this gate does not anchor
+tiny mainnet gas and is proven twice over by the receipts suite and the public-receipt suite, so this suite does not anchor
 anything new — it proves the SCHEDULER's honest-skip path (no signer configured) instead, with the
 real X Layer credentials in this environment deliberately, temporarily cleared and restored.
 """
@@ -15,14 +15,14 @@ import uuid
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 from . import db, engine, followup, scheduler, store, summary
-from . import verify_phase3 as p3
-from . import verify_phase3b as p3b
-from . import verify_phase4 as p4
+from . import verify_engine as p3
+from . import verify_autonomy as p3b
+from . import verify_email as p4
 
 
 class _NoXLayerCreds:
     """Temporarily blanks the real X Layer credentials this environment has configured (used by
-    GATE 6/6b), so `anchor_pending`'s honest-skip path can be exercised deterministically without
+    the receipts suite/6b), so `anchor_pending`'s honest-skip path can be exercised deterministically without
     spending any new real mainnet gas. Restores the original values on exit, always."""
 
     KEYS = ("XLAYER_PRIVATE_KEY", "XLAYER_CONTRACT")
@@ -59,14 +59,14 @@ def run(r) -> None:
         receipts_ = store.list_receipts(cur)
     s = summary.build_summary(threads, receipts_, since=since)
     r.check(
-        "The summary's numbers are counted from real receipts this gate just wrote, not asserted",
+        "The summary's numbers are counted from real receipts this suite just wrote, not asserted",
         (s.inquiries == 1 and s.quotes_sent == 1 and s.negotiations == 1
          and s.bookings == 1 and abs(s.booked_value - 80.0) < 0.01),
         "One real conversation ran end to end: a quote, a negotiated counter (£85 down to £80,\n"
         "within the guardrail), and a booking. `build_summary` is pure arithmetic over the\n"
         "`store.list_threads`/`store.list_receipts` rows this conversation actually produced —\n"
         "the £80 booked value is read back from `receipts.decision.detail.agreed`, the same\n"
-        "field GATE 3 already proves is derived from the tenant's own floor, never invented.",
+        "field the engine suite already proves is derived from the tenant's own floor, never invented.",
         f"| {summary.render_summary_text(tenant, s)}",
     )
 
@@ -80,7 +80,7 @@ def run(r) -> None:
         "A floor breach is counted as an escalation, with the prospect's own words carried verbatim",
         (s2.escalations == 1
          and any("40" in ex for ex in s2.escalation_examples)),
-        "£40 against a £70 floor breaches, exactly as GATE 3 check 7 already proves — this gate\n"
+        "£40 against a £70 floor breaches, exactly as the engine suite check 7 already proves — this suite\n"
         "checks that the breach ALSO surfaces in the owner-facing summary, with the prospect's\n"
         "real message, not a synthesized example. Never fabricated: the text is\n"
         "`decision['inbound_body']`, the exact string the prospect sent.",
@@ -97,7 +97,7 @@ def run(r) -> None:
     r.check(
         "A reply queued for owner approval (Feature 2) is visible in the summary as its own count",
         s3.queued_for_approval == 1 and s3.quotes_sent == 1,
-        "This tenant's profile is deliberately thin (GATE 3b-2's own fixture) — the quote is\n"
+        "This tenant's profile is deliberately thin (the autonomy suite's own fixture) — the quote is\n"
         "still counted as a quote, and separately flagged as held for approval, so an owner\n"
         "reading the summary can tell 'CONCIERGE answered this' from 'CONCIERGE answered this,\n"
         "but only after I looked at it', which is precisely the distinction Feature 2 exists to\n"
@@ -134,8 +134,8 @@ def run(r) -> None:
         "The scheduler's own follow-up and DEAD-marking jobs feed the same real summary",
         (s4.follow_ups_sent == 1 and s4.threads_gone_dead == 1
          and any(res.action == "marked_dead" for res in result_dead.follow_up_results)),
-        "`scheduler.dispatch` is the single per-tenant entry point Phase 8 adds: it calls\n"
-        "`followup.process_tenant` (GATE 3b-4's own mechanism, unchanged) on a schedule instead\n"
+        "`scheduler.dispatch` is the single per-tenant entry point the scheduler adds: it calls\n"
+        "`followup.process_tenant` (the follow-up suite's own mechanism, unchanged) on a schedule instead\n"
         "of on demand, and the resulting receipts are the same rows `build_summary` already\n"
         "counts — no separate reporting path that could drift from what actually happened.",
         f"| follow_ups_sent: {s4.follow_ups_sent}, threads_gone_dead: {s4.threads_gone_dead}",
@@ -149,9 +149,10 @@ def run(r) -> None:
         "The scheduler's anchoring job skips honestly, never fabricates a signature or a tx hash",
         anchored_now == [],
         "With no X Layer signer/contract configured, `anchor_pending` returns an empty list\n"
-        "rather than raising or inventing a placeholder. This gate deliberately does not spend\n"
-        "any NEW real mainnet gas proving the anchoring mechanism itself works — GATE 6 and GATE\n"
-        "6b already do that, repeatedly, against the real deployed contract. What's provable\n"
+        "rather than raising or inventing a placeholder. This suite deliberately does not spend\n"
+        "any NEW real mainnet gas proving the anchoring mechanism itself works — the receipts and\n"
+        "public-receipt suites already do that, repeatedly, against the real deployed contract.\n"
+        "What is provable\n"
         "here, cheaply and repeatably, is that the scheduled job degrades exactly as honestly as\n"
         "every other missing-credential path in this codebase.",
         f"| anchor_pending() with no credentials -> {anchored_now}",
@@ -196,7 +197,7 @@ def run(r) -> None:
         "ISOLATION — a barrister's summary contains none of the spa's receipts, or vice versa",
         not (spa_ids & other_ids) and s_other.quotes_sent == 1,
         "`build_summary` only ever sees the rows its caller fetched via an RLS-scoped\n"
-        "`tenant_session` — the same fence GATE 1 proved holds for every other table. There is\n"
+        "`tenant_session` — the same fence the isolation suite proved holds for every other table. There is\n"
         "no code path here that reads across tenants to build one report.",
         f"| receipt id overlap: {len(spa_ids & other_ids)}\n"
         f"| barrister summary quotes_sent: {s_other.quotes_sent}",
@@ -252,13 +253,13 @@ def run(r) -> None:
         "functions with nothing calling them on a schedule. `run_all` is that caller —\n"
         "`python3 -m concierge.scheduler` on a systemd timer (deploy/concierge-scheduler.timer).\n"
         "It cannot use an ordinary session to find its work: RLS means an unscoped read returns\n"
-        "zero rows (GATE 1), so enumeration goes through `scheduler_tenant_ids()` as the\n"
+        "zero rows (the isolation suite), so enumeration goes through `scheduler_tenant_ids()` as the\n"
         "enumeration-only `concierge_worker` role, and each tenant is then processed through the\n"
         "same RLS-fenced `tenant_session` as every other read in the system. Failures are\n"
         "returned per-tenant, never raised, so one unreachable Postmark cannot stop another\n"
         "tenant's receipts from anchoring.",
         f"| tenants enumerated: {len(enumerated)}, dispatched: {len(all_results)}, errors: {len(errors)}\n"
-        f"| this gate's three tenants all present in the run: "
+        f"| this suite's three tenants all present in the run: "
         f"{ {str(spa_id), str(digest_id), str(other_id)} <= ran_ids }",
     )
 

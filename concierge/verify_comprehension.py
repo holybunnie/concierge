@@ -1,9 +1,9 @@
-"""GATE 3c — comprehension: does the agent answer the question it was actually asked?
+"""the comprehension suite — comprehension: does the agent answer the question it was actually asked?
 
-Every other gate proves CONCIERGE cannot invent a figure. That is a real property and it holds:
+Every other suite proves CONCIERGE cannot invent a figure. That is a real property and it holds:
 there is exactly one language-model call in the package (`gaps.classify_gap`, offline, post-hoc)
 and it can never reach a reply. But "never invents a number" is not the same as "never answers
-wrongly", and the gap between those two is this gate's entire subject.
+wrongly", and the gap between those two is this suite's entire subject.
 
 The dangerous outcome is a REAL price attached to a MISUNDERSTOOD question. It is worse than a
 refusal, because a quote is signed, receipted and anchored on-chain as a commitment — an escalation
@@ -18,7 +18,7 @@ So the pass condition here is deliberately asymmetric:
   * a figure sent for a question that could not be answered from the profile -> FAIL
 
 The questions are generated from each tenant's own profile by `concierge.corpus` — see that
-module for why nothing here is written in any trade's vocabulary. This gate runs three tenants,
+module for why nothing here is written in any trade's vocabulary. This suite runs three tenants,
 one of which (check 4) has no vertical template at all, to prove the corpus and the comprehension
 behaviour are trade-neutral rather than tuned to the trades that happen to have templates.
 """
@@ -28,18 +28,18 @@ from __future__ import annotations
 import re
 
 from . import corpus, db, engine, store
-from . import verify_phase3 as p3
+from . import verify_engine as p3
 
 
 def _ask(tenant_id, question: str) -> tuple[str, bool, bool, str]:
     """One question, one fresh thread. Returns (action, a_price_was_sent, autonomous, body).
 
-    A fresh thread per question is deliberate: this gate measures how a question is understood
-    on its own, not how a negotiation evolves — Phase 3 and 3b-3 already prove the latter.
+    A fresh thread per question is deliberate: this suite measures how a question is understood
+    on its own, not how a negotiation evolves — the engine and 3b-3 already prove the latter.
 
     "A price was sent" is deliberately narrower than "the reply contains a digit". Answering
     "X takes 60 minutes" to a duration question is the CORRECT behaviour and contains a digit;
-    counting it as a price would score the fix as the defect it repairs. The harm this gate
+    counting it as a price would score the fix as the defect it repairs. The harm this suite
     exists to measure is specifically a *monetary commitment* reaching a prospect, so the test
     is whether the rendered price from the decision's own quote appears in the message body.
     """
@@ -131,7 +131,7 @@ def run(r) -> None:
     r.check(
         "No figure is ever sent in answer to a question the stored profile cannot answer",
         total_wrong == 0,
-        "This is the check this gate exists for. A qualifier the profile does not cover ('for\n"
+        "This is the check this suite exists for. A qualifier the profile does not cover ('for\n"
         "two people', 'at my home', 'on a bank holiday'), or a question that is not about price\n"
         "at all ('how long does it take'), must not come back with a figure. Escalating is a\n"
         "pass. Asking a clarifying question is a pass. Sending a real price for a question that\n"
@@ -163,7 +163,7 @@ def run(r) -> None:
     r.check(
         "The tenant with NO vertical template comprehends exactly as safely as the ones with",
         vet_wrong == 0 and vet["total"] > 0,
-        "GATE 3 check 2 proves a template-less trade can QUOTE as well as one with a template.\n"
+        "the engine suite check 2 proves a template-less trade can QUOTE as well as one with a template.\n"
         "This proves it also REFUSES as well — that comprehension safety is a property of the\n"
         "engine rather than something a vertical template confers. If this ever fails while\n"
         "checks 2 and 3 pass, the fix has been tuned to the trades that have templates, which is\n"
@@ -243,12 +243,12 @@ def run(r) -> None:
     )
 
     r.note(
-        "What this gate deliberately does not do",
+        "What this suite deliberately does not do",
         "It does not check phrasing, tone or helpfulness — only whether a figure was sent for a\n"
         "question that could not be answered from stored data. Those are real qualities and this\n"
         "gate would pass a system that is safe and curt. It also runs each question on a fresh\n"
-        "thread, so it measures first-contact comprehension; multi-turn negotiation is GATE 3's\n"
-        "and GATE 3b-3's subject.",
+        "thread, so it measures first-contact comprehension; multi-turn negotiation is the engine suite's\n"
+        "and the floor-curve suite's subject.",
         f"| questions generated per tenant is a function of that tenant's own menu size\n"
         f"| tenants exercised: 3 (two with a vertical template, one without)",
     )

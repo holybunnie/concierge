@@ -1,4 +1,4 @@
-"""GATE 1 — tenant model and isolation, proven by attack rather than by assertion.
+"""the isolation suite — tenant model and isolation, proven by attack rather than by assertion.
 
 Two real tenants are created in a real Postgres. Then, as the application role, we try eight
 distinct ways to read or write across the boundary. Every one must fail. A test that merely
@@ -76,7 +76,7 @@ def seed() -> dict:
 
 
 def run(r) -> None:
-    """Populate a Report (from verify.py) with GATE 1 checks."""
+    """Populate a Report (from verify.py) with the isolation suite checks."""
 
     # ---- 0. schema
     try:

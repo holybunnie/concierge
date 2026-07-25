@@ -11,10 +11,10 @@ anyone who knows the operator's address (`recover_signer`, below). `xlayer_tx` i
 anchored on X Layer mainnet via `ReceiptAnchor.anchorReceipt` — verifiable on-chain, by anyone,
 forever, independent of CONCIERGE staying up. Recording is synchronous (every state transition);
 anchoring is a second step (`anchor`) so a customer-facing reply is never blocked on a mainnet
-confirmation — see `verify_phase6.py` and HANDOFF's note on the receipt-batch worker.
+confirmation — see `verify_receipts.py` and HANDOFF's note on the receipt-batch worker.
 
 Both are NULL until `anchor()` runs. There is no placeholder transaction hash and no placeholder
-signature: the harness reports NULLs rather than hiding them, exactly as before Phase 6.
+signature: the harness reports NULLs rather than hiding them, exactly as before receipt anchoring.
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def record(
 
     `signature` and `xlayer_tx` are left NULL deliberately — see the module docstring. A
     fabricated transaction hash would make every receipt in the table untrustworthy, including
-    the real ones added later. `confidence` (Feature 2, GATE 3b-2) is `concierge.confidence`'s
+    the real ones added later. `confidence` (Feature 2, the autonomy suite) is `concierge.confidence`'s
     computed score for this decision, or None when the feature does not apply to it.
     `receipt_id` lets `engine.step` pre-generate the id so a verify link (Feature 3) can be
     embedded in the very email whose receipt this is — see `store.insert_receipt`.

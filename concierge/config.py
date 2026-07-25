@@ -57,7 +57,7 @@ class MissingCredential(RuntimeError):
 # only to run migrations, and never by request-handling code.
 APP_DATABASE_URL = "postgresql://concierge_app:concierge_app@localhost:5432/concierge"
 OWNER_DATABASE_URL = "postgresql://concierge:concierge@localhost:5432/concierge"
-# The scheduled worker's enumeration-only role (Phase 8). It holds no table grants at all — see
+# The scheduled worker's enumeration-only role (the scheduler). It holds no table grants at all — see
 # the worker-role block in schema.sql for why it is separate from concierge_app.
 WORKER_DATABASE_URL = "postgresql://concierge_worker:concierge_worker@localhost:5432/concierge"
 
@@ -74,7 +74,7 @@ def worker_database_url() -> str:
     return get("WORKER_DATABASE_URL") or WORKER_DATABASE_URL
 
 
-# ---------------------------------------------------------------- email (Phase 4)
+# ---------------------------------------------------------------- email (the email connector)
 #
 # Inbound mail lands on a dedicated subdomain — inbox.<domain> — so parsing incoming mail can
 # never interfere with normal mail on the apex, and so the MX that points at Postmark's inbound
@@ -102,7 +102,7 @@ def inbound_webhook_secret() -> str | None:
     return get("POSTMARK_INBOUND_WEBHOOK_SECRET")
 
 
-# ---------------------------------------------------------------- calendar (Phase 5)
+# ---------------------------------------------------------------- calendar (booking)
 #
 # In the data model each tenant carries its own Cal.com in profile.calendar_ref{cal_api_key,
 # event_type_id, ...}. These env fallbacks let the single-operator demo run without persisting a
@@ -116,7 +116,7 @@ def cal_event_type_id() -> str | None:
     return get("CAL_EVENT_TYPE_ID")
 
 
-# ---------------------------------------------------------------- chain (Phase 6)
+# ---------------------------------------------------------------- chain (receipt anchoring)
 #
 # X Layer mainnet only (§9, docs/VERIFICATION_LEDGER.md) — a testnet receipt proves nothing to a
 # customer or an arbitrator. XLAYER_CONTRACT is written once, at deploy time, by the operator
@@ -143,7 +143,7 @@ def xlayer_explorer_tx_url(tx_hash: str) -> str:
 
 # ---------------------------------------------------------------- public verification (Feature 3)
 #
-# `verify_phase6b.py` / GATE 6b. The page itself needs no credential to exist — it reads receipts
+# `verify_public_receipts.py` / the public-receipt suite. The page itself needs no credential to exist — it reads receipts
 # already in Postgres — but the LINK in an outbound email needs a real, reachable base URL to
 # point at. Absent, no verify line is appended (§3: never a placeholder that looks live), the
 # same honest degradation as PENDING-DOMAIN.invalid for a tenant address with no domain yet.

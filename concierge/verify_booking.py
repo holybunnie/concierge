@@ -1,15 +1,15 @@
-"""GATE 5 — booking, against live Cal.com.
+"""the booking suite — booking, against live Cal.com.
 
-GATE 3 proved the booking *logic* against a declared fixture calendar. This re-runs the same
+the engine suite proved the booking *logic* against a declared fixture calendar. This re-runs the same
 journey with the fixture replaced by real Cal.com v2 calls: a real negotiation, real availability
 fetched in the prospect's timezone, the §9b.3 re-fetch before booking, a real booking created
 with a UTC start and a nested attendee, and its status confirmed from the API's own response.
 
-This gate makes a real booking on the operator's connected calendar and then cancels it, so a
+This suite makes a real booking on the operator's connected calendar and then cancels it, so a
 real calendar is never left with verification clutter. The creation is confirmed before the
 cancel, so the round trip is genuinely proven — not simulated.
 
-Needs CAL_API_KEY + CAL_EVENT_TYPE_ID (OPERATOR_PROVIDES item 4). Absent → the gate cannot run
+Needs CAL_API_KEY + CAL_EVENT_TYPE_ID (OPERATOR_PROVIDES item 4). Absent → the suite cannot run
 and says so; it does not fabricate a booking.
 
 The one added object, ObservingCalendar, is a declared fixture that WRAPS the real adapter to
@@ -92,7 +92,7 @@ def run(r) -> None:
 
     if not config.cal_api_key() or not config.cal_event_type_id():
         r.note(
-            "Cal.com credentials absent — GATE 5 cannot run, and nothing is faked",
+            "Cal.com credentials absent — the booking suite cannot run, and nothing is faked",
             "CAL_API_KEY / CAL_EVENT_TYPE_ID are not set (OPERATOR_PROVIDES item 4). The Cal.com\n"
             "adapter is built and unit-reachable, but a real booking cannot be proven without a\n"
             "real key. No booking is simulated. Add the key to .env and re-run.",
@@ -156,7 +156,7 @@ def run(r) -> None:
             "The whole conversation ran against live Cal.com: the £85 price was quoted from the\n"
             "profile, £80 checked against the floor and agreed, the timezone asked for, three real\n"
             "openings offered in Europe/London, and the pick booked. The booking is treated as\n"
-            "done only because the API returned an accepted status — GATE 0 proved this same\n"
+            "done only because the API returned an accepted status — the foundations suite proved this same\n"
             "server rejects a non-ISO start and a missing nested attendee, so a successful create\n"
             "is itself proof the request was correctly shaped (UTC start, nested attendee).",
             _transcript(msgs, outs)
@@ -174,7 +174,7 @@ def run(r) -> None:
             "rather than double-booked. Here the calendar was queried once to offer and again to\n"
             "verify the pick was still open before POSTing the booking.\n"
             "The raced-slot re-offer path itself is a calendar-agnostic engine behaviour, proven\n"
-            "deterministically at GATE 3 check 11 where the race can be forced.",
+            "deterministically at the engine suite check 11 where the race can be forced.",
             f"| live /slots calls during the conversation: {obs.slots_calls}\n"
             f"| booking issued after re-fetch: {obs.last_book is not None}",
         )
@@ -238,7 +238,7 @@ def run(r) -> None:
     r.note(
         "Cal.com sends the invite and reminders natively; that leg is the provider's, not ours",
         "On a confirmed booking Cal.com emails the attendee and host and adds the calendar\n"
-        "invite. GATE 5 proves CONCIERGE creates and confirms the booking; the invite delivery is\n"
+        "invite. The booking suite proves CONCIERGE creates and confirms the booking; the invite delivery is\n"
         "Cal.com's own, and the host account received it for the (now cancelled) test booking.",
     )
 

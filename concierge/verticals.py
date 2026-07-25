@@ -136,7 +136,7 @@ def _timezone() -> Field:
 
 # ---------------------------------------------------------------- the qualifier policies
 #
-# GATE 3c measured what clients actually ask and CONCIERGE could not answer. The four classes
+# the comprehension suite measured what clients actually ask and CONCIERGE could not answer. The four classes
 # below were not chosen in the abstract — they are the qualifier classes that made up nearly
 # every escalation in that sweep: how many people, how long, where, and when.
 #

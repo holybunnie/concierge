@@ -1,4 +1,4 @@
-"""The Postmark seam (Phase 4). Two directions, one file.
+"""The Postmark seam (the email connector). Two directions, one file.
 
 Inbound:  Postmark receives mail on inbox.<domain>, parses it, and POSTs a JSON document to our
           webhook. `parse_inbound` turns that document into the fields the rest of the system
@@ -7,7 +7,7 @@ Inbound:  Postmark receives mail on inbox.<domain>, parses it, and POSTs a JSON 
 Outbound: `PostmarkMailer.send` POSTs to the Postmark send API. It requires a real token and
           raises loudly without one (§3): there is no offline "pretend to send" path in the
           production object. The harness supplies its own recording mailer, declared as a fixture
-          exactly like GATE 3's calendar.
+          exactly like the engine suite's calendar.
 
 Kept to the standard library on purpose — `verify.py` already speaks HTTP this way, and every
 dependency is a supply-chain surface in a system that signs commitments.

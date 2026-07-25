@@ -1,4 +1,4 @@
-"""GATE 3b-4 — Safe Follow-Up.
+"""the follow-up suite — Safe Follow-Up.
 
 Proves the feature does exactly what the addendum scoped it to do, and NOTHING more: a thread
 that already has a real prospect on it gets nudged once, referencing what was actually quoted,
@@ -13,8 +13,8 @@ import uuid
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 from . import db, engine, followup, store
-from . import verify_phase3 as p3
-from . import verify_phase4 as p4
+from . import verify_engine as p3
+from . import verify_email as p4
 
 
 def run(r) -> None:
@@ -54,7 +54,7 @@ def run(r) -> None:
         "and price already quoted, £85 for the deep tissue massage — not a generic 'checking in'\n"
         "template disconnected from what was discussed. It goes to the SAME contact, from the\n"
         "SAME connector (`RecordingMailer` here stands in for `postmark.PostmarkMailer` exactly\n"
-        "as it does in GATE 4), and the AI disclosure still leads.",
+        "as it does in the email suite), and the AI disclosure still leads.",
         f"| to: {followed_up.email.to_address if followed_up else None}\n"
         f"| body: {followed_up.email.text_body if followed_up else None}\n"
         f"| receipt action: {followed_up.receipt.action if followed_up else None}",
@@ -69,7 +69,7 @@ def run(r) -> None:
         (died is not None and died.action == "marked_dead" and died.email is None
          and died.thread.state == "DEAD" and len(mailer.sent) == 1),
         "No second message is sent — 'DEAD' is an honest internal record that this lead went\n"
-        "quiet (useful signal for the tenant's Phase 8 summary), not another nudge. Only one\n"
+        "quiet (useful signal for the tenant's the scheduler summary), not another nudge. Only one\n"
         "email total was ever sent across both checks, confirmed by the recording mailer.",
         f"| action: {died.action if died else None}   state: {died.thread.state if died else None}\n"
         f"| total emails sent so far: {len(mailer.sent)}",

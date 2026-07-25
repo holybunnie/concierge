@@ -12,33 +12,33 @@ Resume point for a session starting cold. **Current as of 2026-07-24.**
 cd /workspaces/concierge
 docker compose up -d postgres      # the container does not survive a codespace rebuild
 pip install -r requirements.txt    # if the container was rebuilt
-python3 verify.py --phase 0        # expect 9 pass / 0 fail / 2 info
-python3 verify.py --phase 1        # expect 11 pass / 0 fail
-python3 verify.py --phase 2        # expect 11 pass / 0 fail / 1 info
-python3 verify.py --phase 3        # expect 16 pass / 0 fail / 3 info
-python3 verify.py --phase 3b-2     # expect 7 pass / 0 fail / 2 info — Feature 2, confidence-scored autonomy
-python3 verify.py --phase 3b-3     # expect 4 pass / 0 fail / 1 info — Feature 5, the decaying floor
-python3 verify.py --phase 3b-4     # expect 3 pass / 0 fail / 1 info — Safe Follow-Up
-python3 verify.py --phase 3c       # expect 6 pass / 0 fail / 1 info — comprehension (0 wrong prices; policies buy +55% autonomy)
-python3 verify.py --phase 4        # expect 8 pass / 0 fail / 3 info
-python3 verify.py --phase 5        # expect 5 pass / 0 fail / 2 info — makes+cancels a real booking
-python3 verify.py --phase 6        # expect 8 pass / 0 fail / 1 info — anchors 2 real receipts on X Layer mainnet
-python3 verify.py --phase 6b       # expect 6 pass / 0 fail / 1 info — anchors 2 more real receipts; public verify page
-python3 verify.py --phase 8        # expect 9 pass / 0 fail / 0 info — summary + scheduled worker, no new gas spent
-python3 verify.py --phase 8b-1     # expect 5 pass / 0 fail / 0 info — Feature 1, product-gap intelligence
+python3 verify.py --suite foundations        # expect 9 pass / 0 fail / 2 info
+python3 verify.py --suite isolation        # expect 11 pass / 0 fail
+python3 verify.py --suite onboarding        # expect 11 pass / 0 fail / 1 info
+python3 verify.py --suite engine        # expect 16 pass / 0 fail / 3 info
+python3 verify.py --suite autonomy     # expect 7 pass / 0 fail / 2 info — Feature 2, confidence-scored autonomy
+python3 verify.py --suite floor-curve     # expect 4 pass / 0 fail / 1 info — Feature 5, the decaying floor
+python3 verify.py --suite follow-up     # expect 3 pass / 0 fail / 1 info — Safe Follow-Up
+python3 verify.py --suite comprehension       # expect 6 pass / 0 fail / 1 info — comprehension (0 wrong prices; policies buy +55% autonomy)
+python3 verify.py --suite email        # expect 8 pass / 0 fail / 3 info
+python3 verify.py --suite booking        # expect 5 pass / 0 fail / 2 info — makes+cancels a real booking
+python3 verify.py --suite receipts        # expect 8 pass / 0 fail / 1 info — anchors 2 real receipts on X Layer mainnet
+python3 verify.py --suite public-receipts       # expect 6 pass / 0 fail / 1 info — anchors 2 more real receipts; public verify page
+python3 verify.py --suite scheduler        # expect 9 pass / 0 fail / 0 info — summary + scheduled worker, no new gas spent
+python3 verify.py --suite product-gaps     # expect 5 pass / 0 fail / 0 info — Feature 1, product-gap intelligence
 ```
 
-`--phase` now takes a string, so sub-gates from the feature addendum sit alongside the numbered
+`--suite` now takes a string, so sub-gates from the feature addendum sit alongside the numbered
 phases (`3b-2` today; `6b`, `7b`, `8b-1`, `3b-3`, `3b-4` as they're built — see "Feature addendum"
 below). The plain numeric phases are unchanged in behavior and in what "pass" means.
 
 All must be green before writing new code. They make real network calls and run real SQL — no
-fixtures, no mocks, with one declared exception: GATE 3's calendar, which is a fixture living in
+fixtures, no mocks, with one declared exception: the engine suite's calendar, which is a fixture living in
 the harness rather than the package, named as such in every check that uses it. A network failure
 reports FAIL rather than passing from cache. **Phase 6 spends real (tiny) mainnet gas every run**
 — each pass anchors two receipts, ~0.0000021 OKB total.
 
-**Then: Phase 4 go-live the moment items 1–3 land, or Phase 7 once item 5 + ledger U3 resolve.**
+**Then: Phase 4 go-live the moment items 1–3 land, or A2A escrow once item 5 + ledger U3 resolve.**
 Everything unblocked has been built.
 
 ## Git — already configured, but fragile across codespace rebuilds
@@ -82,10 +82,10 @@ git config --local --add credential.helper \
 | 1 Tenant model + isolation | **11 pass**, 9 of them attacks | Postgres RLS, not app predicates |
 | 2 Vertical-aware onboarding | **11 pass / 1 info** | real estate, legal, spa + generic |
 | 3 State machine + guardrails | **16 pass / 3 info** | 10 of them attacks |
-| 4 Email connector (Postmark) | **8 pass / 3 info + LIVE** | GATE 4 harness green; **live round-trip proven 2026-07-25** — real inbound email → Postmark → webhook on the VPS → tenant resolved → AI reply delivered to Gmail (2 replies `Sent`, not spam) |
+| 4 Email connector (Postmark) | **8 pass / 3 info + LIVE** | the email suite harness green; **live round-trip proven 2026-07-25** — real inbound email → Postmark → webhook on the VPS → tenant resolved → AI reply delivered to Gmail (2 replies `Sent`, not spam) |
 | 5 Booking (live Cal.com) | **5 pass / 2 info** | real booking created + cancelled against live Cal.com |
 | 6 Receipts on X Layer mainnet | **8 pass / 1 info** | ReceiptAnchor deployed, 2 real receipts anchored, tamper + forgery attacks caught |
-| 3b-2 Confidence-scored autonomy (Feature 2) | **7 pass / 2 info** | thin profile queues, complete profile auto-sends, precedent moves a marginal figure over the line, GATE 3 regression re-proved |
+| 3b-2 Confidence-scored autonomy (Feature 2) | **7 pass / 2 info** | thin profile queues, complete profile auto-sends, precedent moves a marginal figure over the line, the engine suite regression re-proved |
 | 3b-3 Decaying floor (Feature 5) | **4 pass / 1 info** | 5 real negotiation rounds tracked the curve exactly, 6 rounds past it the absolute floor still never broke, flat-floor tenant regression re-proved |
 | 3b-4 Safe Follow-Up | **3 pass / 1 info** | real stalled thread nudged once from its own history, second stall marks it DEAD, a thread with no genuine prior contact never triggers one however far the clock is pushed |
 | 6b Public receipt verification (Feature 3) | **6 pass / 1 info** | real anchored receipt reads back correctly on the public page; nonexistent id, malformed id, and a real internal-only (floor-breach) receipt all render the identical clean 404; two tenants' pages never cross |
@@ -93,7 +93,7 @@ git config --local --add credential.helper \
 | 3c Comprehension (answering the question asked) | **6 pass / 0 fail / 1 info** | 103 generated questions per run across 3 tenants: 0 sent a price they should not have (was 70), 96% of answerable questions handled without a human; check 6 proves the four optional onboarding policy questions take the SAME tenant from 27.5% to 82.5% autonomy with no code change |
 
 **Local DB hygiene:** gates create tenants and never clean up, and the inbound-address allocator
-gives up after 99 same-name collisions — at ~227 tenants GATE 4 began failing to onboard at all.
+gives up after 99 same-name collisions — at ~227 tenants the email suite began failing to onboard at all.
 `TRUNCATE tenants, threads, receipts, gap_events CASCADE` on the LOCAL container fixes it (checked
 first that no receipt carried a real `xlayer_tx`). Do this before a long gate session.
 | 8b-1 Product-gap intelligence (Feature 1) | **5 pass / 0 fail** | an unquotable inquiry writes one verbatim GapEvent and surfaces word-for-word in the owner summary; a floor breach writes none; a second tenant's summary never contains it; with no LLM key the gap shows as raw text, never a fabricated category |
@@ -110,10 +110,10 @@ addendum message itself, not reproduced here). Sequencing per the addendum's Par
 | Safe Follow-Up | Phase 3 | 3b-4 | **done**, 3 pass / 0 fail / 1 info |
 | 3 — Public receipt verification | Phase 6 | 6b | **done**, 6 pass / 0 fail / 1 info |
 | 1 — Product-gap intelligence | Phase 8 | 8b-1 | **done**, 5 pass / 0 fail |
-| 4 — Cross-tenant benchmarking | Phase 7 | 7b | blocked — needs real Phase 7 engagement data first, per the addendum's own §0.2 |
+| 4 — Cross-tenant benchmarking | A2A escrow | 7b | blocked — needs real A2A escrow engagement data first, per the addendum's own §0.2 |
 
 The Phase-3 family (Features 2, 5, and Safe Follow-Up), Feature 3 (Phase 6's family), Phase 8, and
-Feature 1 are all complete. Only Feature 4 remains (blocked on Phase 7).
+Feature 1 are all complete. Only Feature 4 remains (blocked on A2A escrow).
 
 **What Feature 1 added:** `concierge/gaps.py` and a `gap_events` table (same RLS `tenant_isolation`
 policy as every other tenant table — no new isolation mechanism). The write path is exactly one
@@ -123,8 +123,8 @@ breach, a human request, or a tripped trigger), and `engine.step` writes one `Ga
 the prospect's verbatim text. `summary.build_summary` now takes an optional `gap_events` list
 (backward-compatible — pre-Feature-1 callers unchanged) and `render_summary_text` adds the payoff
 section ("N inquiries asked for something you don't offer… verbatim examples"). `scheduler.process_tenant`
-fetches the gaps and calls `gaps.classify_pending` before building the summary. GATE 8b-1
-(`verify_phase8b1.py`) proves write → verbatim-in-summary → floor-breach-is-not-a-gap → cross-tenant
+fetches the gaps and calls `gaps.classify_pending` before building the summary. the product-gaps suite
+(`verify_product_gaps.py`) proves write → verbatim-in-summary → floor-breach-is-not-a-gap → cross-tenant
 isolation → honest no-key degradation.
 
 **Categorization is optional enrichment and is NOT currently working — the `LLM_API_KEY` in `.env`
@@ -133,7 +133,7 @@ with `output_config={"format": {"type": "json_schema", …}}`, model `claude-opu
 verified against the claude-api reference), but a live call returns **401 "API key is invalid."**
 The key is a real-format `sk-ant-…` (length 100) that the server rejects — expired, revoked, or
 mistyped. Feature 1 degrades exactly as designed: `classify_gap` returns `None`, gaps render as raw,
-unclustered text, and the summary says so — GATE 8b-1 check 5 proves this deterministically. So the
+unclustered text, and the summary says so — the product-gaps suite check 5 proves this deterministically. So the
 feature is honest and complete; only the coarse category labels are missing until the operator
 supplies a working key. **This is also the first code path that actually consumes item 7** —
 `OPERATOR_PROVIDES.md` previously said it was "not currently consumed by any code path," which is
@@ -171,7 +171,7 @@ from network I/O). Tenant-configurable via `profile.follow_up_policy` (`quiet_ho
 
 **The hard boundary against cold outbound is `followup._has_real_contact()`** — checked on the
 thread's own stored history (a `direction: in` entry must actually exist), not trusted from the
-caller or from `state == AWAITING_REPLY` alone. GATE 3b-4 check 3 proves it with a thread
+caller or from `state == AWAITING_REPLY` alone. the follow-up suite check 3 proves it with a thread
 constructed directly (bypassing `engine.step` entirely, so no real inbound ever happened) and
 pushed 10 years into the future — it is never touched, no email ever sent to it. Cold outbound
 itself — a function accepting a bare address and an "send an intro" instruction — was not built;
@@ -186,13 +186,13 @@ the curve instead of a static number, and `engine.py`'s negotiation branch now t
 `negotiation_round` on the thread's own offer (same pattern as `timezone_attempts`) and computes
 elapsed days from `thread.created_at`. The absolute floor (`floor_curve.floor`) is a hard clamp
 applied inside `pricing.floor_curve_value` itself — no caller can construct a bound below it, even
-by feeding it a malformed curve. `verify_phase3b3.py` / GATE 3b-3 proves the curve is followed
+by feeding it a malformed curve. `verify_floor_curve.py` / the floor-curve suite proves the curve is followed
 point-by-point (not jumped to the eventual floor early, not stuck at the starting point late), red
 -teams six rounds past where the curve runs out, and re-proves a curve-less tenant is unaffected.
 
 One real cross-feature bug found and fixed while building this: `confidence.py`'s completeness
 signal (Feature 2) only recognized the flat `pricing_rules.floor`, so a tenant using ONLY a
-`floor_curve` scored as if they'd never set a floor at all — correctly caught by GATE 3b-3's own
+`floor_curve` scored as if they'd never set a floor at all — correctly caught by the floor-curve suite's own
 harness when every negotiation round unexpectedly queued for owner approval instead of sending.
 Fixed in `confidence.py` to recognize either shape as "a floor is set". Worth remembering when
 building Safe Follow-Up or the remaining features: anything Feature 2 reads out of the profile
@@ -204,35 +204,35 @@ completeness, floor proximity, precedent — combined by a fixed, documented wei
 never an LLM call), a new `AWAITING_OWNER_APPROVAL` thread state, a `confidence jsonb` column on
 `receipts` (persisted alongside the decision, not just rendered for display), and the gating
 logic in `engine.step()` that drafts-but-holds a reply scoring below the tenant's per-service
-`profile.autonomy_thresholds` (default 0.55, conservative). `verify_phase3b.py` / GATE 3b-2 proves
-it end to end, including a real regression re-run of GATE 3's own NEW→BOOKED journey.
+`profile.autonomy_thresholds` (default 0.55, conservative). `verify_autonomy.py` / the autonomy suite proves
+it end to end, including a real regression re-run of the engine suite's own NEW→BOOKED journey.
 
 One correction made *while building this feature*, worth recording here since the ledger is for
 external facts and this isn't one — it's an internal calibration note: the first weighting
-(0.40/0.35/0.25, threshold 0.70) broke GATE 3's and GATE 5's existing "full autonomous journey"
+(0.40/0.35/0.25, threshold 0.70) broke the engine suite's and the booking suite's existing "full autonomous journey"
 fixtures, because with a 0.25 precedent weight no brand-new tenant could ever clear 0.70 on a real
 negotiated discount. Recalibrated to 0.40/0.45/0.15 with a 0.55 threshold (see `confidence.py`'s
-own docstring for the two scenarios it's calibrated against) and adjusted GATE 3/5's demo
+own docstring for the two scenarios it's calibrated against) and adjusted the engine suite/5's demo
 counter-offer from £75 to £80 so their "comfortable, non-marginal negotiation" fixtures stay
 comfortable rather than sitting on the boundary this feature exists to flag. The £75-against-a-
-£72.25-floor case is now what GATE 3b-2 checks 3-4 use on purpose, to prove that exact boundary.
+£72.25-floor case is now what the autonomy suite checks 3-4 use on purpose, to prove that exact boundary.
 
 ### What Phase 4 added
 
 `postmark.py` (parse a real inbound document; send via the Postmark API on stdlib only),
 `mail.py` (route by recipient → run the engine tenant-scoped → dispatch reply + owner alert;
 webhook auth), `app.py` (the FastAPI inbound webhook systemd keeps alive on the VPS),
-`verify_phase4.py`. Config gained `inbound_domain()` = `inbox.<CONCIERGE_DOMAIN>`, and
+`verify_email.py`. Config gained `inbound_domain()` = `inbox.<CONCIERGE_DOMAIN>`, and
 `onboarding.allocate_inbound_address` now uses it.
 
 What the gate proves now, against real Postgres and Postmark's real payload schema: an inbound
 email is parsed, routed to the one tenant that owns the address, quoted from that tenant's
 profile, and answered FROM the tenant's own inbox with the disclosure on line one — plus attacks
 (orphan recipient refused, +tag/case leak attempts, unauthenticated webhook, email threading).
-The **one** stand-in is a recording mailer, declared a fixture exactly as GATE 3's calendar;
+The **one** stand-in is a recording mailer, declared a fixture exactly as the engine suite's calendar;
 production sends through `postmark.PostmarkMailer`, which refuses to run without a real token.
 
-**What is NOT yet proven** and is the remaining GATE 4 requirement: a real reply landing in a
+**What is NOT yet proven** and is the remaining the email suite requirement: a real reply landing in a
 real inbox, not spam. That needs the Postmark token (item 3, account still in approval), the
 DKIM/Return-Path/MX DNS on `inbox.quietdesks.com` (item 2, domain now bought), and the webhook
 deployed on the VPS (item 1). See the Phase 4 go-live checklist below.
@@ -262,7 +262,7 @@ real email round-trip was proven end to end (see the Phase 4 section above). All
    `InboundDomain = inbox.quietdesks.com` set on the server. Webhook checks the **password half**
    only. Proven live: no-auth → 401, wrong secret → 401, correct secret → 200.
 7. ✅ Live test PASSED: real Gmail → `halcyon-rooms@inbox.quietdesks.com` → webhook → tenant resolved
-   → AI reply delivered to the Gmail inbox (2 replies `Sent`, not spam). GATE 4 requirement met.
+   → AI reply delivered to the Gmail inbox (2 replies `Sent`, not spam). the email suite requirement met.
 
 ### VPS deployment (live) — `38.49.216.59`
 
@@ -293,7 +293,7 @@ bounds the exposure for now, but the root password is the outstanding item.
 write, compiled with Foundry), `concierge/xlayer.py` (signs and sends real transactions against
 X Layer mainnet — RPC transport on stdlib `urllib`, signing via `eth_account`, the one dependency
 this phase adds and the reasoning for taking it is in the module docstring), new functions in
-`receipts.py` (`anchor()`, `recover_signer()`), `store.mark_anchored`, `verify_phase6.py`.
+`receipts.py` (`anchor()`, `recover_signer()`), `store.mark_anchored`, `verify_receipts.py`.
 
 Deployed contract: `0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587` on chain 196. Every receipt now
 carries two independent proofs once anchored: an offline ECDSA signature over the content hash
@@ -306,8 +306,8 @@ receipt and anchoring it are deliberately two separate steps (`receipts.record` 
 fires `_anchor_in_background` on its own daemon thread after the reply is already sent, only when
 a receipt exists and both `XLAYER_PRIVATE_KEY`/`XLAYER_CONTRACT` are configured. This is
 deliberately *not* inside `engine.step` or `mail.handle_inbound` — both are called directly, with
-real chain credentials now present in `.env`, by `verify_phase3.py`, `verify_phase4.py` and
-`verify_phase5.py`, and a gate run must never have the side effect of spending real mainnet gas.
+real chain credentials now present in `.env`, by `verify_engine.py`, `verify_email.py` and
+`verify_booking.py`, and a gate run must never have the side effect of spending real mainnet gas.
 Only the actual FastAPI process spends gas, and only on a real inbound email. Confirmed by a
 direct call to `_anchor_in_background` (NULL → real signature + real tx) and a mocked
 `TestClient` request proving the thread only fires under the right conditions — not yet proven
@@ -315,7 +315,7 @@ against a real Postmark-delivered email, since that still needs item 3.
 
 One finding not in any doc: **the public RPC (`rpc.xlayer.tech`) is eventually consistent across
 nodes** — an `eth_call` issued immediately after a confirmed write can hit a node that hasn't
-seen it yet. `verify_phase6.py` polls rather than reading once; production code anchoring
+seen it yet. `verify_receipts.py` polls rather than reading once; production code anchoring
 synchronously would need the same care.
 
 `XLAYER_PRIVATE_KEY` and `XLAYER_CONTRACT` are in `.env` (gitignored). The signer
@@ -326,14 +326,14 @@ deploy) — never a key holding meaningful assets, per OPERATOR_PROVIDES' own ad
 
 `pricing.py` (quote derivation), `guardrails.py` (negotiation bounds), `lexicon.py` (the
 tenant's own nouns), `receipts.py` (hashing + tamper detection), `engine.py` (the state
-machine), `verify_phase3.py`.
+machine), `verify_engine.py`.
 
 The design decision worth knowing before touching any of it: **the engine is trade-neutral, and
 the words are the tenant's.** Pricing reads a canonical vocabulary — `pricing_rules.headline` /
 `floor` / `max_discount` — that vertical templates map onto via `Field.maps_to`, so a trade with
 no template quotes exactly as well as one with. And every noun in an outbound message comes from
 the profile rather than from a string literal, so a dentist says "consultation" and an estate
-agent says "viewing" without either word appearing in the code. GATE 3 check 2 proves it with a
+agent says "viewing" without either word appearing in the code. the engine suite check 2 proves it with a
 veterinary practice; check 3 greps `engine.PROSE` against `engine.TRADE_NOUNS` to stop the
 regression. See CLAUDE.md for the rule in full.
 
@@ -344,7 +344,7 @@ than inventing times — check 12.
 ## What is left
 
 ### Phase 4 — email connector (Postmark) · DONE + LIVE, proven 2026-07-25
-Built and passing GATE 4 (8/0/3): inbound parse, tenant resolution from the recipient address,
+Built and passing the email suite (8/0/3): inbound parse, tenant resolution from the recipient address,
 outbound send with the AI disclosure as the first line, webhook authenticity, email threading.
 Two reality corrections from the build spec, both in the ledger: **Postmark inbound has no HMAC
 signature** — authenticity is HTTP Basic Auth carried in the webhook URL, which `mail.check_webhook_auth`
@@ -379,8 +379,8 @@ The **test tenant** `halcyon-rooms@inbox.quietdesks.com` (Halcyon Rooms spa, own
 `jennyoliver630@gmail.com`, services deep-tissue massage £85 / signature facial £70) lives on the
 live DB — reuse it for demo footage, or onboard a fresh one.
 
-### Phase 5 — booking (Cal.com) · DONE, GATE 5 passed 2026-07-23
-`calcom.py` fills the `engine.Calendar` seam with live Cal.com v2 calls; `verify_phase5.py`
+### Phase 5 — booking (Cal.com) · DONE, the booking suite passed 2026-07-23
+`calcom.py` fills the `engine.Calendar` seam with live Cal.com v2 calls; `verify_booking.py`
 runs the full NEW→BOOKED journey against the real API, creates a real booking (UTC start, nested
 attendee, prospect timezone), confirms it by the API's own `accepted` status, and **cancels it**
 so a real calendar is left clean. Versions pinned: slots `2024-09-04`, bookings `2026-02-25`
@@ -389,9 +389,9 @@ with a `CAL_API_KEY`/`CAL_EVENT_TYPE_ID` env fallback for the single-operator de
 6433300, connected to a Google Calendar. **The Cal.com key is `cal_live_` and was exposed in
 chat — rotate before submission.**
 
-### Phase 6 — receipts on X Layer **mainnet (196)** · DONE, GATE 6 passed 2026-07-24
+### Phase 6 — receipts on X Layer **mainnet (196)** · DONE, the receipts suite passed 2026-07-24
 `xlayer.py` fills the anchoring seam with live X Layer calls against a deployed `ReceiptAnchor`
-contract; `verify_phase6.py` runs a real conversation through the real engine, anchors the
+contract; `verify_receipts.py` runs a real conversation through the real engine, anchors the
 resulting quote receipt and a floor-breach receipt, confirms both on-chain independently, and
 red-teams a decision tamper and a signature-forgery attempt. Real measured gas: 224,160 for the
 one-time deploy, 51,849 per anchor — both cheaper than the pre-deploy estimates in ledger §9.
@@ -400,15 +400,15 @@ as NULL; a background worker calling `receipts.anchor()` on unanchored rows is P
 (see "Workers" in CLAUDE.md §12), so replies stay fast and are never blocked on a mainnet
 confirmation.
 
-### Phase 7 — A2A escrow + settlement · BLOCKED on operator item 5 **and ledger U3**
+### A2A escrow — A2A escrow + settlement · BLOCKED on operator item 5 **and ledger U3**
 U3 (the OKX escrow API call signatures) is unresolved — the OnchainOS docs cover wallet install
 but not the escrow credentials. **No escrow code may be written against a guessed API shape.**
 Resolve U3 first.
 
 **Two different on-chain identities — do not conflate them.** (a) The **X Layer signer** (operator
 item 6, `XLAYER_PRIVATE_KEY` in `.env`, addr `0x69eb…`) is a plain key holding ~0.01 OKB of gas
-that signs and anchors *receipts* — **already provided**, which is why GATE 6 passes live. (b) "The
-wallet" that Phase 7 waits on is the **OKX Agentic Wallet** (operator item 5) — the *A2A identity*
+that signs and anchors *receipts* — **already provided**, which is why the receipts suite passes live. (b) "The
+wallet" that A2A escrow waits on is the **OKX Agentic Wallet** (operator item 5) — the *A2A identity*
 that funds/receives escrow and settles USDT/USDG, created via `npx skills add okx/onchainos-skills`
 + a creation email, keys in a TEE. **Missing.** The receipts wallet is done; the escrow wallet is not.
 
@@ -418,9 +418,9 @@ unconfirmed), and (2) the exact `a2a-pay` call signatures + USDT-vs-USDG settlem
 mechanics. *Installing and reading* the skills package (`npx skills add okx/onchainos-skills`, then
 its `SKILL.md` files for `okx-agent-payments-protocol` / `okx-ai`) needs no wallet — only *running*
 an escrow CLI does — so the shape can be verified from the vendor's own shipped docs (not guessed,
-which Phase 7 forbids) and the escrow module written ready-to-test. A second live source: the shared
+which A2A escrow forbids) and the escrow module written ready-to-test. A second live source: the shared
 VPS already has `okx-a2a` installed and running (`/usr/local/bin/okx-a2a`). What still needs the
-wallet + credentials + funded USDT: any live call, and therefore the whole GATE 7 round-trip.
+wallet + credentials + funded USDT: any live call, and therefore the whole the escrow suite round-trip.
 
 ### VPS deploy — move NOW, don't wait for Postmark (operator item 1)
 Nothing is deployed yet; everything runs locally in the codespace. **Almost none of the deploy
@@ -443,30 +443,30 @@ key or runs the deploy commands via `! <cmd>`. The full go-live gate runs are de
 Postmark is live (operator's stated plan), but the deploy itself is not. Steps: the Phase 4 go-live
 checklist above.
 
-### Phase 8 — summary + scheduled actions · DONE, GATE 8 passed 2026-07-24
+### Phase 8 — summary + scheduled actions · DONE, the scheduler suite passed 2026-07-24
 `concierge/summary.py` (pure arithmetic over `store.list_threads`/`list_receipts` — inquiries,
 quotes, negotiations, bookings + value, escalations with verbatim text, Feature-2 queued-for-
 approval count, Safe Follow-Up nudges and DEAD threads) and `concierge/scheduler.py` (the one
 per-tenant entry point: `anchor_pending()` finally calls `receipts.anchor()` on unanchored rows —
 the exact gap this file used to describe — `followup.process_tenant` on a schedule instead of on
 demand, and a periodic summary send gated by `profile.summary_policy.last_sent_at` so it fires
-once per period, not every run). GATE 8 proves the numbers against real conversations this gate
+once per period, not every run). the scheduler suite proves the numbers against real conversations this gate
 runs, and proves the anchoring job's honest no-credentials skip *without* spending any new real
-mainnet gas — GATE 6/6b already prove the anchoring mechanism itself, repeatedly.
+mainnet gas — the receipts suite/6b already prove the anchoring mechanism itself, repeatedly.
 
 **The worker entry point now exists (2026-07-25).** `scheduler.run_all()` +
 `python3 -m concierge.scheduler` (`--tenant`, `--dry-run`; one JSON line per run to stdout, so
 `journalctl -u concierge-scheduler` is greppable), with `deploy/concierge-scheduler.{service,timer}`
 (oneshot, every 15min, `Persistent=true`). Enumerating tenants needed a fourth deliberate door —
 `scheduler_tenant_ids()`, granted to a new enumeration-only `concierge_worker` role and REVOKEd
-from `concierge_app`; see CLAUDE.md for why the split is load-bearing. GATE 8 is now **9 pass**
+from `concierge_app`; see CLAUDE.md for why the split is load-bearing. the scheduler suite is now **9 pass**
 (checks 8 and 9 are new). **Still a deploy action: installing the timer on the VPS** — that needs
 `WORKER_DATABASE_URL` in `/opt/concierge/.env` and a real password for `concierge_worker` (the
 schema creates it with a literal dev password, same known gap as `concierge_app`).
 
 Not yet built: end-to-end proof against live Phase 4 email
-+ Phase 7 A2A data, which is blocked on those phases the same way it always was. Feature 1
-(product-gap intelligence) attached here and is **done** (GATE 8b-1) — see the Feature addendum
++ A2A escrow A2A data, which is blocked on those phases the same way it always was. Feature 1
+(product-gap intelligence) attached here and is **done** (the product-gaps suite) — see the Feature addendum
 section above for what it added and the invalid-LLM-key finding.
 
 ### Phase 9 — hardening + submission
@@ -480,20 +480,20 @@ video, architecture diagram, "reproduce every claim" README pass, Google form be
 **7 of 8 operator items are now in: 1 (VPS, deployed), 2 (domain+DNS), 3 (Postmark, live), 4
 (Cal.com), 6 (X Layer signer), 7 (LLM key — fixed 2026-07-25; the old value was truncated and 401'd,
 the full `sk-ant-…` now works, so Feature 1's optional gap categorization is live).** Only **item 5
-(OKX Agentic Wallet)** remains, which — with ledger U3 — is what still blocks Phase 7. Item 8
+(OKX Agentic Wallet)** remains, which — with ledger U3 — is what still blocks A2A escrow. Item 8
 (web-search) stays optional/skipped. Full instructions in `docs/OPERATOR_PROVIDES.md`.
 
 **Phase 4 is LIVE as of 2026-07-25** — Postmark approved, the app deployed on the VPS, DNS + DKIM +
 Return-Path + MX + InboundDomain all set, and a real email round-trip proven end to end (see the
 Phase 4 section for the evidence and the two go-live gotchas). Booking, receipts, and now email all
-have real live footage for the demo. **Phase 7** is the only remaining blocked phase — gated on the
+have real live footage for the demo. **A2A escrow** is the only remaining blocked phase — gated on the
 OKX Agentic Wallet (item 5) plus resolving ledger U3 (the doc-research half of U3 is unblocked — see
-the Phase 7 section).
+the A2A escrow section).
 
 **What's left is now mostly Phase 9 (submission):** the ~90s demo video, architecture diagram, the
 "reproduce every claim" README pass, and the Google form before the deadline — plus the security
 hardening TODO (rotate the VPS root password, move to SSH-key auth) and rotating the exposed
-`cal_live_` Cal.com key. Phase 7 (+ Feature 4) only if item 5 + U3 land in time.
+`cal_live_` Cal.com key. A2A escrow (+ Feature 4) only if item 5 + U3 land in time.
 
 Mitigation if approval runs late: while pending you can still configure inbound, use the API, and
 send to your own verified domain — so Phase 4 is buildable and demoable provided the test
@@ -516,22 +516,22 @@ Each has a harness check that fails loudly if broken.
 5. **No fabricated credential, and no placeholder that looks live.**
 6. **AI disclosure in the first line of every outbound message**, with a route to a human.
    Asking for a human is checked before qualification, pricing and all state logic, so it works
-   from any state (GATE 3 checks 13 and 14).
+   from any state (the engine suite checks 13 and 14).
 7. **No trade vocabulary in `engine.PROSE`.** Domain nouns come from `profile.lexicon` and
-   `profile.services`, never from a string literal. GATE 3 check 3 greps for the regression.
+   `profile.services`, never from a string literal. the engine suite check 3 greps for the regression.
 8. **A floor breach never receives a counter-offer.** Countering at the floor publishes the
-   tenant's reservation price; the breach escalates and no figure is sent (GATE 3 check 7).
+   tenant's reservation price; the breach escalates and no figure is sent (the engine suite check 7).
 9. **Nothing is claimed as booked without the calendar API confirming it**, and with no calendar
-   connected the engine escalates rather than inventing an appointment (GATE 3 check 12).
+   connected the engine escalates rather than inventing an appointment (the engine suite check 12).
 10. **No confidence score, floor-curve point or benchmark aggregate comes from a language
     model.** `confidence.py` is arithmetic over three named, stored signals; it may only decide
-    whether a reply sends or queues, never what the reply says (GATE 3b-2).
+    whether a reply sends or queues, never what the reply says (the autonomy suite).
 
 ## Open questions for the operator
 
 - **`CLAUDE.md` is a visible tell in a public repo.** Rename to `CONVENTIONS.md`? Cost: it stops
   being auto-loaded as repo conventions, so `docs/HANDOFF.md` would have to carry them. Undecided.
-- Ledger **U3** (OKX escrow API shape) blocks all of Phase 7 and needs resolving before that phase
+- Ledger **U3** (OKX escrow API shape) blocks all of A2A escrow and needs resolving before that phase
   can start.
 
 ## Known gaps, stated plainly

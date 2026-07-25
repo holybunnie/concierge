@@ -1,11 +1,11 @@
-"""GATE 6b — public receipt verification (Feature 3).
+"""the public-receipt suite — public receipt verification (Feature 3).
 
-Phase 6 already anchors every commitment as a signed, on-chain-confirmed receipt. This gate
+receipt anchoring already anchors every commitment as a signed, on-chain-confirmed receipt. This suite
 proves the read-only, public surface built on top of it: a client who received a quote can hit
 `/r/{receipt_id}` and see exactly what was committed, without any authentication and without
 CONCIERGE handing out a general receipts-read capability. Every receipt anchored here is real —
-the SAME `receipts.anchor()` GATE 6 proves, spending the same real (tiny) mainnet gas — because
-this feature is a view over Phase 6's real data, never a separate, potentially-stale copy of it.
+the SAME `receipts.anchor()` the receipts suite proves, spending the same real (tiny) mainnet gas — because
+this feature is a view over receipt anchoring's real data, never a separate, potentially-stale copy of it.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 
 from . import app as app_module
 from . import db, engine, onboarding, receipts, store
-from . import verify_phase6 as p6
+from . import verify_receipts as p6
 
 PROSPECT = "priya.raman@example.com"
 
@@ -53,16 +53,16 @@ def run(r) -> None:
     tenant_a = _onboard("Halcyon Rooms Verify6b-A")
     tenant_b = _onboard("Halcyon Rooms Verify6b-B")
 
-    # ---- 1. a real quote receipt, anchored for real (same call GATE 6 proves)
+    # ---- 1. a real quote receipt, anchored for real (same call the receipts suite proves)
     quote_outs = _converse(tenant_a, ["Hi, how much is a deep tissue massage?"])
     quote_receipt = quote_outs[0].receipt
     with db.tenant_session(tenant_a) as cur:
         anchored = receipts.anchor(cur, quote_receipt)
     r.check(
-        "A real receipt from a real conversation is anchored for real before this gate touches it",
+        "A real receipt from a real conversation is anchored for real before this suite touches it",
         bool(anchored.signature) and bool(anchored.xlayer_tx),
         "Feature 3 is a read-only view — it creates no data of its own. This anchor is the exact\n"
-        "same call GATE 6 proves end to end (signature + on-chain confirmation); GATE 6b starts\n"
+        "same call the receipts suite proves end to end (signature + on-chain confirmation); the public-receipt suite starts\n"
         "from a receipt that is already real and already anchored, and only checks what the\n"
         "public page does with it.",
         f"| receipt_id = {anchored.receipt_id}\n"
@@ -153,7 +153,7 @@ def run(r) -> None:
 
     r.note(
         "What this feature is NOT",
-        "No new data is written by any check above beyond the receipts GATE 6's own anchoring\n"
+        "No new data is written by any check above beyond the receipts the receipts suite's own anchoring\n"
         "flow already creates. `public_receipt` and `receipts.public_view` are read-only; there\n"
         "is no route that lists receipts, and no route takes anything but a single opaque id.",
         "",

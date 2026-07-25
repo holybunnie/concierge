@@ -1,10 +1,10 @@
 """Product-Gap Intelligence (addendum Feature 1) — optional categorization.
 
-Phase 3's state machine already has the one decision this feature instruments: an inquiry the
+the engine's state machine already has the one decision this feature instruments: an inquiry the
 tenant's profile cannot answer escalates rather than inventing a service (`Unquotable`, never
 guessed — see `pricing.match_service`). `engine.step` writes exactly one new row for that
 existing transition (`store.insert_gap_event`) — no new decision logic there, and no network
-call from inside the no-network decision path GATE 3 check 5 proves.
+call from inside the no-network decision path the engine suite check 5 proves.
 
 This module is the OPTIONAL enrichment half, split out on purpose: turning a gap's raw text into
 a coarse category ("service not offered", "pricing tier not offered", "geography not served") is

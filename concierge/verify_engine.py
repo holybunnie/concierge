@@ -1,4 +1,4 @@
-"""GATE 3 — the state machine and the deterministic guardrails.
+"""the engine suite — the state machine and the deterministic guardrails.
 
 This is the decisive gate. It needs no credentials and no network: every check below runs the
 real engine against a real PostgreSQL database, and the only thing standing in for the outside
@@ -27,7 +27,7 @@ PROSPECT = "nadia.okoro@example.com"
 #
 # THIS IS A FIXTURE AND IT IS NOT PART OF THE SHIPPED PACKAGE. It lives in the harness, not in
 # `concierge/`, so it cannot be reached by production code even by accident. Its only job is to
-# stand in for the seam that GATE 5 fills with real Cal.com calls once the operator supplies an
+# stand in for the seam that the booking suite fills with real Cal.com calls once the operator supplies an
 # API key (item 4). Nothing it returns is presented anywhere as a real booking: the report says
 # so at every point it is used, and the production default (`engine.NoCalendar`) refuses.
 
@@ -181,7 +181,7 @@ def _transcript(messages, outcomes, *, indent="| ") -> str:
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------- the gate
+# ---------------------------------------------------------------- the suite
 
 def run(r) -> None:
     db.migrate()
@@ -205,7 +205,7 @@ def run(r) -> None:
         "for rather than assumed, three times are offered in the prospect's own zone, and the\n"
         "pick is booked and confirmed.\n"
         "THE CALENDAR IS A FIXTURE. No Cal.com call was made — the operator has not supplied an\n"
-        "API key (item 4), and GATE 5 is where that becomes real. Everything else here is the\n"
+        "API key (item 4), and the booking suite is where that becomes real. Everything else here is the\n"
         "production code path against a real database.",
         _transcript(msgs, outs) + f"\nfinal state: {thread.state}\n"
         f"fixture calendar recorded: {cal.booked}",
@@ -292,7 +292,7 @@ def run(r) -> None:
         "imports anything that can make a network call, so none of them can consult a model —\n"
         "this is a property of the code, not a rule someone has to remember, and it holds\n"
         "regardless of whether an LLM key is configured elsewhere in the environment for other\n"
-        "phases (Phase 2 template enrichment, Phase 3 prose drafting). Every figure in the\n"
+        "phases (onboarding template enrichment, the engine prose drafting). Every figure in the\n"
         "transcript above came out of PostgreSQL by arithmetic.\n"
         "§2 does permit a model to restyle this prose into the tenant's voice later. It may\n"
         "never change a number: the figures are computed before any drafting could happen and\n"
@@ -446,7 +446,7 @@ def run(r) -> None:
         "engine turns that into an escalation: the owner books by hand. That is a worse product\n"
         "than a real booking and a far better one than a confirmation for an appointment that\n"
         "does not exist.\n"
-        "The fixture calendar used elsewhere in this gate lives in the harness, not in the\n"
+        "The fixture calendar used elsewhere in this suite lives in the harness, not in the\n"
         "package, so production code cannot reach it even by mistake.",
         _transcript(nocal_msgs, nocal_outs)
         + f"\ndefault calendar in the engine: {engine.NoCalendar.__name__}\n"
@@ -463,7 +463,7 @@ def run(r) -> None:
     r.check(
         "SB 243 — every outbound message opens by disclosing the AI and offering a human",
         all_disclosed and len(every_reply) > 10,
-        f"All {len(every_reply)} replies sent across every conversation in this gate were\n"
+        f"All {len(every_reply)} replies sent across every conversation in this suite were\n"
         "checked, not a sample. The disclosure is the first line of each, and each carries a\n"
         "route to a human. It is applied in render(), which is the only function that produces\n"
         "an outbound body, so there is no path that emits a message without it.\n"
@@ -504,7 +504,7 @@ def run(r) -> None:
         "within_rules=false — a refusal is evidence too, and in an escrow dispute it is the\n"
         "evidence that matters.\n"
         "The tamper test rewrites the agreed figure to £1 and recomputes: the hash no longer\n"
-        "matches. Anchoring that hash on X Layer is GATE 6 and needs a funded signer (item 6).",
+        "matches. Anchoring that hash on X Layer is the receipts suite and needs a funded signer (item 6).",
         f"| receipts written: {len(all_receipts)}\n"
         f"| actions: {sorted({x.action for x in all_receipts})}\n"
         f"| booked receipt rule_checked: {booked_receipt.rule_checked}\n"
@@ -528,7 +528,7 @@ def run(r) -> None:
          and {t.tenant_id for t in vet_threads} == {vet_id}
          and not ({x.receipt_id for x in spa_receipts}
                   & {x.receipt_id for x in vet_receipts})),
-        "GATE 1 proved the database fences tenants apart. This re-proves it with the engine\n"
+        "the isolation suite proved the database fences tenants apart. This re-proves it with the engine\n"
         "doing the writing rather than the harness: threads, history and receipts written during\n"
         "the conversations above. Asking for the spa's thread by its exact primary key, from\n"
         "inside the vet's session, returns nothing — the id is not a capability.",
@@ -547,18 +547,18 @@ def run(r) -> None:
         "and anchoring need a funded signer on X Layer mainnet (OPERATOR_PROVIDES item 6), which\n"
         "has not arrived. There is no placeholder transaction hash anywhere: a fabricated one\n"
         "would make every receipt in the table untrustworthy, including the real ones added at\n"
-        "GATE 6. The content hash written today is the value that gets anchored then, so these\n"
+        "the receipts suite. The content hash written today is the value that gets anchored then, so these\n"
         "receipts stay verifiable afterwards.",
         f"anchored receipts: {sum(1 for x in all_receipts if receipts.anchored(x))} "
         f"of {len(all_receipts)}",
     )
     r.note(
-        "The calendar is the only fixture in this gate, and it is not in the shipped package",
-        "GATE 3 is about the state machine, so the calendar is a declared seam: FixtureCalendar\n"
+        "The calendar is the only fixture in this suite, and it is not in the shipped package",
+        "the engine suite is about the state machine, so the calendar is a declared seam: FixtureCalendar\n"
         "lives in this harness file, returns slots on a fixed grid, and is named as a fixture in\n"
         "every check that touches it. The production default is engine.NoCalendar, which refuses\n"
-        "(check 12). GATE 5 replaces the seam with real Cal.com calls and re-runs this journey.\n"
-        "Everything else in this gate is production code against a real PostgreSQL database.",
+        "(check 12). The booking suite replaces the seam with real Cal.com calls and re-runs this journey.\n"
+        "Everything else in this suite is production code against a real PostgreSQL database.",
         f"fixture module: {FixtureCalendar.__module__}\n"
         f"production default: concierge.engine.NoCalendar",
     )
@@ -577,7 +577,7 @@ def run(r) -> None:
         "    permits it — understanding only, never pricing).\n"
         "Booking-window enforcement is also partial: the minimum-notice window is applied here,\n"
         "but which days and hours are bookable comes from the connected calendar's own schedule\n"
-        "rather than being re-derived from prose, so there is one source of truth at GATE 5.",
+        "rather than being re-derived from prose, so there is one source of truth at the booking suite.",
         f"spa lexicon fallbacks in use: {list(words.gaps) or 'none — tenant supplied both words'}",
     )
 

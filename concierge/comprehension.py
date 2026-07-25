@@ -1,7 +1,7 @@
-"""Did we understand the question? — layers 1 and 2 of the comprehension fix (GATE 3c).
+"""Did we understand the question? — layers 1 and 2 of the comprehension fix (the comprehension suite).
 
 `pricing.match_service` answers "which service is this about". It scores what the inquiry and a
-service name have in common, and — this was the defect GATE 3c measured — it says nothing at all
+service name have in common, and — this was the defect the comprehension suite measured — it says nothing at all
 about the words it did NOT consume. "How much is X for two people?" and "How much is X?" produce
 an identical match, so they produced an identical reply: one real price, one of them for the wrong
 question. 70 of 103 generated questions failed that way.
@@ -23,8 +23,8 @@ real reply — or reports that the profile cannot answer it, and the caller esca
 That split is the whole design: escalate only what is genuinely unanswerable, so the agent stays
 useful rather than becoming uniformly cautious.
 
-Nothing here reaches a language model, and no word in this file names a trade — GATE 3c check 1
-and GATE 3's TRADE_NOUNS grep both hold it to that.
+Nothing here reaches a language model, and no word in this file names a trade — the comprehension suite check 1
+and the engine suite's TRADE_NOUNS grep both hold it to that.
 """
 
 from __future__ import annotations
@@ -109,6 +109,11 @@ INTENT_CUES: dict[str, tuple[str, ...]] = {
 }
 
 
+# Every qualifier word in one set. `assess` runs on every inbound message and previously asked
+# `any(t in vocab for vocab in QUALIFIERS.values())` for each token — four set lookups per word
+# to answer a question one lookup answers.
+_ALL_QUALIFIER_WORDS = frozenset(w for vocab in QUALIFIERS.values() for w in vocab)
+
 # Every word appearing in an intent cue. These are ACCOUNTED FOR by definition: a word that told
 # us what was being asked ("fee", "cost", "long", "suitable") has done its job and is not an
 # unexplained leftover. Deriving this from INTENT_CUES rather than writing a third word list
@@ -127,7 +132,6 @@ class Assessment:
     # class -> the tenant's own policy text, stated verbatim in the reply. Never paraphrased,
     # never turned into a new figure.
     covered: dict[str, str] = field(default_factory=dict)
-    unconsumed: tuple[str, ...] = ()
     comprehension: float = 1.0
 
     @property
@@ -210,9 +214,6 @@ def assess(profile: dict[str, Any], text: str, *, service_name: str,
             found[cls] = hits
 
     intent = classify_intent(text)
-    # A duration question is not an uncovered duration qualifier — it is a question this profile
-    # may well be able to answer outright (`services[].duration_min`). The caller decides that;
-    # counting it here as "uncovered" would escalate a question we can answer.
     covered: dict[str, str] = {}
     uncovered_list = []
     for cls in found:
@@ -230,9 +231,9 @@ def assess(profile: dict[str, Any], text: str, *, service_name: str,
     # Comprehension: the share of what the client actually said that we accounted for. Feeds
     # Feature 2's fourth signal — see `confidence.py`. Deliberately blunt: it does not need to
     # know what an unrecognised word MEANS, only that the client spent words we cannot explain.
-    explained = [t for t in asked if t in consumed or t in _CUE_WORDS
-                 or any(t in vocab for vocab in QUALIFIERS.values())]
-    score = len(explained) / len(asked) if asked else 1.0
+    explained = sum(1 for t in asked
+                    if t in consumed or t in _CUE_WORDS or t in _ALL_QUALIFIER_WORDS)
+    score = explained / len(asked) if asked else 1.0
 
     return Assessment(intent=intent, qualifiers=found, uncovered=uncovered, covered=covered,
-                      unconsumed=leftover, comprehension=round(score, 3))
+                      comprehension=round(score, 3))

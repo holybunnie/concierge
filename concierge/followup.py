@@ -25,7 +25,7 @@ every existing discipline: the AI disclosure leads, the current offer or agreed 
 referenced, never a template disconnected from context) and sends it via the same connector, from
 the same address, to the same contact already on the thread. If a follow-up was already sent and a
 second, longer period has since passed with still no reply, the thread is marked `DEAD` — no
-further message, just an honest record that this one went quiet (visible in Phase 8's summary).
+further message, just an honest record that this one went quiet (visible in the scheduler's summary).
 
 ## What is deliberately absent
 

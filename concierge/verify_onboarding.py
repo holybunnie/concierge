@@ -1,4 +1,4 @@
-"""GATE 2 — vertical-aware onboarding, on three real business descriptions.
+"""the onboarding suite — vertical-aware onboarding, on three real business descriptions.
 
 The gate asks for: correct classification, the right template with a filled example, gaps
 flagged, a sample requested, rules read back, and a unique inbound address returned. Those are
@@ -184,7 +184,7 @@ def run(r) -> None:
         "The rules are read back for confirmation, and a unique inbound address is returned",
         "£70" in readback and "escalate" in readback and "AI agent" in readback
         and address.startswith("the-wilding-rooms@") and spa.gaps() == [],
-        "The read-back is rendered from the built profile — the same object Phase 3 will quote\n"
+        "The read-back is rendered from the built profile — the same object the engine will quote\n"
         "from — so what the tenant confirms is literally what the engine reads. A read-back\n"
         "generated from a different source than the engine consumes would be a reassuring lie.\n"
         f"The address is the load-bearing output: it is how anyone reaches this tenant.\n"
@@ -222,7 +222,7 @@ def run(r) -> None:
         "with zero answers. The resulting profile has no services and no pricing rules at all —\n"
         "the example values (85, 70) appear nowhere in it. build_profile() reads self.answers and\n"
         "never touches Field.example, so this is structural rather than a lucky outcome. A\n"
-        "profile with no prices cannot quote; Phase 3 escalates instead.",
+        "profile with no prices cannot quote; the engine escalates instead.",
         f"answers given: {empty.answers}\n"
         f"resulting profile: {empty_profile}\n"
         f"example prices that must NOT appear: {example_prices} -> present: {contaminated}",

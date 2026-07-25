@@ -1,6 +1,6 @@
-"""GATE 3b-3 — the decaying floor (Feature 5).
+"""the floor-curve suite — the decaying floor (Feature 5).
 
-GATE 3 already proved a single flat floor is never crossed. This gate proves the richer, OPTIONAL
+the engine suite already proved a single flat floor is never crossed. This suite proves the richer, OPTIONAL
 shape — `pricing_rules.floor_curve` — behaves the same way at every point along the curve, not
 just at its resting value: a counter-offer is checked against wherever the curve says CONCIERGE
 may currently go, and the absolute floor at the end of it is exactly as hard a line as a flat
@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 
 from . import db, engine, guardrails, pricing, store
-from . import verify_phase3 as p3
+from . import verify_engine as p3
 
 CURVE = dict(
     description=("Bright Path Consulting helps small businesses set up their books and "
@@ -85,7 +85,7 @@ def run(r) -> None:
     # it. Asking exactly at the wire would also trip Feature 2's floor-proximity signal (a
     # separate, correct feature: a figure sitting right on the floor is genuinely lower-
     # confidence) and queue the reply for owner approval instead of sending it, which would be
-    # this gate accidentally exercising GATE 3b-2 instead of the curve itself.
+    # this suite accidentally exercising the autonomy suite instead of the curve itself.
     msgs = [
         "Hi, what's your fee for a consulting engagement?",  # 0: quoted at £1,200
         "Could you do 1120?",        # 1: round 0 -> floor 1,000
@@ -177,12 +177,12 @@ def run(r) -> None:
          and [b.limit for b in bounds_round0] == [b.limit for b in bounds_round9]
          and ruling_round0.floor == ruling_round9.floor == 72.25
          and ruling_round0.allowed == ruling_round9.allowed),
-        "This is GATE 3's own flat-floor spa tenant (£70 floor, 15% discount cap — the cap binds\n"
-        "at £72.25, GATE 3 check 6). `pricing.floor_curve()` returns None because this tenant\n"
+        "This is the engine suite's own flat-floor spa tenant (£70 floor, 15% discount cap — the cap binds\n"
+        "at £72.25, the engine suite check 6). `pricing.floor_curve()` returns None because this tenant\n"
         "never set one, and `bounds_for`/`negotiate` fall straight to the ORIGINAL flat-floor\n"
         "branch — round_index 0 and round_index 9 produce byte-identical bounds and rulings,\n"
         "because nothing here ever reads the argument for this tenant. Feature 5 is additive: a\n"
-        "tenant who never heard of it negotiates exactly as GATE 3 already proved.",
+        "tenant who never heard of it negotiates exactly as the engine suite already proved.",
         f"| round 0 bounds: {[str(b) for b in bounds_round0]}\n"
         f"| round 9 bounds: {[str(b) for b in bounds_round9]}\n"
         f"| round 0 ruling.floor={ruling_round0.floor}, allowed={ruling_round0.allowed}\n"
@@ -197,5 +197,5 @@ def run(r) -> None:
         "uses). No code path in `engine.py` or `guardrails.py` ever writes to it: 'the agent "
         "decides to be more flexible because the conversation feels promising' is exactly the "
         "failure mode this build refuses to implement, and there is no function here that could.",
-        f"floor_curve set this gate: {FLOOR_CURVE}",
+        f"floor_curve set this suite: {FLOOR_CURVE}",
     )

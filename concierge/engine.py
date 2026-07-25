@@ -25,7 +25,7 @@ Accepting an offer, countering on price, asking a question, picking a slot, goin
 are identical in every trade on earth, and encoding them here costs nothing. Naming the thing
 being sold is the tenant's business, literally.
 
-The Phase 3 harness proves this rather than asserting it: it greps `PROSE` for a list of trade
+The the engine harness proves this rather than asserting it: it greps `PROSE` for a list of trade
 nouns and fails if any appears, then runs the same code for a spa, a barrister and a business
 no template has ever heard of, and shows the three transcripts side by side reading in three
 different registers.
@@ -56,7 +56,7 @@ from .pricing import Quote, Unquotable
 # ---------------------------------------------------------------- outbound prose
 #
 # The entire vocabulary of the product, in one place so it can be audited in one place.
-# INVARIANT (checked by GATE 3): no trade noun appears here. Domain words arrive through
+# INVARIANT (checked by the engine suite): no trade noun appears here. Domain words arrive through
 # {service}, {engagement} and {client}, all of which come from the tenant's profile.
 
 PROSE: dict[str, str] = {
@@ -139,16 +139,16 @@ PROSE: dict[str, str] = {
         "Still keen to get a {engagement} booked in, or is there anything else I can answer "
         "first?",
 
-    # Feature 3 (public receipt verification, GATE 6b) — appended to a commitment-bearing
+    # Feature 3 (public receipt verification, the public-receipt suite) — appended to a commitment-bearing
     # reply only when a receipt id and a real public base URL both exist (never a placeholder
     # link). Its own PROSE entry, not an f-string built inline in `render`, so it stays inside
-    # the one table GATE 3 check 3 greps for trade vocabulary.
+    # the one table the engine suite check 3 greps for trade vocabulary.
     "verify_line":
         "This offer is cryptographically committed — verify it hasn't changed: "
         "{verify_url}\n\n",
 }
 
-# Words that would make this a single-trade product if they appeared in PROSE. The GATE 3
+# Words that would make this a single-trade product if they appeared in PROSE. The the engine suite
 # check greps for these. Extend the list freely — it costs nothing and catches the exact
 # regression this design exists to prevent.
 TRADE_NOUNS = (
@@ -168,7 +168,7 @@ class CalendarUnavailable(RuntimeError):
 
 
 class Calendar(Protocol):
-    """The seam Phase 5 fills with real Cal.com calls.
+    """The seam booking fills with real Cal.com calls.
 
     Adapters return **UTC-aware datetimes only**. Rendering into the prospect's timezone
     happens here, once, so a timezone bug has exactly one place to live.
@@ -206,7 +206,7 @@ class NoCalendar:
 
 @dataclass
 class Inbound:
-    """One message arriving from a prospect. Channel-agnostic — Phase 4 supplies these."""
+    """One message arriving from a prospect. Channel-agnostic — the email connector supplies these."""
 
     body: str
     from_address: str
@@ -290,7 +290,7 @@ def _norm(text: str) -> str:
 
 
 def is_spam(text: str) -> bool:
-    """Deliberately small. Real filtering is Postmark's job (Phase 4); this catches the obvious."""
+    """Deliberately small. Real filtering is Postmark's job (the email connector); this catches the obvious."""
     t = _norm(text)
     return any(m in t for m in _SPAM_MARKERS)
 
@@ -567,7 +567,7 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
             e.reason, action="unquotable", rule="profile.services + pricing_rules",
             detail={"considered": e.considered}, product_gap=text.strip())
 
-    # We know WHICH service. Layers 1-2 (GATE 3c) now ask the two questions the match itself
+    # We know WHICH service. Layers 1-2 (the comprehension suite) now ask the two questions the match itself
     # cannot: what did the client say that we did not consume, and what are they actually
     # asking about it? Both reads are deterministic and both fail toward the owner.
     read = comprehension.assess(profile, text, service_name=quote.service_name,
@@ -855,7 +855,7 @@ def step(cur: Cursor, tenant: Tenant, thread: Thread, inbound: Inbound,
     receipt_id = uuid.uuid4()
     reply = render(tenant, decision, thread, receipt_id=receipt_id)
 
-    # Feature 2 (GATE 3b-2): a pricing/negotiation decision that scored below this service's
+    # Feature 2 (the autonomy suite): a pricing/negotiation decision that scored below this service's
     # autonomy threshold is drafted but not sent. The decision itself (state, offer, rule
     # checked) is unchanged — only whether the prospect sees it changes. Queuing happens here,
     # not in `decide()`, because only `step()` knows what the rendered reply actually says.

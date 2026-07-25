@@ -7,27 +7,27 @@ Nothing here is faked, stubbed, or simulated. A missing credential is reported a
 - Item 1 (VPS): **PROVIDED + DEPLOYED** — `38.49.216.59`; CONCIERGE live at `https://app.quietdesks.com`.
 - Item 2 (domain+DNS): **PROVIDED** — `quietdesks.com` at Cloudflare; all Phase 4 DNS records set.
 - Item 3 (Postmark): **PROVIDED + LIVE** — approved, token in VPS `.env`, inbound round-trip proven.
-- Item 4 (Cal.com): **PROVIDED** — key `cal_live_…` + event type `6433300`. GATE 5 passed live.
+- Item 4 (Cal.com): **PROVIDED** — key `cal_live_…` + event type `6433300`. the booking suite passed live.
   **Key was exposed in chat — rotate before submission.**
-- Item 6 (X Layer signer): **PROVIDED** — GATE 6 live.
+- Item 6 (X Layer signer): **PROVIDED** — the receipts suite live.
 - Item 7 (LLM key): **PROVIDED (fixed 2026-07-25)** — the earlier value was truncated and 401'd; the
   full `sk-ant-…` now works; Feature 1 categorization is live.
-- Item 5 (OKX Agentic Wallet): **MISSING** — blocks Phase 7 + ledger U3. Item 8 optional/skipped.
+- Item 5 (OKX Agentic Wallet): **MISSING** — blocks A2A escrow + ledger U3. Item 8 optional/skipped.
 
 **Deadline 2026-07-27 22:59 UTC.**
 
 Phases 0–6 and 8 are done; **Phase 4 is LIVE** (real email round-trip proven 2026-07-25). Feature 1
-is done. **Only Phase 7 remains blocked** — on item 5 and ledger U3 (the OKX escrow API shape).
+is done. **Only A2A escrow remains blocked** — on item 5 and ledger U3 (the OKX escrow API shape).
 
 | # | Item | Status | Blocks | Notes |
 |---|---|---|---|---|
 | 1 | VPS — 2 vCPU / 4GB / 40GB, Ubuntu 24.04, 24/7 | ✅ PROVIDED + DEPLOYED | ~~P4~~, P7, P8 | `38.49.216.59` (shared `Jennycruzy` box). CONCIERGE deployed 2026-07-24 under a dedicated `concierge` user, own Postgres container on `127.0.0.1:5433`, systemd + nginx + TLS. Live at `https://app.quietdesks.com`. **Hardening TODO:** rotate the leaked root password, move to SSH-key auth. |
 | 2 | Domain + DNS access | ✅ PROVIDED | ~~P4~~ | `quietdesks.com` at Cloudflare. All Phase 4 records set: A `app` → VPS (grey), MX `inbox` → inbound.postmarkapp.com, DKIM TXT + Return-Path CNAME (both verified). DMARC still optional. |
 | 3 | Postmark server API token (inbound + outbound) | ✅ PROVIDED + LIVE | ~~P4~~ | Approved 2026-07-24 (ticket `[NVXMEE-2Z5W7]`). Token in VPS `.env`; server "Concierge" configured with `InboundHookUrl` + `InboundDomain=inbox.quietdesks.com`; sending domain DKIM + Return-Path verified. **Live round-trip proven 2026-07-25** (inbound email → webhook → tenant → reply Sent, not spam). Default **Transactional** stream. |
-| 4 | Cal.com account + API key (`cal_...`) + event type ID | ✅ PROVIDED | P5 | In `.env`. **GATE 5 passed live 2026-07-23** — real booking created and cancelled against event type 6433300. Key is `cal_live_` — rotate before submission, it was exposed in chat. |
+| 4 | Cal.com account + API key (`cal_...`) + event type ID | ✅ PROVIDED | P5 | In `.env`. **the booking suite passed live 2026-07-23** — real booking created and cancelled against event type 6433300. Key is `cal_live_` — rotate before submission, it was exposed in chat. |
 | 5 | OKX Agentic Wallet + creation email; `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE` | ❌ MISSING | P7 | Also blocks verifying the escrow API shape at all (ledger U3). |
-| 6 | Funded OKB on X Layer **mainnet (196)** | ✅ PROVIDED | ~~P6~~, P7 | In `.env` as `XLAYER_PRIVATE_KEY`. **GATE 6 passed live 2026-07-24** — `ReceiptAnchor` deployed at `0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587`, two real receipts anchored, ~0.0103 OKB left (~9,900 more anchors at the measured 51,849 gas/anchor). |
-| 7 | LLM API key | ✅ PROVIDED (fixed 2026-07-25) | P2, P3 drafting; Feature 1 categorization | Earlier value was **truncated** (missing the last chars → 401); the full `sk-ant-…` now works — verified with a live `gaps.classify_gap` call returning `service_not_offered`. GATE 2/GATE 3 are deterministic and need no key; the one consumer is **Feature 1's optional gap categorization** (`concierge/gaps.py`), which is now live (and still degrades honestly to raw text if the key is ever absent). |
+| 6 | Funded OKB on X Layer **mainnet (196)** | ✅ PROVIDED | ~~P6~~, P7 | In `.env` as `XLAYER_PRIVATE_KEY`. **the receipts suite passed live 2026-07-24** — `ReceiptAnchor` deployed at `0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587`, two real receipts anchored, ~0.0103 OKB left (~9,900 more anchors at the measured 51,849 gas/anchor). |
+| 7 | LLM API key | ✅ PROVIDED (fixed 2026-07-25) | P2, P3 drafting; Feature 1 categorization | Earlier value was **truncated** (missing the last chars → 401); the full `sk-ant-…` now works — verified with a live `gaps.classify_gap` call returning `service_not_offered`. the onboarding suite/the engine suite are deterministic and need no key; the one consumer is **Feature 1's optional gap categorization** (`concierge/gaps.py`), which is now live (and still degrades honestly to raw text if the key is ever absent). |
 | 8 | Web-search / retrieval API key | ❌ MISSING | P2 enrichment | **Optional.** Without it, onboarding uses built-in vertical templates and says so out loud. |
 
 ---
@@ -36,9 +36,9 @@ is done. **Only Phase 7 remains blocked** — on item 5 and ledger U3 (the OKX e
 
 Real work, no fabrication, no credentials needed:
 
-- ~~**Phase 1** — tenant model + isolation, on local Postgres. Fully provable.~~ **DONE, GATE 1
-  passed 2026-07-23.** 11 checks, 9 of them attacks. `python3 verify.py --phase 1`.
-- ~~**Phase 2** — vertical-aware onboarding.~~ **DONE, GATE 2 passed 2026-07-23.** Classification
+- ~~**Phase 1** — tenant model + isolation, on local Postgres. Fully provable.~~ **DONE, the isolation suite
+  passed 2026-07-23.** 11 checks, 9 of them attacks. `python3 verify.py --suite isolation`.
+- ~~**Phase 2** — vertical-aware onboarding.~~ **DONE, the onboarding suite passed 2026-07-23.** Classification
   turned out not to need item 7 at all: it is a weighted lexicon that reports the exact terms
   behind each decision, works with no key, and abstains rather than guessing when two verticals
   score too close. An LLM may still be added later to catch descriptions the lexicon misses.
@@ -48,11 +48,11 @@ Real work, no fabrication, no credentials needed:
   provide the domain.
 - **Phase 3** — the state machine and deterministic guardrails, driven by fixture inquiries. This is
   the **decisive** gate (every price provably from the profile) and it needs **nothing from you**.
-- ~~**Phase 6** — the receipt contract, signing, hashing and tamper detection.~~ **DONE, GATE 6
+- ~~**Phase 6** — the receipt contract, signing, hashing and tamper detection.~~ **DONE, the receipts suite
   passed live 2026-07-24**, once item 6 arrived. `ReceiptAnchor` deployed at
   `0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587`; two real receipts anchored and independently
-  re-verified on-chain; two tamper attacks caught. `python3 verify.py --phase 6`.
-- ~~**Phase 5** — booking against live Cal.com.~~ **DONE, GATE 5 passed live 2026-07-23**, once
+  re-verified on-chain; two tamper attacks caught. `python3 verify.py --suite receipts`.
+- ~~**Phase 5** — booking against live Cal.com.~~ **DONE, the booking suite passed live 2026-07-23**, once
   item 4 arrived.
 
 So: Phases 1, 2, 3, 5, 6 are done. **4 and 7 remain blocked** — 4 on items 1–3, 7 on item 5 and
@@ -201,14 +201,14 @@ is bounded by design.
 ⚠️ **Honest gap:** the OnchainOS docs describe the wallet install clearly but do **not** document
 where the API key / secret / passphrase for the escrow and settlement calls come from — they likely
 come from the OKX developer portal, but I have not confirmed that live. This is ledger item **U3**
-and it is unresolved. I'll pin it down at GATE 7 and will not write escrow code against a guessed
+and it is unresolved. I'll pin it down at the escrow suite and will not write escrow code against a guessed
 API shape.
 
 → `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE` in `.env` — once U3 is resolved.
 
 ## 7. OKB for gas — MAINNET, chain 196. Buy ~1 OKB (~$82)
 
-**✅ PROVIDED 2026-07-24. GATE 6 passed live — see docs/VERIFICATION_LEDGER.md's Phase 6 entry
+**✅ PROVIDED 2026-07-24. the receipts suite passed live — see docs/VERIFICATION_LEDGER.md's Phase 6 entry
 for the real deploy tx, contract address, and measured gas (cheaper than the estimate below).**
 
 **This is a mainnet product. Receipts anchor on X Layer mainnet (196) from Phase 6 onward.**

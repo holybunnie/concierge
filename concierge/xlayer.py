@@ -1,4 +1,4 @@
-"""X Layer mainnet (196) adapter (Phase 6) — signs and anchors receipts for real.
+"""X Layer mainnet (196) adapter (receipt anchoring) — signs and anchors receipts for real.
 
 `receipts.py` writes `signature` and `xlayer_tx` as NULL until this module exists (see its
 docstring). This fills that seam: every anchor is a real `anchorReceipt(bytes32)` call against

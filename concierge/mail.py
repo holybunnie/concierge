@@ -1,7 +1,7 @@
 """LOOP 2 over email (§10): an inbound message becomes a state-machine step and a reply.
 
 This is the glue between Postmark and the engine, and it is deliberately thin. It resolves the
-tenant from the recipient address, runs exactly the Phase 3 engine inside a tenant-scoped
+tenant from the recipient address, runs exactly the engine inside a tenant-scoped
 session, and then — outside that session — sends whatever the engine decided to say. Network I/O
 never happens with a database transaction held open.
 

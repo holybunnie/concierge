@@ -1,27 +1,27 @@
-"""GATE 3b-2 — confidence-scored autonomy (Feature 2).
+"""the autonomy suite — confidence-scored autonomy (Feature 2).
 
-GATE 3 proved the state machine and the guardrails. This gate proves the layer built on top of
+the engine suite proved the state machine and the guardrails. This suite proves the layer built on top of
 both: a decision that is within the tenant's rules may still be too close to call for CONCIERGE
 to send unsupervised. `concierge/confidence.py` is the entire answer to "did an LLM decide that?"
-— there is nothing in it that could, and the score is attached to the receipt Phase 3 already
+— there is nothing in it that could, and the score is attached to the receipt the engine already
 writes, not rendered once and discarded.
 
-Checks 1-2 are the gate's own requirement, almost verbatim from the spec: a thin profile queues,
+Checks 1-2 are the suite's own requirement, almost verbatim from the spec: a thin profile queues,
 a complete one auto-sends, for the same kind of inquiry. Checks 3-4 go one layer deeper — they
 prove the floor-proximity signal is doing real work (a COMPLETE profile still queues a genuinely
 marginal negotiation) and that precedent is what moves a marginal decision the rest of the way
 (the same negotiation auto-sends once this exact price point has been booked three times).
 Check 5 proves the score is persisted and independently retrievable, not just visible on the
-Outcome object the caller happened to keep. Check 6 is the regression proof: GATE 3's own
+Outcome object the caller happened to keep. Check 6 is the regression proof: the engine suite's own
 NEW -> BOOKED journey, re-run here, still completes with no human touching it.
 """
 
 from __future__ import annotations
 
 from . import confidence, db, engine, store
-from . import verify_phase3 as p3
+from . import verify_engine as p3
 
-# Same day-spa template and field keys GATE 3 already exercises, so nothing here is exercising
+# Same day-spa template and field keys the engine suite already exercises, so nothing here is exercising
 # an untested onboarding path — only the profiles' completeness differs.
 
 THIN = dict(
@@ -127,7 +127,7 @@ def run(r) -> None:
          and marginal_thread_1.state == "AWAITING_OWNER_APPROVAL"),
         "This is the same tenant as check 2 — profile completeness is identical and maximal. The\n"
         "only thing that changed is the figure on the table: £75 is within the guardrail (it is\n"
-        "not a floor breach, GATE 3 check 7 covers that failure mode separately) but it sits close\n"
+        "not a floor breach, the engine suite check 7 covers that failure mode separately) but it sits close\n"
         "enough to the floor, with zero prior bookings at this price to vouch for it, that the\n"
         "score falls short. This is the proof that confidence is not just a proxy for 'did the\n"
         "tenant fill in their profile' — the floor-proximity signal does real, independent work.",
@@ -177,7 +177,7 @@ def run(r) -> None:
          and quoted_receipt.confidence["score"] == thin_conf["score"]
          and quoted_receipt.confidence["autonomous"] is False
          # The three WEIGHTED signals are this feature's formula and must all be persisted.
-         # `comprehension` (GATE 3c, layer 3) rides along at weight 0.0 — it caps autonomy
+         # `comprehension` (the comprehension suite, layer 3) rides along at weight 0.0 — it caps autonomy
          # rather than voting on the score, so asserting the weighted three by name is the
          # honest test here, not a count that changes whenever a cap is added.
          and {s["name"] for s in quoted_receipt.confidence["signals"]}
@@ -204,7 +204,7 @@ def run(r) -> None:
         "A thread already awaiting owner approval is not re-entered by a follow-up message",
         (held_out.action == "hold" and held_thread.state == "AWAITING_OWNER_APPROVAL"
          and held_out.reply is not None and "reviewing" in held_out.reply),
-        "Same principle GATE 3 check-pattern already applies to ESCALATED, BOOKED, IGNORED and\n"
+        "Same principle the engine suite check-pattern already applies to ESCALATED, BOOKED, IGNORED and\n"
         "DEAD threads: once a decision is waiting on the owner, a further message does not get a\n"
         "second autonomous decision stacked on top of it. The prospect gets a holding reply, not\n"
         "silence and not a second drafted-but-unsent quote.",
@@ -212,20 +212,20 @@ def run(r) -> None:
         f"| reply: {held_out.reply.splitlines()[-1] if held_out.reply else None}",
     )
 
-    # ---- 7. regression: GATE 3's own NEW -> BOOKED journey is unaffected by this feature
+    # ---- 7. regression: the engine suite's own NEW -> BOOKED journey is unaffected by this feature
     spa_id = p3._onboard(p3.SPA)
     msgs = ["Hi, how much is a deep tissue massage?", "Could you do 80?", "yes please",
             "London", "2"]
     cal = p3.FixtureCalendar()
     _, reg_thread, reg_outs = p3._converse(spa_id, msgs, cal)
     r.check(
-        "REGRESSION — GATE 3's baseline NEW -> BOOKED journey still completes with no human",
+        "REGRESSION — the engine suite's baseline NEW -> BOOKED journey still completes with no human",
         (reg_thread.state == "BOOKED" and len(cal.booked) == 1
          and all(o.reply is not None for o in reg_outs)),
-        "GATE 3's own fixture tenant (floor, discount cap, escalation triggers, ICP, booking\n"
-        "rules and lexicon all set — the profile GATE 3 was always written against) runs the\n"
+        "the engine suite's own fixture tenant (floor, discount cap, escalation triggers, ICP, booking\n"
+        "rules and lexicon all set — the profile the engine suite was always written against) runs the\n"
         "exact same five-message conversation end to end. Every reply sent, nobody queued,\n"
-        "state machine and guardrails behaving exactly as GATE 3 already proved. Confidence-\n"
+        "state machine and guardrails behaving exactly as the engine suite already proved. Confidence-\n"
         "scored autonomy is additive: it holds back the decisions it was built to catch (checks\n"
         "1 and 3 above) and leaves this one alone.",
         p3._transcript(msgs, reg_outs) + f"\nfinal state: {reg_thread.state}",
@@ -237,18 +237,18 @@ def run(r) -> None:
         f"`profile.autonomy_thresholds` is tenant-settable (at onboarding or later, via the same\n"
         f"`store.update_profile` every other profile edit uses) and defaults to "
         f"{confidence.DEFAULT_AUTONOMY_THRESHOLD} per service when unset — conservative, not\n"
-        "permissive, per the spec. No fixture in this gate sets an override: every score above is\n"
+        "permissive, per the spec. No fixture in this suite sets an override: every score above is\n"
         "compared against that documented default.",
         f"DEFAULT_AUTONOMY_THRESHOLD = {confidence.DEFAULT_AUTONOMY_THRESHOLD}\n"
         f"weights: completeness={confidence.WEIGHT_COMPLETENESS}, "
         f"proximity={confidence.WEIGHT_PROXIMITY}, precedent={confidence.WEIGHT_PRECEDENT}",
     )
     r.note(
-        "What this gate does not build",
+        "What this suite does not build",
         "Approving or editing a queued draft (the tenant acting on `pending_approval`) is not\n"
         "built here — the owner acts on the drafted text via the same alert channel ESCALATE\n"
-        "already uses (email, once Phase 4 is live), exactly as any other escalation today. A\n"
-        "dashboard 'approve' button that resumes the thread and sends the edited text is Phase 8\n"
+        "already uses (email, once the email connector is live), exactly as any other escalation today. A\n"
+        "dashboard 'approve' button that resumes the thread and sends the edited text is the scheduler\n"
         "territory (a UI over stored state, not a new decision), not a gap in this feature's own\n"
         "claim: drafted, not sent, queued, logged.",
         "",

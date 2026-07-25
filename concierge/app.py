@@ -103,7 +103,7 @@ async def inbound_postmark(request: Request) -> JSONResponse:
 
 # ---------------------------------------------------------------- public receipt verification
 #
-# Feature 3 (GATE 6b). Read-only, unauthenticated, scoped by receipt_id alone — see
+# Feature 3 (the public-receipt suite). Read-only, unauthenticated, scoped by receipt_id alone — see
 # `db.get_public_receipt` and `receipts.public_view` for the isolation guarantee. No framework:
 # this is plain server-rendered HTML, because a trust page has no business needing a build step.
 

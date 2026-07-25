@@ -20,7 +20,7 @@ Two generated cases deserve explanation:
   trades, including two this codebase has never seen.
 - **The qualifier cases** ("for two people", "90 minutes", "at my home") use generic commercial
   English — quantity, duration, location, timing — not trade vocabulary. "Two people" means the
-  same thing to a barrister and a boat mechanic. `verify_phase3c` greps this module against
+  same thing to a barrister and a boat mechanic. `verify_comprehension` greps this module against
   `engine.TRADE_NOUNS` to keep it that way.
 """
 
@@ -145,7 +145,7 @@ def generate(profile: dict[str, Any], *, foreign_services: list[str] | None = No
 
 
 def summarise(results: list[tuple[Question, str, bool, bool]]) -> dict[str, Any]:
-    """Fold per-question outcomes into the numbers the gate judges.
+    """Fold per-question outcomes into the numbers the suite judges.
 
     `results` is (question, action_taken, a_price_was_sent, answered_autonomously). Two numbers
     matter and they pull against each other, which is the point of reporting both:

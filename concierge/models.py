@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any
 
 # Thread states (§9). A thread is always in exactly one of these.
-# AWAITING_OWNER_APPROVAL (Feature 2, GATE 3b-2): a reply was drafted but scored below the
+# AWAITING_OWNER_APPROVAL (Feature 2, the autonomy suite): a reply was drafted but scored below the
 # tenant's autonomy threshold for that service, so it is held for the owner rather than sent.
 STATES = ("NEW", "ENGAGED", "AWAITING_REPLY", "NEGOTIATING", "BOOKED", "ESCALATED", "IGNORED",
           "DEAD", "AWAITING_OWNER_APPROVAL")

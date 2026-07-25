@@ -1,18 +1,18 @@
-"""Phase 8 — the scheduled-worker entry point.
+"""the scheduler — the scheduled-worker entry point.
 
 Two jobs already existed as callable functions with nothing calling them on a schedule:
-`receipts.anchor()` (Phase 6 — HANDOFF.md names this exact gap: "a background worker calling
-receipts.anchor() on unanchored rows is Phase 8 territory") and `followup.dispatch()` (the
-addendum's Safe Follow-Up). This module is that scheduler, plus the third scheduled job Phase 8
+`receipts.anchor()` (receipt anchoring — HANDOFF.md names this exact gap: "a background worker calling
+receipts.anchor() on unanchored rows is the scheduler territory") and `followup.dispatch()` (the
+addendum's Safe Follow-Up). This module is that scheduler, plus the third scheduled job the scheduler
 itself adds: a periodic summary.
 
 `dispatch(tenant_id)` is meant to run once per tenant on a timer — a cron job or systemd timer on
 the VPS, the same deploy pattern as `app.py`'s webhook (§12). Actually installing that timer is a
-VPS/operator action this code cannot perform from inside a gate; what's provable here is that the
+VPS/operator action this code cannot perform from inside a suite; what's provable here is that the
 function does the right thing when it runs, against real stored data.
 
 Every job is arithmetic or a call to an already-proven function — `anchor_pending` is a thin
-filter in front of `receipts.anchor()` (GATE 6/6b already prove that mechanism twice over), and
+filter in front of `receipts.anchor()` (the receipts suite/6b already prove that mechanism twice over), and
 `process_tenant` never blocks a database transaction on a network call to Postmark or a summary
 send — decide and persist first, then send, exactly like `mail.handle_inbound` and
 `followup.process_tenant`.
@@ -45,7 +45,7 @@ def _summary_policy(profile: dict[str, Any]) -> tuple[float, datetime | None]:
 def anchor_pending(cur: Cursor, tenant: Tenant) -> list[Receipt]:
     """Sign + anchor every receipt for this tenant that isn't yet.
 
-    Not a new anchoring mechanism — `receipts.anchor()` is exactly what GATE 6 and GATE 6b
+    Not a new anchoring mechanism — `receipts.anchor()` is exactly what the receipts suite and the public-receipt suite
     already anchor real receipts with, called here from a scheduled sweep instead of `app.py`'s
     per-request background thread. Absent a configured signer/contract, this returns an empty
     list rather than raising — the same honest-skip already used everywhere a credential is

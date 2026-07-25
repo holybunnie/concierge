@@ -1,13 +1,13 @@
-"""GATE 8b-1 — Product-Gap Intelligence (addendum Feature 1).
+"""the product-gap suite — Product-Gap Intelligence (addendum Feature 1).
 
-Phase 3 already escalates, never invents, when a prospect asks about something the tenant's
-profile cannot answer (GATE 3 check 5). This feature turns that existing escalation into a market
+the engine already escalates, never invents, when a prospect asks about something the tenant's
+profile cannot answer (the engine suite check 5). This feature turns that existing escalation into a market
 signal: the question is recorded verbatim as a `GapEvent`, and surfaced — aggregated — in the
 owner's summary: "here's what your market asked for that you don't sell."
 
 Every check runs a real conversation against real PostgreSQL. The gap text shown in the summary
 is the exact string the prospect sent, never synthesized. Check 4 is the isolation test, reusing
-Phase 1's RLS fence unchanged: one tenant's gaps can never appear in another's report. Check 5
+tenant isolation's RLS fence unchanged: one tenant's gaps can never appear in another's report. Check 5
 proves honest degradation — with no LLM key the category is None and the raw text still survives.
 """
 
@@ -17,7 +17,7 @@ import os
 from datetime import datetime, timedelta, timezone as dt_timezone
 
 from . import db, gaps, store, summary
-from . import verify_phase3 as p3
+from . import verify_engine as p3
 
 GAP_QUERY = "Do you offer laser hair removal, and how much is it?"
 
@@ -56,8 +56,8 @@ def run(r) -> None:
          and len(spa_gaps) == 1
          and spa_gaps[0].raw_query_text == GAP_QUERY
          and spa_gaps[0].classified_category is None),
-        "The spa sells massage and facials, not laser hair removal. Phase 3 escalates rather\n"
-        "than inventing a price (GATE 3 check 5 already proves that). Feature 1 adds exactly one\n"
+        "The spa sells massage and facials, not laser hair removal. the engine escalates rather\n"
+        "than inventing a price (the engine suite check 5 already proves that). Feature 1 adds exactly one\n"
         "side effect to that existing transition: a GapEvent row carrying the prospect's exact\n"
         "words, with no category yet (categorization is a later, optional step — check 5). No new\n"
         "decision — the escalation happened for the same reason it always did.",
@@ -93,7 +93,7 @@ def run(r) -> None:
     r.check(
         "A floor breach escalates but writes NO gap — 'not offered' is not the same as 'too cheap'",
         breach_gaps == [],
-        "£40 against a £70 floor breaches and escalates (GATE 3 check 7). But the prospect asked\n"
+        "£40 against a £70 floor breaches and escalates (the engine suite check 7). But the prospect asked\n"
         "for a service the tenant DOES sell — that is not a product gap, and `engine.decide` sets\n"
         "`product_gap` only on the Unquotable branch, never on a floor breach, a human request, or\n"
         "a tripped trigger. Recording it as demand for an unoffered service would be a lie; this\n"
@@ -120,7 +120,7 @@ def run(r) -> None:
          and GAP_QUERY not in other_text),
         "The barrister asked about a service it DOES offer, so it has no gap of its own — and it\n"
         "certainly cannot see the spa's. `store.list_gap_events` only ever returns rows its\n"
-        "RLS-scoped session can read (the identical `tenant_isolation` policy GATE 1 proved for\n"
+        "RLS-scoped session can read (the identical `tenant_isolation` policy the isolation suite proved for\n"
         "every tenant table — no new mechanism for this feature). The spa's laser-hair-removal\n"
         "gap cannot appear in the barrister's report under any query.",
         f"| spa gap texts: {sorted(spa_gap_texts)}\n"
