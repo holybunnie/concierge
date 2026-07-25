@@ -1,0 +1,45 @@
+[Unit]
+# The OKX A2A (agent-to-agent) transport: an XMTP daemon that receives marketplace job events
+# and carries our replies back. It is a delivery channel, exactly like Postmark — it never
+# decides a tenant's price. See docs/HANDOFF.md, "Listing on OKX AI", for the two prices this
+# distinction protects.
+#
+# Why this exists as a systemd service rather than a chat session: OKX's documented ASP flow runs
+# `okx-a2a user watch` inside a Claude Code or Codex session and keeps it alive with a two-minute
+# cron self-wake. That dies when the laptop closes, which is why listed agents go quiet. A
+# foreground daemon under Restart=always does not.
+Description=CONCIERGE OKX A2A transport daemon
+After=network-online.target concierge.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=concierge
+Group=concierge
+WorkingDirectory=/opt/concierge
+
+# HOME is load-bearing, not cosmetic. The daemon keeps its identity and state in
+# $HOME/.okx-agent-task, and this box is shared: the rwoo project runs its own okx-a2a daemon as
+# its own user with its own HOME. Pointing at /opt/concierge is what keeps the two listings from
+# ever touching each other's credentials or agent identity.
+Environment=HOME=/opt/concierge
+
+# Our OWN copy of the CLI, deliberately NOT the global /usr/local/bin/okx-a2a. rwoo's running
+# daemon executes that global binary, so `npm install -g @okxweb3/a2a-node@latest` — which the
+# vendor's own doctor offers as an auto-fix — would swap the code out from under another
+# project's live process. We pin our version here and leave theirs alone.
+ExecStart=/opt/concierge/a2a/node_modules/.bin/okx-a2a run
+
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/opt/concierge
+
+[Install]
+WantedBy=multi-user.target

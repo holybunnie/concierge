@@ -475,6 +475,51 @@ video, architecture diagram, "reproduce every claim" README pass, Google form be
 
 ---
 
+## OKX A2A — what is set up, and the shared-box rule that governs it
+
+**The box is shared. `38.49.216.59` also hosts the `rwoo` project, which runs its OWN okx-a2a
+daemon.** Everything below exists to make CONCIERGE's listing incapable of touching theirs.
+
+| | rwoo (not ours) | CONCIERGE |
+|---|---|---|
+| user / HOME | `rwoo` / `/opt/rwoo` | `concierge` / `/opt/concierge` |
+| config | `/opt/rwoo/.okx-agent-task` (700) | `/opt/concierge/.okx-agent-task` (700) |
+| CLI | global `/usr/local/bin/okx-a2a` (0.1.9) | `/opt/concierge/a2a/…/okx-a2a` (0.1.10) |
+
+**🛑 Never run `npm install -g @okxweb3/a2a-node@latest` on this box.** The vendor's own
+`okx-a2a doctor` offers it as an auto-fix, and it would replace the binary that rwoo's *running*
+daemon (pid 881931, up for days) is executing. We keep a private copy under `/opt/concierge/a2a`
+instead. Same reasoning forbids `daemon autostart install`, which writes OS-level autostart:
+`deploy/concierge-a2a.service` runs `okx-a2a run` in the foreground under systemd instead, so our
+process supervision is ours alone.
+
+Verified: as the `concierge` user the daemon reports `stopped` while rwoo's and root's keep
+running — per-user isolation holds, and it is the same pattern rwoo already relies on.
+
+**Why a daemon at all — this is the differentiator.** OKX's documented ASP flow runs
+`okx-a2a user watch` (a long poll) inside a Claude Code or Codex chat session, kept alive by a
+2-minute cron self-wake; `watch-core.md` gates it on `CLAUDECODE=1`/`CODEX_THREAD_ID`. Close the
+laptop and the listing goes quiet. That is why marketplace agents go offline. CONCIERGE already
+runs as real infrastructure (systemd `Restart=always`, nginx+TLS, its own Postgres, a timer), so
+the A2A transport simply joins it. This resolves ledger **U4**: the monitor CAN run headless, via
+`daemon`/`run` — not via the documented chat-session watch.
+
+**ASP actions are gas-free.** Per the vendor's ASP reference: `apply`/`deliver`/arbitration/
+refund/claim all go through the platform paymaster, so the agentic wallet needs no native balance
+and no pre-funded USDT. It is the payee; the buyer funds escrow and it releases on sign-off.
+Settlement is USDT or USDG.
+
+**Still open before the daemon can be started:**
+1. **The wallet identity** — operator action, cannot be delegated: keys live in a TEE tied to an
+   email login. Until an identity exists the daemon has nothing to listen for.
+2. **The AI-provider binding.** `doctor` reports "no default AI provider is bound" as a blocker,
+   and `config provider` accepts only `codex|claude|hermes|openclaw` — it cannot be pointed at our
+   own binary. Unresolved: whether the daemon can run purely as an XMTP→JSON writer that our own
+   worker consumes (preferred — keeps every tenant-facing decision in `engine.step`), or whether
+   it insists on invoking an LLM subsession. If the latter, that subsession's ONLY permitted job
+   is to relay: hand the message to the engine and return the computed reply verbatim, with a
+   suite check proving the delivered figure equals what `engine.step` computed.
+
 ## Listing on OKX AI — decided pricing and the reasoning
 
 **Price (operator decision, 2026-07-25):** 2 USDT/week with 10 trials, then 5 USDT/week or
