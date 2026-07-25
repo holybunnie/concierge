@@ -696,8 +696,13 @@ and no pre-funded USDT. It is the payee; the buyer funds escrow and it releases 
 Settlement is USDT or USDG.
 
 **Still open before the daemon can be started:**
-1. **The wallet identity** — operator action, cannot be delegated: keys live in a TEE tied to an
-   email login. Until an identity exists the daemon has nothing to listen for.
+1. ~~**The wallet identity**~~ — **RESOLVED, and it was never actually missing.** `onchainos
+   wallet status` on the VPS reports `loggedIn: true`, `loginType: google`, account
+   `d9d6ae76-90e5-41cc-92ee-797d4324de34`, EVM `0x45818399a3e0f756cb26ff2fcd13a4824313df94` — the
+   same address the listing carries as `ownerAddress`. The agent could not have been registered
+   without it. Balance `$0.00` is expected: ASP actions go through the platform paymaster, so the
+   payee needs no native balance. **Escrow is blocked by ledger U3 (the `a2a-pay` call shapes)
+   alone — not by a credential.**
 2. **The AI-provider binding.** `doctor` reports "no default AI provider is bound" as a blocker,
    and `config provider` accepts only `codex|claude|hermes|openclaw` — it cannot be pointed at our
    own binary. Unresolved: whether the daemon can run purely as an XMTP→JSON writer that our own

@@ -3,7 +3,11 @@
 What CONCIERGE needs from you, what each thing unblocks, and what stays broken until it arrives.
 Nothing here is faked, stubbed, or simulated. A missing credential is reported as missing.
 
-**Status as of 2026-07-25: 7 of 8 provided. Only item 5 (OKX wallet) remains; item 8 optional.**
+**Status as of 2026-07-25 (evening): 8 of 8 material items provided; item 8 optional/skipped.**
+Item 5 was recorded as MISSING for days and **that was wrong** — the Agentic Wallet has existed
+since the listing was created, and `onchainos wallet status` on the VPS proves it. Nothing an
+operator can supply is now outstanding. What blocks A2A escrow is **ledger U3** — the `a2a-pay`
+call shapes — which is a documentation question, not a credential.
 - Item 1 (VPS): **PROVIDED + DEPLOYED** — `38.49.216.59`; CONCIERGE live at `https://app.quietdesks.com`.
 - Item 2 (domain+DNS): **PROVIDED** — `quietdesks.com` at Cloudflare; all Phase 4 DNS records set.
 - Item 3 (Postmark): **PROVIDED + LIVE** — approved, token in VPS `.env`, inbound round-trip proven.
@@ -25,7 +29,7 @@ is done. **Only A2A escrow remains blocked** — on item 5 and ledger U3 (the OK
 | 2 | Domain + DNS access | ✅ PROVIDED | ~~P4~~ | `quietdesks.com` at Cloudflare. All Phase 4 records set: A `app` → VPS (grey), MX `inbox` → inbound.postmarkapp.com, DKIM TXT + Return-Path CNAME (both verified). DMARC still optional. |
 | 3 | Postmark server API token (inbound + outbound) | ✅ PROVIDED + LIVE | ~~P4~~ | Approved 2026-07-24 (ticket `[NVXMEE-2Z5W7]`). Token in VPS `.env`; server "Concierge" configured with `InboundHookUrl` + `InboundDomain=inbox.quietdesks.com`; sending domain DKIM + Return-Path verified. **Live round-trip proven 2026-07-25** (inbound email → webhook → tenant → reply Sent, not spam). Default **Transactional** stream. |
 | 4 | Cal.com account + API key (`cal_...`) + event type ID | ✅ PROVIDED | P5 | In `.env`. **the booking suite passed live 2026-07-23** — real booking created and cancelled against event type 6433300. Key is `cal_live_` — rotate before submission, it was exposed in chat. |
-| 5 | OKX Agentic Wallet + creation email; `OKX_API_KEY`, `OKX_SECRET_KEY`, `OKX_PASSPHRASE` | ❌ MISSING | P7 | Also blocks verifying the escrow API shape at all (ledger U3). |
+| 5 | OKX Agentic Wallet + creation email | ✅ **PROVIDED — verified live 2026-07-25** | ~~P7~~ (partly) | `onchainos wallet status` on the VPS: `loggedIn: true`, `loginType: google`, `email: melindacharles82@gmail.com`, account `d9d6ae76-90e5-41cc-92ee-797d4324de34`. EVM address **`0x45818399a3e0f756cb26ff2fcd13a4824313df94`** — the same address the listing carries as `ownerAddress`/`agentWalletAddress`, which is why agent #9274 could be registered at all. Balance `$0.00`, which is **expected**: per the vendor's ASP reference every ASP action goes through the platform paymaster, so the payee wallet needs no native balance and no pre-funded USDT. **This row said MISSING until 2026-07-25 and was simply wrong** — the wallet has existed since the listing was created. What remains open is ledger **U3** (the `a2a-pay` call shapes), not the wallet. The separate `OKX_API_KEY`/`SECRET`/`PASSPHRASE` triple is a *different* credential set (the exchange developer portal) and no code path consumes it. |
 | 6 | Funded OKB on X Layer **mainnet (196)** | ✅ PROVIDED | ~~P6~~, P7 | In `.env` as `XLAYER_PRIVATE_KEY`. **the receipts suite passed live 2026-07-24** — `ReceiptAnchor` deployed at `0x9b3C500C59CEC55036e3839091f7C5B2cD9D0587`, two real receipts anchored, ~0.0103 OKB left (~9,900 more anchors at the measured 51,849 gas/anchor). |
 | 7 | LLM API key | ✅ PROVIDED (fixed 2026-07-25) | P2, P3 drafting; Feature 1 categorization | Earlier value was **truncated** (missing the last chars → 401); the full `sk-ant-…` now works — verified with a live `gaps.classify_gap` call returning `service_not_offered`. the onboarding suite/the engine suite are deterministic and need no key; the one consumer is **Feature 1's optional gap categorization** (`concierge/gaps.py`), which is now live (and still degrades honestly to raw text if the key is ever absent). |
 | 8 | Web-search / retrieval API key | ❌ MISSING | P2 enrichment | **Optional.** Without it, onboarding uses built-in vertical templates and says so out loud. |
