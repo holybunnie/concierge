@@ -13,6 +13,18 @@ uvicorn[standard]>=0.29
 # itself makes no outbound HTTP calls of its own.
 httpx>=0.27
 
+# Feature 1 (product-gap intelligence). The ONLY dependency in this file that any language model
+# is reached through, and it is reached from exactly one function: `gaps.classify_gap`, which puts
+# a coarse label on an escalation that has already happened. Nothing about a price, a floor or a
+# decision passes through it.
+#
+# It is listed here because leaving it out does not fail loudly. `classify_gap` catches every
+# exception and returns None — correct behaviour for narration that must never break a report —
+# so an ImportError is indistinguishable from "no key configured", and the owner's summary quietly
+# shows raw text forever. That is exactly what happened on the VPS: the key was valid, the module
+# was absent, and the feature looked like an honest degradation instead of a missing install.
+anthropic>=0.119
+
 # Phase 6. Receipt anchoring on X Layer mainnet (concierge/xlayer.py) needs secp256k1 signing and
 # RLP transaction encoding. Hand-rolling either to avoid a dependency is a worse security
 # trade-off than taking one audited, widely-used library — the RPC transport itself stays on

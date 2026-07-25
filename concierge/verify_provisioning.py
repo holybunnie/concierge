@@ -397,6 +397,114 @@ def _run(r, transport: RecordingTransport) -> None:
         f"| model calls found: {offenders or 'none'}",
     )
 
+    # ---- 10-13. the wire format, captured from live traffic on 2026-07-25
+    #
+    # Everything below is a structural copy of payloads a real marketplace agent actually
+    # produced against this listing — not a guess at the documented shape. They are here because
+    # every one of these cases was found by hand, in production, on the day a real agent messaged
+    # the listing and got nothing back. A fault found by hand and not written into the harness is
+    # a fault that comes back.
+    real_inbound = {
+        "id": "todo_1785004471408_bdb079b8", "kind": "notification", "status": "pending",
+        "jobId": "0x4cb7dc24769104f13fd11dd406cbe77ce3102998cd6d3e954359dddfbbc25b30",
+        "userContent": (
+            "\U0001F4E5 [Received] SecAgent#1791 → CONCIERGE#9274 (you)\n"
+            "Job: 0x4cb7...5b30\n────────────\n"
+            "「Hello, I have a leaking kitchen faucet and would like a quote for the "
+            "repair.」\n────────────"),
+    }
+    real_echo = {
+        "id": "todo_1785016375055_512e6ac5", "kind": "notification", "status": "pending",
+        "jobId": "0x4cb7dc24769104f13fd11dd406cbe77ce3102998cd6d3e954359dddfbbc25b30",
+        "userContent": (
+            "\U0001F4E4 [Sent] CONCIERGE#9274 (you) → SandboxAgent#1791\n"
+            "Job: 0x4cb7...5b30\n────────────\n"
+            "「This is an AI agent, not a person.」\n"
+            "────────────"),
+    }
+    real_decision = {
+        "id": "todo_1785004841636_54e817c9", "kind": "decision_request", "status": "pending",
+        "jobId": "0x4cb7dc24769104f13fd11dd406cbe77ce3102998cd6d3e954359dddfbbc25b30",
+        "choices": [{"key": "A", "label": "Retry after login"}, {"key": "B", "label": "Don't retry"}],
+        # The event name really does arrive at this escaping depth: JSON, inside a shell command,
+        # inside a JSON string. A regex written for bare quotes finds nothing and looks correct.
+        "llmContent": ("[RECOVERABLE_AI_DISPATCH_FAILURE]\n{\"retryCommand\":\"okx-a2a session "
+                       "send --content '{\\\"message\\\":{\\\"event\\\":\\\"job_asp_selected\\\"}}'\"}"),
+    }
+
+    ev_in = a2a.Event.from_payload(real_inbound)
+    ev_echo = a2a.Event.from_payload(real_echo)
+    ev_dec = a2a.Event.from_payload(real_decision)
+
+    r.check(
+        "A real live payload is read correctly — the documented shape is NOT what arrives",
+        (ev_in.message_text() == "Hello, I have a leaking kitchen faucet and would like a quote "
+                                 "for the repair."
+         and ev_in.from_agent_id == "1791"
+         and ev_in.job_id and not ev_in.is_platform_internal() and not ev_in.is_own_outbound()),
+        "The daemon does not send the shape the vendor documents. There is no top-level `type`\n"
+        "or `event`: `kind` carries a broad category (`notification`), the buyer's words are\n"
+        "wrapped in corner brackets inside a block of arrows and divider rules, and there is no\n"
+        "`fromAgentId` field at all — the sender exists only inside the rendered header line.\n"
+        "Handing that whole block to the strict parsers would have them reading a divider rule\n"
+        "as a tenant's answer, and a service parsed out of chrome is a wrong price sent later\n"
+        "under that tenant's name. This check holds the parser to the bytes that actually arrive.",
+        f"| kind as sent      : {ev_in.kind}\n"
+        f"| words extracted   : {ev_in.message_text()!r}\n"
+        f"| sender recovered  : {ev_in.from_agent_id} (from the header, no field carries it)\n"
+        f"| classified as     : buyer message",
+    )
+
+    r.check(
+        "The platform's event name is found however deeply it is escaped",
+        "job_asp_selected" in ev_dec.platform_events()
+        and a2a.Event.from_payload({"type": "sub_asp_selected"}).platform_events() == {"sub_asp_selected"},
+        "The real event name arrives as JSON inside a shell command inside a JSON string, so it\n"
+        "reads `\\\\\\\"event\\\\\\\":\\\\\\\"…` by the time it lands. A subscription check looking for a\n"
+        "top-level `sub_asp_selected` would never have fired on live traffic — auto-provisioning\n"
+        "would have been silently dead on arrival for the first real buyer, and this suite could\n"
+        "not have caught it, because this suite hands it the documented shape. Both are now read:\n"
+        "the documented one, which the fixtures above use, and the escaped one, which the wire uses.",
+        f"| found in the real decision_request : {sorted(ev_dec.platform_events())}\n"
+        f"| documented top-level shape still ok: "
+        f"{sorted(a2a.Event.from_payload({'type': 'sub_asp_selected'}).platform_events())}",
+    )
+
+    r.check(
+        "CONCIERGE never answers its own message, and never answers the platform's",
+        ev_echo.is_own_outbound() and ev_dec.is_platform_internal()
+        and not ev_in.is_own_outbound() and not ev_in.is_platform_internal(),
+        "Two ways to talk to yourself forever, both live on this box. The daemon echoes our own\n"
+        "sent messages back through the same queue that carries inbound ones, distinguished only\n"
+        "by `[Sent]` against `[Received]` in a rendered header — so an unguarded worker reads its\n"
+        "own reply next tick and answers it, with the buyer copied in, every tick. And a\n"
+        "`decision_request` is the platform asking US to choose (a failed dispatch offering\n"
+        "'retry / don't retry'); answering one outward delivers our internal plumbing to a\n"
+        "customer. Neither is prevented by a missing field or a lucky failure — both are named.",
+        f"| our own echo    : is_own_outbound={ev_echo.is_own_outbound()}  (never answered)\n"
+        f"| platform prompt : is_platform_internal={ev_dec.is_platform_internal()}  (never answered)\n"
+        f"| a real buyer    : answered normally",
+    )
+
+    unserved = provision.unserved_reply()
+    digits = [c for c in unserved if c.isdigit()]
+    first_line = unserved.splitlines()[0]
+    r.check(
+        "The reply to a stranger carries the disclosure and not one digit",
+        (not digits and "ai agent" in first_line.lower()
+         and ("human" in first_line.lower() or "person" in first_line.lower())),
+        "A message on a job with no tenant behind it used to fall through into nothing at all.\n"
+        "Refusing to quote was right — no profile, no prices, and inventing one is the single\n"
+        "thing this build exists to prevent — but refusing to act and refusing to speak are\n"
+        "different decisions, and conflating them meant a stranger got silence, which reads as a\n"
+        "broken listing rather than a principled one. So it answers, from stored prose, with the\n"
+        "disclosure on line one exactly as the email path requires, and with no figure of any\n"
+        "kind in it. Being asked to invent a price and declining is the demonstration.",
+        f"| first line : {first_line}\n"
+        f"| digits in the whole reply: {len(digits)}\n"
+        f"| length     : {len(unserved)} chars, assembled in provision.py, no model",
+    )
+
     # ---- info: the transport itself is not exercised here
     r.note(
         "The okx-a2a CLI itself is stubbed in this suite, deliberately",
