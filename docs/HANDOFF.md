@@ -770,6 +770,62 @@ workaround for this — re-check it after re-listing.
 **Before resubmitting for review:** a real inbound job must be seen to get a real reply. The daemon
 being up is not that proof, and was never that proof.
 
+### NEXT ACTION — prove the listing answers, then resubmit
+
+Nothing further should be built before this passes. Everything above says the listing *can*
+answer; none of it says it *has*. Two routes, and they prove slightly different things.
+
+**Route A — drive a client agent from the CLI (no browser).** Verified available 2026-07-26:
+`onchainos agent pre-check --role user` returns `canCreate: true`, `existingSameRole: []`. A
+second agent identity under the same owner wallet plays the client, designates #9274, and the
+`job_asp_selected` event lands on our own daemon.
+
+```bash
+# on the VPS, as the concierge user, HOME=/opt/concierge
+onchainos agent create --role user --name "<client agent name>"
+onchainos agent create-task \
+  --title "Concierge - test enquiry" \
+  --description "<the enquiry text>" \
+  --budget 0 --max-budget 0 --currency USDT \
+  --provider 9274 \
+  --service-id dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027 \
+  --visibility 1                                   # 1 = private; requires --provider
+```
+
+Then watch all three legs, which is the actual point of the exercise:
+
+```bash
+journalctl -u concierge-a2a -f                      # the event arriving over XMTP
+journalctl -u concierge-a2a-provision -f            # advanced/unserved != 0, failed == 0
+ls -lt /opt/concierge/.okx-agent-task/logs/ai-session-job*.log | head   # the handler session
+```
+
+What counts as a pass: an outbound message actually leaves (`[Sent]` in the notification queue, or
+an `advanced`/`unserved` count above zero), and no `failed`. A session log that ends in a refusal,
+a 401, or nothing at all is a fail no matter what the other units report.
+
+**Costs and cautions for Route A.** It creates a real second agent identity on the owner wallet and
+a real task on the marketplace, during a review cycle. `--visibility 1` keeps the task private to
+the designated provider rather than publicly listed. Budget 0 mirrors what the platform's own
+tester sent. It cannot be un-created, so it is an operator decision, not a harness step.
+
+**Route B — the manual test OKX themselves asked for.** From the rejection notice verbatim:
+
+> Register as an OKX.ai user, then try using your Agent by prompting "I would like to use the
+> services of agent ID {enter your agent ID}"
+
+Entry point is `web3.okx.com` (the OnchainOS/OKX AI product — the dev docs it cites live at
+`web3.okx.com/onchainos/dev-docs/okxai/how-to-become-a2a`). This route proves the path a real buyer
+takes, including the platform's own routing, which Route A partly bypasses. It needs a browser and
+an OKX.ai user account, so it is the operator's to run — the harness cannot.
+
+**Then, and only then:** resubmit for review via chat, per the rejection notice.
+
+**Re-check after re-listing:** the 07:12 `next-action` auto-reject (`serviceId … NOT in your
+registered catalog`) is expected to disappear once #9274 is listed again, since the serviceId is
+demonstrably ours. If it persists once listed, it is a platform-side bug worth raising with OKX
+rather than working around — do not special-case it in our code.
+
 ## Listing on OKX AI — decided pricing and the reasoning
 
 **Price (operator decision, 2026-07-25):** 2 USDT/week with 10 trials, then 5 USDT/week or
