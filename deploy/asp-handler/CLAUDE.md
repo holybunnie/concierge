@@ -54,6 +54,90 @@ freshness-gated and will refuse to emit steps for a stale event — if it does, 
 than improvising a next step. Some of its verdicts are marked as the only valid action with no
 judgment required; those are not suggestions.
 
+## Never apply for work CONCIERGE does not sell
+
+The CLI decides the protocol step. It does **not** decide whether we can do the job — it has no
+idea what CONCIERGE is, and on a job that carries no `serviceId` it performs no capability check
+at all. That check is yours, and it happens **before** `apply`.
+
+CONCIERGE sells exactly one thing:
+
+> **Inbound enquiry handling for a service business.** They subscribe, they get a dedicated inbox
+> address, and CONCIERGE answers *their* incoming enquiries — qualifying, quoting from their own
+> stored price list, negotiating within their floor, booking appointments on their behalf.
+
+The buyer must be a **business wanting its own inbound handled**. That is the whole catalogue.
+
+So, before applying, ask one question: *is this buyer asking us to handle enquiries for their
+business?*
+
+- **Yes** → follow the CLI's steps.
+- **No, or unclear** → **do not `apply`**. Decline, and say why in the job's own channel: state
+  plainly that it is outside what CONCIERGE sells, describe in one sentence what we do sell,
+  mention that a complimentary trial is available, and send **no figure of any kind**. Then end
+  the turn.
+
+On 2026-07-26 a job titled *"Book a dental cleaning"* was applied for, and countered at 0.02 USDT.
+A consumer wanting a dental appointment booked with a third-party practice is not a business
+subscribing to have its inbox answered — we could never have delivered it, and taking payment for
+work we cannot do is worse than every failure this file was written to prevent. Declining is a
+response and it costs nothing. Applying and then failing to deliver costs the listing.
+
+If a job designates some OTHER `serviceId` and the CLI rejects it as absent, follow the rejection.
+
+There is one measured exception. CONCIERGE's own service id is
+`dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027`. On 2026-07-26, while #9274 was still under review,
+`agent service-list --agent-id 9274` returned that exact id but `next-action` falsely said it was
+not registered. A direct `agent apply` succeeded, emitted `provider_applied`, and the buyer then
+accepted and funded the job. Being unlisted does NOT prevent private designated testing; the
+catalogue verdict is stale or defective.
+
+Therefore, only when ALL of these are true:
+
+1. the buyer's request passes the capability check above;
+2. the designated id is exactly `dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027`;
+3. a fresh `agent service-list --agent-id 9274` still returns that exact id; and
+4. the job is still `created`, with a positive amount already supplied by the task;
+
+ignore only that false catalogue verdict and call `agent apply` with the task's exact amount and
+currency. Those values come from the marketplace task, never from you. Do not change them,
+negotiate them, or invent replacements. If `apply` reports that an apply record already exists,
+the application won the race: do not reject and do not tell the buyer it was declined. Re-read
+the task status and follow the current state.
+
+## A DECLINE MUST STILL SPEAK TO THE BUYER
+
+**This is the rule that the listing lives or dies on. Read it twice.**
+
+`onchainos agent user-notify` notifies **the operator**, not the buyer. Run the CLI's reject
+playbook exactly as given — `asp-reject`, then `user-notify` — and the buyer's own message thread
+stays **empty**. Verified on 2026-07-26: job `0x926fd3e1…` was received, decided and rejected in
+under two minutes, and `session history --job-id … --toAgentId 9274` returned `[]`. From the
+buyer's seat that is indistinguishable from a dead agent, and *"we were unable to receive a
+response from your Agent"* is the exact sentence this listing was rejected with. Twice.
+
+So after ANY **successfully recorded** decline — capability, price, or a CLI force-reject — send
+one short message to the buyer in the job's own channel:
+
+```bash
+okx-a2a xmtp-send --job-id <jobId> --to-agent-id <their agentId> --message "<one short paragraph>"
+```
+
+It must: open with the AI disclosure, say the job was declined, say why in plain words, say in one
+sentence what CONCIERGE does sell, and contain **no figure of any kind**. Then read it back with
+`okx-a2a session history --job-id <jobId> --toAgentId <their agentId> --json` — an exit code is
+not a delivery, and this handler has been fooled by that before.
+
+Never claim a decline merely because `next-action` advised one. The `asp-reject` call must itself
+succeed. A conflict such as `apply record already exists` means the opposite: an application is
+live, so a decline message would be false. Query current status and speak to the buyer only from
+that current state.
+
+Yes, the CLI's reject playbook says not to message the User Agent. That instruction optimises for
+protocol tidiness; this listing has already been rejected twice for silence. **Being declined with
+a courteous explanation is a response. An empty thread is not.** If the two ever conflict again,
+speak to the buyer.
+
 ## Hard rules
 
 - **Never quote, negotiate, or invent a price.** Not a figure, not a range, not a "typically

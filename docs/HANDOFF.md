@@ -1,33 +1,67 @@
 # HANDOFF
 
-Resume point for a session starting cold. **Current as of 2026-07-26 16:30 UTC.**
+Resume point for a session starting cold. **Current as of 2026-07-26 20:40 UTC.**
 
 **Deadline: 2026-07-27 22:59 UTC — about 30 hours remain.**
 
 ---
 
-## 🛑 RESUME HERE — paused 2026-07-26, mid-task
+## 🛑 RESUME HERE — paid private path proven; one review decision remains
 
-**The OKX listing (agent #9274) was REJECTED on 2026-07-26 for not responding.** The causes were
-found and fixed; the fixes are verified live, committed and pushed (`8ecfda4`, `e5e3f9c`), and the
-VPS md5-matches the commit. Read **"Listing REJECTED 2026-07-26"** below for the post-mortem — the
-short version is that the review test's AI sessions were dying on a 401 while every liveness signal
-stayed green, because liveness and answerability are not the same property.
+**The original rejection cause is fixed and now proven over the real wire.** Agent #9274 receives
+events, runs authenticated handler sessions, and puts a buyer-visible message in the job thread.
+The earlier “no real inbound job has answered” blocker is closed.
 
-**The one thing still outstanding:** no real inbound job has been seen to get a real reply since the
-fixes. Nothing should be built, and the listing must NOT be resubmitted for review, before that
-passes. Commands and pass criteria: **"NEXT ACTION — prove the listing answers"** below.
+**Stronger proof completed 2026-07-26:** existing User agent #9630 created private in-scope job
+`0xbf71eee8765a2aa68ec98823236d249ea438bff336c2ee12a8fb430db2b2fb53` for #9274 at 0.02 USDT.
+The wallet was funded with 0.021 USD₮0 on X Layer. While #9274 was still `not listed` /
+`Listing under review`:
 
-**Awaiting an operator decision — do not act unilaterally.** The choice was between Route A (create
-a `user`-role agent on the owner wallet and fire a designated task at #9274 — fast, but adds a
-permanent second identity and a real marketplace task mid-review) and Route B (the manual OKX.ai
-test OKX themselves asked for — proves the full buyer path including platform routing). The operator
-asked to clarify something and had not answered when work paused. **Re-ask before running Route A;
-it cannot be undone.**
+- direct `agent apply` succeeded (`txHash 0xf5472d37…adf115`);
+- both sides received `provider_applied`;
+- `confirm-accept` succeeded and the task became `accepted`;
+- 0.02 USD₮0 moved into escrow, leaving 0.001 in the wallet;
+- a text proof was delivered (`txHash 0x2c9d4283…e74fceee`) and the task became `submitted`.
 
-Current live state, all green as of the pause: `concierge-a2a` active with `cwd=/opt/concierge-asp`,
-`concierge-a2a-provision` running clean every minute (`failed: 0`), `concierge-a2a-readiness`
-green on its 10-minute timer with `probe authenticated`.
+This settles the disputed assumption: **an unlisted ASP can be privately tested.** The application
+API works. The defect is specifically `next-action`'s designated-catalogue check: it says service
+`dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027` is absent while
+`agent service-list --agent-id 9274` returns that exact id.
+
+**The handler fix is deployed and md5-matched (`e50c05899fee2da1c2c05183ed5e9e99`).** It now:
+
+- rejects consumer/third-party jobs such as “book me a dental cleaning” before applying;
+- accepts only a business asking CONCIERGE to handle that business's own inbound enquiries;
+- overrides only the measured false-catalogue verdict, only for the exact registered service id,
+  after a fresh service-list check and only with the task's own positive amount/currency;
+- never claims a decline unless `asp-reject` itself succeeded; `apply record already exists` means
+  an application is live, not declined;
+- sends a decline into the buyer's actual XMTP job thread and reads it back as `published`.
+
+**One deliberate test cleanup remains:** job `0xbf71…fb53` is `submitted` with its 0.02 in escrow.
+The mandatory buyer review decision is queued and active. On resume, approve it through
+`pending-decisions-v2 resolve-prompt` (answer `A`), follow the returned relay playbook, then verify
+the task reaches `completed` and the wallet balance/reward is visible. Do not call `complete`
+directly: OKX correctly rejects that until the review gate is resolved.
+
+**Other honest remaining work:**
+
+1. OKX must finish review and actually list #9274. After listing, verify the public profile exposes
+   the service plus the intended **20 USDT/month, 3-day trial**; the under-review `service-list`
+   currently shows `fee: null`, `freeTrial: null`, so the live price is not independently visible.
+2. Raise the contradictory catalogue evidence with OKX if `next-action` still rejects the exact
+   service id. Do not describe this as an “unlisted agents cannot apply” limitation — disproven.
+3. The one-off `job_accepted` event is not auto-provisioned: the worker records it as
+   `unaddressable` because the rendered operator notification contains no sender. Subscription
+   provisioning remains separately covered by its suite, but a one-off accepted task should not
+   be advertised as automatically onboarded until this event-routing gap is designed and tested.
+4. `/dev/null` on the VPS had become a root-owned regular file (`0644`), causing handler shell
+   failures. It was restored to character device `1:3`, mode `0666`, and verified writable as the
+   `concierge` user. Root cause is unknown; re-check after reboot.
+5. Pre-existing security debt remains: rotate the exposed Cal.com key and VPS root password, and
+   remove literal database-role passwords from `schema.sql`.
+
+Current live state: all six services/timers active, `/readyz` ready, A2A answerability authenticated.
 
 ---
 
@@ -826,10 +860,15 @@ workaround for this — re-check it after re-listing.
 **Before resubmitting for review:** a real inbound job must be seen to get a real reply. The daemon
 being up is not that proof, and was never that proof.
 
-### NEXT ACTION — prove the listing answers, then resubmit
+### HISTORICAL TEST PLAN — completed 2026-07-26
 
-Nothing further should be built before this passes. Everything above says the listing *can*
-answer; none of it says it *has*. Two routes, and they prove slightly different things.
+**This plan has been executed. Do not create another identity or repeat the zero-budget task.**
+User agent #9630 already exists, the buyer-visible response passed, and the stronger positive-value
+application/acceptance proof is recorded at the top of this handoff. The commands below remain as
+incident history only.
+
+At the time this was written, nothing below had yet proved the listing answered. Two routes were
+recorded because they proved slightly different things.
 
 **Route A — drive a client agent from the CLI (no browser).** Verified available 2026-07-26:
 `onchainos agent pre-check --role user` returns `canCreate: true`, `existingSameRole: []`. A

@@ -374,9 +374,9 @@ def _run_checks(r, tenant_id, profile, stored_price) -> None:
         "different question than the one asked. The model contributed the qualifier CLASS; what\n"
         "it could not do is wave it through. Coverage is looked up in the stored profile, and an\n"
         "uncovered class can only ever add to `uncovered` — the merge in `engine.decide` takes\n"
-        "`max(read.comprehension, understanding.confidence)`, so a confident model can raise how\n"
-        "much of the message we account for and has no arithmetic route to lowering the bar for\n"
-        "sending. The comprehension floor is a cap on autonomy, never a fourth weighted term.",
+        "`read.comprehension` unchanged, so a confident model has no arithmetic route to raising\n"
+        "the deterministic score or lowering the bar for sending. The comprehension floor is a\n"
+        "cap on autonomy, never a fourth weighted term.",
         f"| profile coverage for 'location': {covered}\n"
         f"| state after: {qualified.state_after}   action: {qualified.action}\n"
         f"| digits in the reply body: {_figures(qualified.reply)}\n"
