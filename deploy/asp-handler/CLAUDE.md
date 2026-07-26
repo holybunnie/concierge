@@ -62,25 +62,50 @@ at all. That check is yours, and it happens **before** `apply`.
 
 CONCIERGE sells exactly one thing:
 
-> **Inbound enquiry handling for a service business.** They subscribe, they get a dedicated inbox
-> address, and CONCIERGE answers *their* incoming enquiries — qualifying, quoting from their own
+> **Inbound enquiry handling for a service business.** They buy a 30-day engagement, get a
+> dedicated inbox address, and CONCIERGE answers *their* incoming enquiries — qualifying, quoting from their own
 > stored price list, negotiating within their floor, booking appointments on their behalf.
 
 The buyer must be a **business wanting its own inbound handled**. That is the whole catalogue.
 
-OKX currently exposes this as a **one-off A2A job**, not an Agent Seller subscription. A private
-zero-budget job is the free-test path; a paid job uses its own negotiated escrow amount. The
-three-day period after delivery is the buyer's review deadline, not a product trial. Never promise
-a marketplace monthly subscription or free-trial field: the live service record has neither.
+OKX currently exposes this as a **one-off A2A job**, not an Agent Seller subscription. Each
+accepted job buys 30 days of service. The first 10 distinct buyers receive one launch engagement
+for 2.5 USDT; later engagements, including repeat work, cost 10 USDT. The three-day period after
+delivery is the buyer's review deadline, not a product trial. Never promise a marketplace monthly
+subscription or free-trial field: the live service record has neither.
 
 So, before applying, ask one question: *is this buyer asking us to handle enquiries for their
 business?*
 
-- **Yes** → follow the CLI's steps.
+- **Yes** → enforce the commercial price below, then follow the CLI's steps only if it passes.
 - **No, or unclear** → **do not `apply`**. Decline, and say why in the job's own channel: state
   plainly that it is outside what CONCIERGE sells, describe in one sentence what we do sell,
-  mention that a private zero-budget test job is available, and send **no figure of any kind**. Then end
-  the turn.
+  and send no tenant/customer price. Then end the turn.
+
+## Enforce our engagement price before applying
+
+The task amount is an offer, not our policy. Before every `apply`, resolve the buyer agent id and
+the task's amount/currency from the envelope or a fresh task-status read, then run:
+
+```bash
+/opt/concierge/.venv/bin/python -m concierge.marketplace_pricing \
+  --job-id <jobId> --buyer-agent-id <buyerAgentId> \
+  --amount <taskAmount> --currency <taskCurrency>
+```
+
+This database-backed command is the only pricing authority. It atomically handles simultaneous
+buyers and returns JSON containing `accepted`, `required_price`, `is_promo`, and `term_days`.
+
+- If `accepted` is true, apply using exactly that validated task amount and currency.
+- If `accepted` is false, do not apply. Run the normal `asp-reject` playbook, then tell the buyer
+  in the job channel that this 30-day engagement requires the returned `required_price` USDT and
+  they may create a correctly priced job. Read that message back as `published`.
+- If the command errors or buyer identity/amount/currency cannot be resolved, fail closed: do not
+  apply, and tell the buyer that price validation is temporarily unavailable.
+
+Never estimate the promotion count yourself, reserve a slot in prose, accept another currency, or
+substitute a different amount in `agent apply`. A rejected/mismatched offer does not consume a
+promotional slot.
 
 On 2026-07-26 a job titled *"Book a dental cleaning"* was applied for, and countered at 0.02 USDT.
 A consumer wanting a dental appointment booked with a third-party practice is not a business
@@ -102,11 +127,11 @@ Therefore, only when ALL of these are true:
 1. the buyer's request passes the capability check above;
 2. the designated id is exactly `dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027`;
 3. a fresh `agent service-list --agent-id 9274` still returns that exact id; and
-4. the job is still `created`, with a positive amount already supplied by the task;
+4. the job is still `created`, with a positive amount already supplied by the task; and
+5. `concierge.marketplace_pricing` accepted that exact buyer/job/amount/currency;
 
 ignore only that false catalogue verdict and call `agent apply` with the task's exact amount and
-currency. Those values come from the marketplace task, never from you. Do not change them,
-negotiate them, or invent replacements. If `apply` reports that an apply record already exists,
+currency. Do not change the task values. If `apply` reports that an apply record already exists,
 the application won the race: do not reject and do not tell the buyer it was declined. Re-read
 the task status and follow the current state.
 
@@ -128,8 +153,10 @@ one short message to the buyer in the job's own channel:
 okx-a2a xmtp-send --job-id <jobId> --to-agent-id <their agentId> --message "<one short paragraph>"
 ```
 
-It must: open with the AI disclosure, say the job was declined, say why in plain words, say in one
-sentence what CONCIERGE does sell, and contain **no figure of any kind**. Then read it back with
+It must: open with the AI disclosure, say the job was declined, say why in plain words, and say in
+one sentence what CONCIERGE does sell. A price-mismatch decline must include only the deterministic
+required engagement price returned by `concierge.marketplace_pricing`; every other decline contains
+no figure. Then read it back with
 `okx-a2a session history --job-id <jobId> --toAgentId <their agentId> --json` — an exit code is
 not a delivery, and this handler has been fooled by that before.
 
@@ -145,11 +172,10 @@ speak to the buyer.
 
 ## Hard rules
 
-- **Never quote, negotiate, or invent a price.** Not a figure, not a range, not a "typically
-  around". CONCIERGE's prices come from a tenant's stored profile through `pricing.py`, and the
-  client-facing conversation is handled by the Python worker (`concierge.provision_worker`), not by
-  you. A number produced in this session would be a fabricated one, and making that structurally
-  impossible is the entire product.
+- **Never invent a price.** CONCIERGE's engagement price comes only from
+  `concierge.marketplace_pricing`; the tenant's customer prices come only from its stored profile
+  through `pricing.py`. These are separate price domains. The client-facing conversation is
+  handled by the Python worker (`concierge.provision_worker`), not by you.
 - **Do not modify `/opt/concierge`.** The application repo is not yours to edit, and a job handler
   that changes application code mid-review is a much worse outcome than a job it could not finish.
 - **Do not install, upgrade, or `npm install -g` anything.** This box is shared with other

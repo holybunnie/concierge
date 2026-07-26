@@ -44,6 +44,15 @@ The mandatory buyer review decision is queued and active. On resume, approve it 
 the task reaches `completed` and the wallet balance/reward is visible. Do not call `complete`
 directly: OKX correctly rejects that until the review gate is resolved.
 
+**Deterministic pricing is deployed and live as of 2026-07-26 23:17 UTC.** The production probe
+for buyer #9630 returned `required_price: 2.5`, `is_promo: true`, `promo_number: 1`, and did not
+reserve the slot because the probe deliberately offered zero. All services are green and the ASP
+is authenticated/answerable. The requested fresh unattended paid test is now blocked only by
+funding: the owner/test wallet has **0.001 USD₮0 liquid**, while the first real promotional job
+must escrow **2.5 USD₮0**. Fund at least another **2.499 USD₮0 on X Layer** before creating it
+(allow a small margin if the platform requires one). The old 0.02 escrow is not approved without
+an explicit instruction and would still be insufficient if released.
+
 **Product-model correction, verified live 2026-07-26:** OKX currently exposes #9274's A2A
 service as one-off escrowed jobs. `service-list` returns `Fee: negotiable`, `fee: null`,
 `freeTrial: null`, and `subscription: []`. Current OKX payment documentation says recurring
@@ -53,6 +62,12 @@ subscriptions do not yet support Agent Sellers. Therefore:
 - a paid engagement is one accepted job with its own escrow amount;
 - the three days shown after delivery are the buyer review deadline, not a product trial;
 - do not claim a 20 USDT/month marketplace subscription or a three-day subscription trial.
+
+**Commercial policy decided 2026-07-26:** every accepted A2A job is one 30-day engagement. The
+first 10 distinct buyers receive one launch engagement at **2.5 USDT**; all later engagements,
+including repeat jobs, are **10 USDT**. There is no free-trial claim. Enforcement is atomic in
+`claim_marketplace_price`: the ASP applies only when the task already carries the exact required
+USDT amount, and a mismatched offer does not consume a promotional slot.
 
 **Other honest remaining work:**
 
@@ -669,14 +684,14 @@ Still outstanding:
 | Owner wallet (escrow payee) | `0x45818399a3e0f756cb26ff2fcd13a4824313df94` |
 | XMTP communication address | `0xb48eDa9d210dc9a36457aB5aB61799e5607C10ae` |
 | Login | `melindacharles82@gmail.com` (TEE keys, no seed phrase) |
-| Service | Inbound enquiry handling — negotiable one-off A2A engagement; zero-budget private test supported |
+| Service | Inbound enquiry handling — first 10 distinct buyers: 2.5 USDT/30 days; then 10 USDT/30 days |
 | State | `approvalLabel: "Listing under review"`, `onlineStatus: 1` |
 | Register tx | `0xdaaaedb1de705e05edb4d45dc6a488b80c2b160f6c5ca86496a536975714d2dd` |
 
 **Live pricing truth supersedes the earlier registration assumption.** #9274's service record
 contains no fee, free trial or subscription plan. Agent Seller A2A work is per-job escrow, and
-current OKX recurring-subscription documentation explicitly excludes Agent Sellers. Free
-evaluation uses a private zero-budget job; paid work uses the amount agreed for that job.
+current OKX recurring-subscription documentation explicitly excludes Agent Sellers. The launch
+price is therefore enforced on each individual job by CONCIERGE itself.
 
 **`validate-listing` is not the whole gate.** It returned `pass: true` on a `serviceDescription`
 the API then rejected with `code=81001: exceeds max length 500`. QA passing is necessary, not
@@ -936,9 +951,11 @@ rather than working around — do not special-case it in our code.
 ## Listing on OKX AI — decided pricing and the reasoning
 
 **Pricing correction (live evidence, 2026-07-26):** the A2A listing accepts individual jobs with a
-negotiated or buyer-supplied task amount. It does not expose the earlier 20 USDT/month plan or a
-three-day product trial. A zero-budget private job is the supported free-test route. A paid job
-uses escrow and is released after buyer acceptance.
+buyer-supplied task amount. It does not expose the earlier 20 USDT/month plan or a three-day
+product trial. The first 10 distinct buyers pay 2.5 USDT for one 30-day launch engagement; later
+and repeat engagements pay 10 USDT for 30 days. Each job uses escrow and is released after buyer
+acceptance. The ASP cannot rewrite an offer when applying, so an incorrectly priced job is
+declined with the exact required price and the buyer can create a corrected job.
 
 **What CONCIERGE sells here is one A2A engagement to set up and handle a business's inbound.**
 Note the two prices, which are easy to conflate and must not be:

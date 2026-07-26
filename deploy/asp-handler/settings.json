@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(onchainos *)",
-      "Bash(okx-a2a *)"
+      "Bash(okx-a2a *)",
+      "Bash(/opt/concierge/.venv/bin/python -m concierge.marketplace_pricing *)"
     ]
   }
 }

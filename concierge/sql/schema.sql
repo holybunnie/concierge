@@ -100,6 +100,21 @@ CREATE TABLE IF NOT EXISTS gap_events (
 
 CREATE INDEX IF NOT EXISTS gap_events_tenant ON gap_events (tenant_id, escalated_at);
 
+-- Marketplace commercial policy. This is deliberately not tenant data: it is the global,
+-- race-sensitive record of which distinct buyers received the finite launch promotion.
+-- concierge_app has no table grant. It can only attempt one atomic reservation through the
+-- SECURITY DEFINER function below.
+CREATE TABLE IF NOT EXISTS marketplace_engagements (
+    job_id          text PRIMARY KEY,
+    buyer_agent_id  text        NOT NULL,
+    price_usdt      numeric(20,6) NOT NULL CHECK (price_usdt > 0),
+    is_promo        boolean     NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS marketplace_engagements_buyer
+    ON marketplace_engagements (buyer_agent_id);
+
 -- ---------------------------------------------------------------- row-level security
 
 ALTER TABLE tenants     ENABLE ROW LEVEL SECURITY;
@@ -177,6 +192,69 @@ $$ SELECT receipt_id, action, decision, rule_checked, within_rules, content_hash
           xlayer_tx, created_at
    FROM receipts WHERE receipt_id = rid $$;
 
+-- Atomically quote and, only when the offered amount is exact, reserve the launch price.
+-- The transaction-scoped advisory lock prevents buyers 10 and 11 both seeing the last slot.
+-- A distinct buyer receives at most one promotional engagement; repeat work is full price.
+CREATE OR REPLACE FUNCTION claim_marketplace_price(
+    job text, buyer text, offered numeric, currency text
+) RETURNS TABLE (
+    accepted boolean, required_price numeric, is_promo boolean, promo_number integer, reason text
+) LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS
+$$
+DECLARE
+    existing marketplace_engagements%ROWTYPE;
+    prior_promo boolean;
+    used_promos integer;
+    required numeric(20,6);
+    promo boolean;
+    position integer;
+BEGIN
+    IF nullif(btrim(job), '') IS NULL OR nullif(btrim(buyer), '') IS NULL THEN
+        RAISE EXCEPTION 'job and buyer are required';
+    END IF;
+
+    PERFORM pg_advisory_xact_lock(9274, 10);
+
+    SELECT * INTO existing FROM marketplace_engagements m WHERE m.job_id = btrim(job);
+    IF FOUND THEN
+        RETURN QUERY SELECT
+            upper(btrim(currency)) = 'USDT' AND offered = existing.price_usdt,
+            existing.price_usdt, existing.is_promo,
+            CASE WHEN existing.is_promo THEN
+                (SELECT count(*)::integer FROM marketplace_engagements m
+                 WHERE m.is_promo AND (m.created_at, m.job_id) <=
+                       (existing.created_at, existing.job_id))
+            ELSE NULL END,
+            CASE WHEN upper(btrim(currency)) <> 'USDT' THEN 'currency_must_be_usdt'
+                 WHEN offered <> existing.price_usdt THEN 'amount_mismatch'
+                 ELSE 'already_reserved' END;
+        RETURN;
+    END IF;
+
+    SELECT coalesce(bool_or(m.is_promo), false) INTO prior_promo
+      FROM marketplace_engagements m WHERE m.buyer_agent_id = btrim(buyer);
+    SELECT count(*)::integer INTO used_promos
+      FROM marketplace_engagements m WHERE m.is_promo;
+
+    promo := NOT prior_promo AND used_promos < 10;
+    required := CASE WHEN promo THEN 2.5 ELSE 10 END;
+    position := CASE WHEN promo THEN used_promos + 1 ELSE NULL END;
+
+    IF upper(btrim(currency)) <> 'USDT' THEN
+        RETURN QUERY SELECT false, required, promo, position, 'currency_must_be_usdt'::text;
+        RETURN;
+    END IF;
+    IF offered <> required THEN
+        RETURN QUERY SELECT false, required, promo, position, 'amount_mismatch'::text;
+        RETURN;
+    END IF;
+
+    INSERT INTO marketplace_engagements(job_id, buyer_agent_id, price_usdt, is_promo)
+    VALUES (btrim(job), btrim(buyer), required, promo);
+    RETURN QUERY SELECT true, required, promo, position, 'reserved'::text;
+END
+$$;
+
 -- Phase 8's scheduled worker has the opposite problem to the resolvers above: it is not answering
 -- an inbound message, so nothing hands it a tenant to scope to. It must ask "which tenants exist"
 -- before it can open a scoped session for each.
@@ -209,6 +287,7 @@ GRANT EXECUTE ON FUNCTION resolve_tenant_by_inbound_address(text) TO concierge_a
 GRANT EXECUTE ON FUNCTION resolve_tenant_by_a2a_job(text) TO concierge_app;
 GRANT EXECUTE ON FUNCTION resolve_tenant_by_engagement(text) TO concierge_app;
 GRANT EXECUTE ON FUNCTION public_receipt(uuid) TO concierge_app;
+GRANT EXECUTE ON FUNCTION claim_marketplace_price(text, text, numeric, text) TO concierge_app;
 GRANT EXECUTE ON FUNCTION current_tenant() TO concierge_app;
 
 -- Explicitly withhold the escape hatches. Without BYPASSRLS (default) and without table
@@ -240,3 +319,5 @@ ALTER ROLE concierge_worker NOBYPASSRLS;
 
 REVOKE EXECUTE ON FUNCTION scheduler_tenant_ids() FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION scheduler_tenant_ids() FROM concierge_app;
+REVOKE ALL ON marketplace_engagements FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION claim_marketplace_price(text, text, numeric, text) FROM PUBLIC;

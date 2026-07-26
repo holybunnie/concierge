@@ -679,6 +679,26 @@ def provisioning() -> int:
     return r.render()
 
 
+def marketplace_pricing() -> int:
+    r = Report(
+        "marketplace-pricing",
+        "Deterministic 30-day A2A engagement pricing",
+        preamble=(
+            "\nThis suite proves the first ten distinct buyers receive one 2.5 USDT engagement,\n"
+            "later and repeat engagements require 10 USDT, mismatches consume no slot, and the\n"
+            "global registry is not directly accessible to the web application.\n"
+        ),
+    )
+    try:
+        from concierge import verify_marketplace_pricing
+        verify_marketplace_pricing.run(r)
+    except Exception as e:
+        import traceback
+        r.check("the marketplace-pricing harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}", traceback.format_exc())
+    return r.render()
+
+
 def intelligence() -> int:
     r = Report(
         "intelligence",
@@ -730,6 +750,7 @@ SUITES = {
     "scheduler": scheduler,
     "product-gaps": product_gaps,
     "provisioning": provisioning,
+    "marketplace-pricing": marketplace_pricing,
 }
 
 

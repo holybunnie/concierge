@@ -81,12 +81,12 @@ echo "==> fixing ownership and restarting the app"
   chown concierge:concierge \
     $REMOTE/.onchainos/task/pending-decisions-new.json \
     $REMOTE/.onchainos/task/pending-decisions-new.lock 2>/dev/null || true
-  # Handler sessions must be able to run the two marketplace CLIs named in their role file.
-  # Install the narrow allow-list only when no operator-managed settings file already exists.
-  if [ ! -e $REMOTE/.claude/settings.json ]; then
-    install -o concierge -g concierge -m 600 \
-      $REMOTE/deploy/asp-handler/settings.json $REMOTE/.claude/settings.json
-  fi
+  # Handler sessions must be able to run exactly the marketplace CLIs and deterministic pricing
+  # command named in their role file. This repository owns that narrow service-account policy.
+  install -o concierge -g concierge -m 600 \
+    $REMOTE/deploy/asp-handler/settings.json $REMOTE/.claude/settings.json
+  cd $REMOTE
+  sudo -u concierge -H $REMOTE/.venv/bin/python -c 'from concierge import db; db.migrate()'
   systemctl restart concierge
   $([[ $RESTART_A2A == 1 ]] && echo 'systemctl restart concierge-a2a; sleep 60' || true)
   sleep 4
