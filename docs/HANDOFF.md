@@ -1,8 +1,33 @@
 # HANDOFF
 
-Resume point for a session starting cold. **Current as of 2026-07-24.**
+Resume point for a session starting cold. **Current as of 2026-07-26 16:30 UTC.**
 
-**Deadline: 2026-07-27 22:59 UTC — 4 days 20 hours remain.**
+**Deadline: 2026-07-27 22:59 UTC — about 30 hours remain.**
+
+---
+
+## 🛑 RESUME HERE — paused 2026-07-26, mid-task
+
+**The OKX listing (agent #9274) was REJECTED on 2026-07-26 for not responding.** The causes were
+found and fixed; the fixes are verified live, committed and pushed (`8ecfda4`, `e5e3f9c`), and the
+VPS md5-matches the commit. Read **"Listing REJECTED 2026-07-26"** below for the post-mortem — the
+short version is that the review test's AI sessions were dying on a 401 while every liveness signal
+stayed green, because liveness and answerability are not the same property.
+
+**The one thing still outstanding:** no real inbound job has been seen to get a real reply since the
+fixes. Nothing should be built, and the listing must NOT be resubmitted for review, before that
+passes. Commands and pass criteria: **"NEXT ACTION — prove the listing answers"** below.
+
+**Awaiting an operator decision — do not act unilaterally.** The choice was between Route A (create
+a `user`-role agent on the owner wallet and fire a designated task at #9274 — fast, but adds a
+permanent second identity and a real marketplace task mid-review) and Route B (the manual OKX.ai
+test OKX themselves asked for — proves the full buyer path including platform routing). The operator
+asked to clarify something and had not answered when work paused. **Re-ask before running Route A;
+it cannot be undone.**
+
+Current live state, all green as of the pause: `concierge-a2a` active with `cwd=/opt/concierge-asp`,
+`concierge-a2a-provision` running clean every minute (`failed: 0`), `concierge-a2a-readiness`
+green on its 10-minute timer with `probe authenticated`.
 
 ---
 
