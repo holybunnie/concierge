@@ -195,6 +195,106 @@ def available() -> bool:
     return os.path.exists(b) or shutil.which(b) is not None
 
 
+def healthy() -> bool:
+    """Read the daemon's lock metadata without invoking a CLI that chmods its state directory."""
+    try:
+        home = os.environ.get("HOME", "/opt/concierge")
+        lock = os.path.join(home, ".okx-agent-task", "run", "daemon.lock", "owner.json")
+        with open(lock, encoding="utf-8") as f:
+            metadata = json.load(f)
+        pid = int(metadata["pid"])
+        os.kill(pid, 0)
+        return metadata.get("ready") is True or bool(metadata.get("readyAt"))
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return False
+
+
+# The doctor line that reports whether the bound AI provider CLI can authenticate. Matched on the
+# stable prefix rather than the whole sentence: the provider name and binary path both vary, and on
+# a shared box they vary per user (running doctor as root reports a different provider entirely).
+_PROVIDER_LINE = re.compile(r"AI provider CLI:\s*(.+)")
+
+# The provider binary's own path, as doctor reports it ("claude CLI at /usr/local/bin/claude is
+# logged in"). Read rather than assumed: the bound provider is configurable and is genuinely
+# different per user on this box — running doctor as root reports `codex`, not `claude`.
+_PROVIDER_BIN = re.compile(r"\bat\s+(/\S+)")
+
+# What a provider CLI says when it cannot authenticate. `401`/`invalid` are the words from the
+# three sessions that actually cost the listing; `not logged in` is what the CLI says when the
+# credential is simply absent.
+_AUTH_FAILURE = re.compile(
+    r"not logged in|please run /login|api key is invalid|authentication_failed|401",
+    re.I,
+)
+
+
+def provider_auth_ok() -> tuple[bool, str]:
+    """Can the daemon's bound AI provider actually authenticate?
+
+    This exists because of what "responsive" turned out not to mean on 2026-07-25. The daemon was
+    up, heartbeating every 60s and reporting `onlineStatus: 1` the entire time, while all three of
+    the reviewer's job sessions died on `401 API key is invalid` after three minutes each. Nothing
+    anywhere went red. The listing was rejected for silence that every liveness signal we had was
+    reporting as health.
+
+    Liveness and the ability to answer are separate properties, and only the second one is the
+    product. This checks the second.
+
+    Returns `(ok, detail)` rather than raising: a caller wants to log the reason, and "doctor could
+    not run" and "provider is logged out" are different operational facts that both mean the same
+    thing to a buyer — nobody is going to answer them.
+    """
+    if not available():
+        return False, f"okx-a2a not found at {binary()!r}"
+    try:
+        proc = subprocess.run(
+            [binary(), "doctor"],
+            capture_output=True, text=True, timeout=TIMEOUT_S,
+            env={**os.environ, "HOME": os.environ.get("HOME", "/opt/concierge")},
+        )
+    except subprocess.TimeoutExpired:
+        return False, f"okx-a2a doctor timed out after {TIMEOUT_S}s"
+
+    match = _PROVIDER_LINE.search(proc.stdout)
+    if not match:
+        return False, f"okx-a2a doctor reported no AI provider line (exit {proc.returncode})"
+    detail = match.group(1).strip()
+    # Doctor states the negative explicitly ("… is not logged in"), so the negative is what we
+    # test. Treating "contains 'logged in'" as success would pass on exactly the failing string.
+    if "not logged in" in detail or "logged in" not in detail:
+        return False, detail
+
+    # Doctor saying "logged in" is NOT sufficient, and this is the whole reason this function is
+    # not three lines long. Measured on 2026-07-26: with the credential removed from the
+    # environment, doctor still reported `claude CLI at /usr/local/bin/claude is logged in` while
+    # that very binary answered `Not logged in · Please run /login`. Doctor inspects stored
+    # credentials; a job session needs a credential that actually authenticates, and those are
+    # different questions. Believing doctor is how a 401 stays invisible for nine hours.
+    #
+    # So we ask the provider itself, with the smallest prompt that still requires a round trip.
+    bin_match = _PROVIDER_BIN.search(detail)
+    if not bin_match:
+        return True, f"{detail} (unprobed: could not read provider path)"
+    provider_bin = bin_match.group(1)
+    try:
+        probe = subprocess.run(
+            [provider_bin, "-p", "ping"],
+            capture_output=True, text=True, timeout=TIMEOUT_S,
+            env={**os.environ, "HOME": os.environ.get("HOME", "/opt/concierge")},
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        return False, f"{detail} but probe failed to run: {type(exc).__name__}: {exc}"
+
+    combined = f"{probe.stdout}\n{probe.stderr}"
+    if _AUTH_FAILURE.search(combined):
+        # The model declining to answer is not an auth failure, and must not be read as one — only
+        # the auth markers count. A refusal still proves the credential worked.
+        return False, f"{detail} but probe could not authenticate: {combined.strip()[:200]}"
+    if probe.returncode != 0:
+        return False, f"{detail} but probe exited {probe.returncode}: {combined.strip()[:200]}"
+    return True, f"{detail} (probe authenticated)"
+
+
 def _run(args: list[str]) -> dict[str, Any] | list[Any]:
     if not available():
         raise A2AUnavailable(

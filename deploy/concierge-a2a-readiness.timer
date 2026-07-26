@@ -1,0 +1,11 @@
+[Unit]
+Description=Check every 10 minutes that the listing can actually answer, not just that it is online
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+Persistent=true
+Unit=concierge-a2a-readiness.service
+
+[Install]
+WantedBy=timers.target

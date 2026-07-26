@@ -1,0 +1,38 @@
+[Unit]
+# Answerability, not liveness. concierge-watchdog.service already curls /readyz every minute and
+# concierge-a2a.service already keeps the daemon alive — and on 2026-07-25 both were green while
+# the listing was being rejected for not responding, because the AI sessions the daemon spawns
+# were failing to authenticate (401) and nothing checked that.
+#
+# Deliberately NOT folded into /readyz: `okx-a2a doctor` makes real network calls and takes
+# seconds, and the watchdog runs every 60s. This runs on its own slower timer instead.
+Description=CONCIERGE A2A answerability check (transport + daemon + AI provider auth)
+After=network-online.target concierge-a2a.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=concierge
+Group=concierge
+WorkingDirectory=/opt/concierge
+
+# Same two environment facts as the transport unit: HOME locates the daemon's own state on a box
+# shared with the rwoo project, and PATH must put OUR copy of the CLI ahead of the global one.
+# Running doctor without these reports another user's provider binding entirely — verified.
+Environment=HOME=/opt/concierge
+Environment=PATH=/opt/concierge/a2a/node_modules/.bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/opt/concierge/.env
+
+ExecStart=/opt/concierge/.venv/bin/python -m concierge.a2a_readiness
+
+StandardOutput=journal
+StandardError=journal
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/opt/concierge
+
+[Install]
+WantedBy=multi-user.target

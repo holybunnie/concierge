@@ -30,12 +30,20 @@ Three properties hold this together, and each one is load-bearing:
 
 from __future__ import annotations
 
+import logging
 import re
 import uuid
 from typing import Any
 
 from . import a2a, config, db, onboarding, store
 from .models import Tenant
+
+# Why this module logs at all: `process_pending` deliberately catches every exception per event so
+# one bad event cannot stop the ones behind it. Counting that failure and saying nothing about it
+# is what let a jammed queue run silently for eight hours on 2026-07-26 — every minute a `failed:
+# 1`, and no way to learn what failed without reproducing it by hand. The count says how many; the
+# log says which one and why.
+log = logging.getLogger(__name__)
 
 # A subscription tells us who is paying but not who to wake at 2am. We ask, and until they answer
 # the address is structurally dead (RFC 2606) rather than plausible — the same choice, for the same
@@ -479,8 +487,8 @@ def process_pending() -> dict[str, int]:
     UNIQUE `a2a_job_id`, replaying is safe: the duplicate insert loses and the buyer is re-greeted
     rather than duplicated.
     """
-    counts = {"seen": 0, "provisioned": 0, "advanced": 0,
-              "unserved": 0, "echo": 0, "internal": 0, "skipped": 0, "failed": 0}
+    counts = {"seen": 0, "provisioned": 0, "advanced": 0, "unserved": 0,
+              "unaddressable": 0, "echo": 0, "internal": 0, "skipped": 0, "failed": 0}
     for event in a2a.pending_events():
         counts["seen"] += 1
 
@@ -510,13 +518,34 @@ def process_pending() -> dict[str, int]:
                     on_message(event)
                     counts["advanced"] += 1
                 except db.TenantUnresolved:
-                    # Not our job — but a stranger is still owed an answer. Silence reads as a
-                    # broken listing; this is the one branch that used to produce it.
-                    on_unserved(event)
-                    counts["unserved"] += 1
+                    if not event.from_agent_id:
+                        # The platform narrating our own job back at us — "[Designated Task
+                        # Declined]" and friends. It carries no sender because there is no peer
+                        # behind it, and `a2a.send` rightly refuses to deliver a message with no
+                        # addressee. So this is not a stranger owed an answer; it is an event that
+                        # CANNOT be answered, and retrying it next minute cannot change that.
+                        #
+                        # It is consumed rather than left pending. Leaving it is what jammed the
+                        # worker on 2026-07-26: the same notification failed every 60 seconds for
+                        # eight hours, held the unit in `failed` state, and buried the real
+                        # question — why nothing had replied to the reviewer — under a repeating
+                        # error that looked like the cause and was only a symptom.
+                        log.warning("Unaddressable event %s on job %s (no sender to reply to): %s",
+                                    event.todo_id, event.job_id,
+                                    (event.message_text() or "")[:200])
+                        counts["unaddressable"] += 1
+                    else:
+                        # Not our job — but a stranger is still owed an answer. Silence reads as a
+                        # broken listing; this is the one branch that used to produce it.
+                        on_unserved(event)
+                        counts["unserved"] += 1
             else:
                 counts["skipped"] += 1
         except Exception:
+            # Counted AND named. `exc_info` is the whole point: the count alone cannot tell an
+            # operator whether the queue is jammed on one poisoned event or losing a real buyer.
+            log.exception("Failed to handle event %s (kind=%s, job=%s) — left unconsumed for retry",
+                          event.todo_id, event.kind, event.job_id)
             counts["failed"] += 1           # leave it unconsumed so the next tick retries
             continue
         if event.todo_id:

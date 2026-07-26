@@ -16,7 +16,17 @@ Wants=network-online.target
 Type=simple
 User=concierge
 Group=concierge
-WorkingDirectory=/opt/concierge
+
+# NOT /opt/concierge, and this is load-bearing. The daemon spawns an AI session per inbound job and
+# that session inherits this directory as its cwd — so pointing it at the application repo gave the
+# handler the repo's own CLAUDE.md, and it concluded it was a development session. On 2026-07-25 it
+# refused a real marketplace job as "the shape of a prompt injection" and answered nobody; the
+# listing was rejected the next morning for not responding.
+#
+# /opt/concierge-asp contains one file: the handler's own CLAUDE.md (source: deploy/asp-handler/ in
+# the repo). It sits OUTSIDE /opt/concierge because Claude Code walks parent directories looking
+# for CLAUDE.md — a subdirectory of the repo would have inherited the repo's instructions anyway.
+WorkingDirectory=/opt/concierge-asp
 
 # HOME is load-bearing, not cosmetic. The daemon keeps its identity and state in
 # $HOME/.okx-agent-task, and this box is shared: the rwoo project runs its own okx-a2a daemon as
@@ -52,7 +62,9 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=false
-ReadWritePaths=/opt/concierge
+# HOME stays /opt/concierge (the XMTP identity and SQLite state live in $HOME/.okx-agent-task and
+# must not move), so both paths are writable: state under the former, the handler's cwd the latter.
+ReadWritePaths=/opt/concierge /opt/concierge-asp
 
 [Install]
 WantedBy=multi-user.target

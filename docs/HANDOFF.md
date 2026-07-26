@@ -711,6 +711,65 @@ Settlement is USDT or USDG.
    is to relay: hand the message to the engine and return the computed reply verbatim, with a
    suite check proving the delivered figure equals what `engine.step` computed.
 
+## Listing REJECTED 2026-07-26 — why, and what was changed
+
+Agent **#9274** was reviewed and **rejected**: *"During platform testing, we were unable to receive
+a response from your Agent, causing the task to time out and be stopped."* Status went to
+`not listed`. This section is the post-mortem, because the failure was invisible to every health
+signal the build had, and that is the part worth not repeating.
+
+**Everything green, nothing answering.** Throughout the failure the daemon was up under
+`Restart=always`, heartbeating every 60s, `onlineStatus: 1`, and `okx-a2a doctor` reported
+8 pass / 0 fail. None of that was false — and none of it measured whether a job got an answer.
+**Liveness and answerability are different properties, and only the second one is the product.**
+
+Three distinct causes, found in the box's own logs:
+
+1. **The review test 401'd.** The real test was job `0x4cb7…` from `SecAgent#1791` on 2026-07-25 at
+   18:37, 18:40 and 21:51. All three AI sessions died on `401 API key is invalid` after ~3 minutes
+   each (`ai-session-job*1791*.log`). Nothing was generated and nothing was sent — this is what
+   timed out and cost the listing. Auth has since been fixed via `CLAUDE_CODE_OAUTH_TOKEN`.
+2. **The handler thought it was a dev session.** The daemon spawns a Claude Code session per job
+   with `cwd` inherited from the unit's `WorkingDirectory`, which was `/opt/concierge` — the repo.
+   The session read the repo's `CLAUDE.md`, concluded it was mid-Phase-9, and on 2026-07-26 07:36
+   refused a real job as *"the shape of a prompt injection"*, answering nobody. Correct instincts,
+   wrong role.
+3. **The queue then jammed, silently, for eight hours.** `provision.process_pending` caught every
+   per-event exception and counted `failed: 1` **without logging what failed**. A
+   `[Designated Task Declined]` notification carries no sender, so `on_unserved` → `a2a.send`
+   rightly refused to deliver a message with no addressee, the event was never consumed, and the
+   worker failed every 60s from 07:11 with no way to learn why short of reproducing it by hand.
+
+**What changed (all verified live on 2026-07-26):**
+
+- `provision.process_pending` gained an `unaddressable` branch: an event with no sender **cannot**
+  be answered, so it is consumed rather than retried forever. Every swallowed exception is now
+  logged with `exc_info`. Real timer run afterwards: `status=0/SUCCESS`, queue drained.
+- **`concierge/a2a_readiness.py` + `concierge-a2a-readiness.timer` (10 min)** — checks the three
+  things that must hold together: transport present, daemon ready, **and the bound provider can
+  actually authenticate**. Exit 1 and a `NOT ANSWERABLE:` line on stderr otherwise.
+- **`a2a.provider_auth_ok` probes; it does not trust `doctor`.** Measured: with the credential
+  removed, `doctor` still reported `claude CLI … is logged in` while that same binary answered
+  `Not logged in · Please run /login`. Doctor inspects stored credentials; a job session needs one
+  that authenticates. Believing doctor is exactly how a 401 stays invisible. The probe classifier
+  is proven against the real incident strings, and proven NOT to read a model refusal as an auth
+  failure.
+- **`WorkingDirectory=/opt/concierge-asp`** for the transport unit, holding one file —
+  `deploy/asp-handler/CLAUDE.md`, the handler's own role. It is **outside** `/opt/concierge`
+  because Claude Code walks parent directories for `CLAUDE.md`, so a subdirectory would have
+  inherited the repo's instructions anyway. `HOME` stays `/opt/concierge` — the XMTP identity and
+  SQLite state live in `$HOME/.okx-agent-task` and must not move. Verified after restart: same
+  `communicationAddress` `0xb48e…10ae`, `onlineStatus: 1`.
+
+**The 07:12 auto-reject was a symptom, not a cause.** `onchainos agent next-action` returned
+`❌ REJECT — designated serviceId=dea8f4fb… is NOT in your registered catalog` and marked it the
+only valid action. That serviceId **is** ours (`agent service-list` confirms). The lookup most
+likely returned nothing because the agent had been de-listed 20 minutes earlier. Do **not** build a
+workaround for this — re-check it after re-listing.
+
+**Before resubmitting for review:** a real inbound job must be seen to get a real reply. The daemon
+being up is not that proof, and was never that proof.
+
 ## Listing on OKX AI — decided pricing and the reasoning
 
 **Price (operator decision, 2026-07-25):** 2 USDT/week with 10 trials, then 5 USDT/week or

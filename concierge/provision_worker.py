@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from datetime import datetime, timezone as dt_timezone
 
@@ -33,6 +34,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true",
                         help="report whether the transport is reachable and exit, touching no events")
     args = parser.parse_args(argv)
+
+    # Diagnostics go to stderr, the JSON summary to stdout, and systemd files both into the same
+    # journal. Without this call `provision`'s `log.exception` falls back to the logging module's
+    # last-resort handler, which prints the message and drops the traceback — the exact half-report
+    # that made a jammed queue take a manual reproduction to explain on 2026-07-26.
+    logging.basicConfig(level=logging.INFO, stream=sys.stderr,
+                        format="%(levelname)s %(name)s: %(message)s")
 
     started = datetime.now(dt_timezone.utc)
     report: dict[str, object] = {"started_at": started.isoformat()}
