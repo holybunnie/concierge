@@ -34,12 +34,13 @@ stranger's email — are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 `https://app.quietdesks.com` — a real email from a stranger reaches a real tenant, is answered
 from that tenant's own inbox, and the commitment is anchored on X Layer mainnet. OKX agent
 **#9274** is online and its A2A service is registered, but the marketplace currently reports
-`Listing under review` / `not listed`; buyers cannot subscribe until OKX publishes it.
+`Listing under review` / `not listed`; public discovery waits on OKX. Private designated A2A jobs
+already work, including application, escrow funding, delivery and buyer review.
 
-Everything is built and verified except **A2A escrow**, which is blocked on a vendor API shape no
-document we can reach actually specifies (ledger U3) plus the OKX Agentic Wallet, and
-**cross-tenant benchmarking**, which needs real escrow data to exist first. No part of this repo
-simulates a capability it has not built.
+OKX currently exposes Agent Seller A2A services as individual escrowed jobs, not recurring
+subscriptions. A free test is a private zero-budget job; paid engagements use a one-time amount
+agreed for that task. The intended monthly subscription/free-trial fields are therefore not
+claimed by this build. No part of this repo simulates a capability the platform does not expose.
 
 ```bash
 pip install -r requirements.txt
@@ -59,7 +60,7 @@ python3 verify.py --suite receipts # X Layer mainnet — spends real (tiny) gas
 python3 verify.py --suite public-receipts # public receipt verification, anchors 2 more receipts
 python3 verify.py --suite scheduler # summary + scheduled worker, 10 checks
 python3 verify.py --suite product-gaps # unmet demand captured from real escalations, 5 checks
-python3 verify.py --suite provisioning # a subscription becomes a working tenant, 9 checks
+python3 verify.py --suite provisioning # an accepted A2A job becomes a working tenant
 ```
 
 Each suite is named for the capability it proves, and prints the raw evidence behind every pass.
@@ -71,8 +72,9 @@ as such in every check that touches them: the engine suite's calendar (a fixture
 harness, not the package — the booking suite replaces it with live Cal.com calls), the email
 suite's recording mailer (production sends through `postmark.PostmarkMailer`, which refuses to run
 without a real token, and the live round-trip is proven separately), and the provisioning suite's
-okx-a2a CLI, stubbed at the `a2a.send` seam because the live daemon's own event payloads cannot be
-confirmed until a real buyer subscribes. The foundations suite makes real network calls and reports
+okx-a2a CLI, stubbed at the `a2a.send` seam. The accepted-job wire format is captured from the live
+paid private test; the subprocess itself remains outside the local suite. The foundations suite
+makes real network calls and reports
 FAIL if the network is down rather than falling back to a cached answer. Every other suite runs
 real SQL against a real PostgreSQL 16 server as the real unprivileged application role.
 
@@ -246,10 +248,10 @@ were already being thrown away. Now they're counted and quoted back to the owner
   nothing at all and the summary shows the raw text — never a fabricated label, never silently
   dropped. The harness proves that degradation deterministically rather than describing it.
 
-### Auto-provisioning — a subscription becomes a working business, unattended (the provisioning suite)
+### Auto-provisioning — an accepted A2A job becomes a working business, unattended (the provisioning suite)
 
 Listing on a marketplace opens a door strangers walk through on their own schedule. Until this
-landed, a subscription produced a notification and a human created the tenant, issued the address
+landed, an accepted job produced a notification and a human created the tenant, issued the address
 and asked the onboarding questions by hand — the one place a person was still load-bearing in a
 product whose entire premise is that nobody's presence is.
 
@@ -257,7 +259,7 @@ product whose entire premise is that nobody's presence is.
   RLS-fenced home rather than needing a second isolation mechanism. That window is safe because an
   empty profile is *already* unquotable — the harness fires a real priced enquiry at the half-built
   tenant and proves it escalates without one digit reaching the client.
-- **A replayed subscription event is idempotent because of a database constraint**, not because of
+- **A replayed accepted-job event is idempotent because of a database constraint**, not because of
   control flow: `tenants.a2a_job_id` is UNIQUE, and the harness forces a duplicate insert to watch
   Postgres refuse it.
 - **A malformed answer is refused, never inferred.** The buyer being a machine makes loose parsing

@@ -1,11 +1,11 @@
-"""Auto-provisioning — a marketplace subscription becomes a working tenant, with nobody watching.
+"""Auto-provisioning — an accepted marketplace job becomes a working tenant, with nobody watching.
 
 Until this module existed, a tenant could only arrive because a human made one. Listing on OKX
 opened a second door that strangers walk through on their own schedule, and a door nobody is
 standing behind is not a product. This is the thing standing behind it.
 
-    sub_asp_selected → create tenant → ask for the owner's address → ask what they do
-                     → run the vertical interview → write the profile → hand back the inbox
+    job_accepted → create tenant → ask for the owner's address → ask what they do
+                 → run the vertical interview → write the profile → hand back the inbox
 
 Three properties hold this together, and each one is load-bearing:
 
@@ -45,18 +45,18 @@ from .models import Tenant
 # log says which one and why.
 log = logging.getLogger(__name__)
 
-# A subscription tells us who is paying but not who to wake at 2am. We ask, and until they answer
+# An accepted job tells us who is paying but not who to wake at 2am. We ask, and until they answer
 # the address is structurally dead (RFC 2606) rather than plausible — the same choice, for the same
 # reason, as `onboarding.PENDING_DOMAIN`. An owner alert bouncing loudly beats one delivered nowhere.
 PENDING_OWNER = "PENDING-OWNER.invalid"
 
-# What a tenant is called between "subscribed" and "told us their name". Never contains the job
+# What a tenant is called between "accepted" and "told us their name". Never contains the job
 # id: this string reaches clients, not just logs. See `on_subscription`.
 PENDING_NAME = "Pending business name"
 
-# Events that mean "a new buyer just bought". The platform names several subscription
-# transitions; only these two create a tenant. Renewals and failures are not new customers.
-SUBSCRIPTION_EVENTS = ("sub_asp_selected", "sub_trial_into_active")
+# Legacy subscription events remain readable for backward compatibility. The live OKX Agent Seller
+# product currently provisions from a one-off escrowed ``job_accepted`` event instead.
+LEGACY_SUBSCRIPTION_EVENTS = ("sub_asp_selected", "sub_trial_into_active")
 
 STAGES = ("awaiting_owner_email", "awaiting_business_name", "awaiting_description",
           "interviewing", "live")
@@ -185,14 +185,25 @@ def _format_hint(kind: str) -> str:
 # ---------------------------------------------------------------- the two entry points
 
 def on_subscription(event: a2a.Event) -> uuid.UUID:
-    """A buyer subscribed. Create their tenant and open the interview.
+    """A buyer's engagement was accepted. Create their tenant and open the interview.
 
     Idempotent through the database, not through this function's control flow: `a2a_job_id` is
     UNIQUE, so a replayed event loses the insert race and we simply re-greet the existing tenant.
     That matters because events are only consumed after commit, so replays are normal, not rare.
     """
     if not event.job_id:
-        raise ValueError(f"Subscription event {event.todo_id!r} carries no job id")
+        raise ValueError(f"Accepted engagement {event.todo_id!r} carries no job id")
+
+    # Lifecycle notifications such as the measured live ``[Job Accepted]`` payload are emitted by
+    # the platform, not by the buyer, and therefore have no sender header. Resolve the peer from
+    # the task record before creating or speaking to a tenant; never guess an address.
+    if not event.from_agent_id:
+        buyer, provider = a2a.task_participants(event.job_id)
+        if provider != "9274":
+            raise ValueError(
+                f"Job {event.job_id!r} belongs to provider {provider}, not CONCIERGE #9274"
+            )
+        event.from_agent_id = buyer
 
     try:
         existing = db.resolve_tenant_by_a2a_job(event.job_id)
@@ -281,7 +292,8 @@ def unserved_reply() -> str:
         "to quote from — and a number produced without them would be invented. Inventing one is "
         "the failure this system is built to make structurally impossible, so it declines instead. "
         "That refusal is the product working, not the product missing.\n\n"
-        "To see it actually quote: subscribe, and I will interview you the way I would any "
+        "To see it actually quote: create an in-scope marketplace job for CONCIERGE, and after acceptance "
+        "I will interview you the way I would any "
         "business — what you sell, your prices, your floor, your cancellation policy. It takes "
         "four steps. From then on, an enquiry like the one you just sent gets a real quote from "
         "your own rules, a booking in your own calendar, and a receipt anyone can verify."
@@ -291,6 +303,7 @@ def unserved_reply() -> str:
 # ---------------------------------------------------------------- the state machine
 
 def _advance(tenant_id: uuid.UUID, event: a2a.Event) -> None:
+    already_live = False
     with db.tenant_session(tenant_id) as cur:
         tenant = store.get_tenant(cur)
         if tenant is None:
@@ -298,43 +311,77 @@ def _advance(tenant_id: uuid.UUID, event: a2a.Event) -> None:
         state = _state(tenant)
         stage = state.get("stage")
 
-        if stage == "live" or stage not in STAGES:
+        if stage == "live":
+            already_live = True
+        elif stage not in STAGES:
             return                                   # onboarding is done; the engine owns this now
 
-        try:
-            # `message_text()`, never `content`: a live notification wraps the buyer's actual
-            # words in the platform's own rendering (arrows, agent ids, divider rules). Handing
-            # all of that to `_step` would have the strict parsers reading platform chrome as the
-            # tenant's answer — and a service line parsed out of a divider rule is a wrong price
-            # sent later under that tenant's name.
-            reply, state = _step(stage, state, event.message_text(), tenant)
-        except Refused as r:
-            _say(event, str(r))
+        if not already_live:
+            try:
+                # `message_text()`, never `content`: a live notification wraps the buyer's actual
+                # words in the platform's own rendering. Parsing the chrome could store a wrong
+                # service and later send a wrong price under the tenant's name.
+                reply, state = _step(stage, state, event.message_text(), tenant)
+            except Refused as r:
+                _say(event, str(r))
+                return
+
+            # Transient keys carry the finished interview out of `_step` and are never persisted.
+            profile = state.pop("_profile", None)
+            vertical = state.pop("_vertical", None)
+            business_name = state.pop("_business_name", None)
+            inbound_address = state.pop("_inbound_address", None)
+
+            if state.get("owner_email") and tenant.owner_email.endswith(PENDING_OWNER):
+                store.update_owner_email(cur, state["owner_email"])
+            if profile is not None:
+                store.update_profile(cur, profile)
+            if vertical:
+                store.update_vertical(cur, vertical)
+            if business_name:
+                store.update_business_name(cur, business_name)
+            if inbound_address:
+                tenant = store.update_inbound_address(cur, inbound_address) or tenant
+
+            engagement = dict(tenant.engagement)
+            engagement["provisioning"] = state
+            store.update_engagement(cur, engagement)
+
+    if already_live:
+        _deliver_if_ready(tenant_id, event)
+        return
+    _say(event, reply)
+    if state.get("stage") == "live":
+        _deliver_if_ready(tenant_id, event)
+
+
+def _deliver_if_ready(tenant_id: uuid.UUID, event: a2a.Event) -> None:
+    """Submit setup completion once, safely across remote-success/local-crash replays."""
+    with db.tenant_session(tenant_id) as cur:
+        tenant = store.get_tenant(cur)
+        if tenant is None:
             return
+        state = _state(tenant)
+        if state.get("stage") != "live" or state.get("marketplace_delivered"):
+            return
+        deliverable = (
+            f"{tenant.business_name} is provisioned and live. "
+            f"Issued inbound address: {tenant.inbound_address}. "
+            "The profile was built only from the buyer's interview answers; enquiries are "
+            "handled from those stored rules, and anything uncovered is escalated."
+        )
 
-        # Transient keys carry the finished interview out of `_step` and are never persisted:
-        # the profile belongs in its own column, not smuggled inside `engagement`.
-        profile = state.pop("_profile", None)
-        vertical = state.pop("_vertical", None)
-        business_name = state.pop("_business_name", None)
-        inbound_address = state.pop("_inbound_address", None)
+    a2a.deliver(event.job_id or "", deliverable)
 
-        if state.get("owner_email") and tenant.owner_email.endswith(PENDING_OWNER):
-            store.update_owner_email(cur, state["owner_email"])
-        if profile is not None:
-            store.update_profile(cur, profile)
-        if vertical:
-            store.update_vertical(cur, vertical)
-        if business_name:
-            store.update_business_name(cur, business_name)
-        if inbound_address:
-            tenant = store.update_inbound_address(cur, inbound_address) or tenant
-
+    with db.tenant_session(tenant_id) as cur:
+        tenant = store.get_tenant(cur)
+        if tenant is None:
+            return
         engagement = dict(tenant.engagement)
+        state = _state(tenant)
+        state["marketplace_delivered"] = True
         engagement["provisioning"] = state
         store.update_engagement(cur, engagement)
-
-    _say(event, reply)
 
 
 def _step(stage: str, state: dict[str, Any], content: str, tenant: Tenant
@@ -420,7 +467,7 @@ def _next_question(s: onboarding.OnboardingSession, state: dict[str, Any], tenan
     too, which the human flow does not do, and the reason is specific rather than thoroughness
     for its own sake: `confidence.py` scores profile completeness and counts a missing lexicon
     against it, so a tenant that skips its own vocabulary scores below the autonomy threshold and
-    queues every reply for an owner who subscribed precisely so as not to be in the loop. Asking
+    queues every reply for an owner who opened the engagement precisely so as not to be in the loop. Asking
     a human four more questions is friction; asking an agent four more questions is four more
     messages. Any of them can be declined with "skip" — declining is still allowed, it is just
     no longer the default.
@@ -492,6 +539,17 @@ def process_pending() -> dict[str, int]:
     for event in a2a.pending_events():
         counts["seen"] += 1
 
+        # This daemon owns both the CONCIERGE ASP and a controlled User test identity. The queue is
+        # account-wide. A message received by that User is not an inbound message to CONCIERGE,
+        # even though both render as ``[Received]``. Consuming it here prevents the ASP worker from
+        # answering its own outbound question through the User's side of the shared daemon.
+        receiving_agent = event.receiving_agent_id()
+        if receiving_agent and receiving_agent != "9274":
+            counts["skipped"] += 1
+            if event.todo_id:
+                a2a.consume(event.todo_id)
+            continue
+
         # Our own outbound message, echoed back through the same queue. Consumed rather than left
         # pending: there is nothing to decide, and a queue that fills with our own sent mail
         # buries the next real buyer in it.
@@ -510,10 +568,26 @@ def process_pending() -> dict[str, int]:
             continue
 
         try:
-            if a2a.KNOWN_EVENTS and (set(SUBSCRIPTION_EVENTS) & event.platform_events()):
+            starts_engagement = (
+                bool(set(LEGACY_SUBSCRIPTION_EVENTS) & event.platform_events())
+                or event.starts_tenant_engagement()
+            )
+            if starts_engagement:
                 on_subscription(event)
                 counts["provisioned"] += 1
             elif event.job_id:
+                if not event.from_agent_id:
+                    # Platform lifecycle prose such as ``[Buyer message received]`` can share a
+                    # tenant-owned job id while omitting the peer header. It is not the buyer's
+                    # answer. Feeding it into the interview can store platform chrome as a
+                    # business name/description and advance several stages incorrectly.
+                    log.warning("Ignoring sender-less platform notification %s on owned job %s: %s",
+                                event.todo_id, event.job_id,
+                                (event.message_text() or "")[:200])
+                    counts["unaddressable"] += 1
+                    if event.todo_id:
+                        a2a.consume(event.todo_id)
+                    continue
                 try:
                     on_message(event)
                     counts["advanced"] += 1

@@ -68,13 +68,18 @@ CONCIERGE sells exactly one thing:
 
 The buyer must be a **business wanting its own inbound handled**. That is the whole catalogue.
 
+OKX currently exposes this as a **one-off A2A job**, not an Agent Seller subscription. A private
+zero-budget job is the free-test path; a paid job uses its own negotiated escrow amount. The
+three-day period after delivery is the buyer's review deadline, not a product trial. Never promise
+a marketplace monthly subscription or free-trial field: the live service record has neither.
+
 So, before applying, ask one question: *is this buyer asking us to handle enquiries for their
 business?*
 
 - **Yes** → follow the CLI's steps.
 - **No, or unclear** → **do not `apply`**. Decline, and say why in the job's own channel: state
   plainly that it is outside what CONCIERGE sells, describe in one sentence what we do sell,
-  mention that a complimentary trial is available, and send **no figure of any kind**. Then end
+  mention that a private zero-budget test job is available, and send **no figure of any kind**. Then end
   the turn.
 
 On 2026-07-26 a job titled *"Book a dental cleaning"* was applied for, and countered at 0.02 USDT.
@@ -153,6 +158,10 @@ speak to the buyer.
 - **Do not answer a client's substantive question yourself.** If a job needs CONCIERGE to actually
   talk to a buyer, that happens through the worker on its own timer. Your job ends at the
   marketplace protocol.
+- **On `job_accepted`, do the protocol notification but do not submit a placeholder deliverable.**
+  The Python provisioning worker resolves the buyer from the task record, conducts the stored-rule
+  interview, issues the real inbox, and submits that actual setup completion through
+  `onchainos agent deliver`. A proof sentence submitted before onboarding is not delivery.
 - **If you genuinely cannot complete a step, say so in the job's own channel** using the CLI's
   notify path rather than ending the turn silently. A stated "I can't do this" is a response; an
   empty log is not.

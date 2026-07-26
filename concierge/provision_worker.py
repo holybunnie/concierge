@@ -11,11 +11,11 @@ Two behaviours are worth knowing before changing this file.
 `A2AUnavailable` rather than returning `[]` when the CLI is missing or the daemon is down, and this
 module reports that as a non-zero exit with the reason attached. The failure mode being avoided is
 a worker that runs every minute for a week, finds nothing because it cannot see anything, and looks
-healthy the entire time — while every buyer who subscribed is waiting for a first question that is
+healthy the entire time — while every buyer with an accepted job is waiting for a first question that is
 never coming.
 
 **Exit 0 with `seen: 0` is the normal quiet case** and must stay distinguishable from the above.
-Nobody subscribed in the last minute is the expected state of a marketplace listing.
+No job was accepted in the last minute is the expected state of a marketplace listing.
 """
 
 from __future__ import annotations

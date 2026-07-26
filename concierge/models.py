@@ -24,7 +24,7 @@ class Tenant:
     inbound_address: str
     profile: dict[str, Any] = field(default_factory=dict)
     engagement: dict[str, Any] = field(default_factory=dict)
-    # Set only for tenants that arrived by subscribing on the OKX marketplace; None for the
+    # Set only for tenants that arrived through an accepted OKX marketplace job; None for the
     # hand-built ones. Nothing in pricing or the engine reads it — it is how the A2A transport
     # finds its way back to the right tenant, and nothing more.
     a2a_job_id: str | None = None

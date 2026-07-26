@@ -1,7 +1,7 @@
 [Unit]
-# Auto-provisioning: turns an OKX marketplace subscription into a working tenant with nobody
+# Auto-provisioning: turns an accepted OKX A2A job into a working tenant with nobody
 # watching. This is the service that makes "listed" mean "open for business" — before it existed,
-# a subscription produced a notification and a human had to build the account by hand.
+# an accepted job produced a notification and a human had to build the account by hand.
 #
 # It is separate from concierge-a2a.service on purpose. That one is the XMTP transport and must
 # stay up to keep `onlineStatus: 1`; this one reads the events it delivers. A crash loop here

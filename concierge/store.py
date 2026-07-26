@@ -63,7 +63,7 @@ def update_profile(cur: Cursor, profile: dict[str, Any]) -> Tenant | None:
 def update_vertical(cur: Cursor, vertical: str) -> Tenant | None:
     """Set once, when auto-provisioning learns the trade from the buyer's own description.
 
-    A hand-built tenant gets its vertical at insert time; one that arrived by subscription cannot,
+    A hand-built tenant gets its vertical at insert time; one that arrived by accepted job cannot,
     because the row has to exist before there is anywhere RLS-fenced to hold the interview. See
     `provision.py`.
     """

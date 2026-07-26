@@ -1,6 +1,6 @@
 [Unit]
-Description=Poll the OKX marketplace for new subscriptions and advance onboarding
-# A buyer subscribing at 3am gets their first question within a minute. A tighter interval buys
+Description=Poll the OKX marketplace for accepted jobs and advance onboarding
+# A buyer whose job is accepted at 3am gets their first question within a minute. A tighter interval buys
 # nothing: the onboarding interview is a conversation, and the buyer's own reply latency dominates.
 
 [Timer]

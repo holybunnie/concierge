@@ -1,6 +1,6 @@
-"""the provisioning suite — auto-provisioning a marketplace buyer into a working tenant.
+"""the provisioning suite — an accepted A2A job becomes a working tenant.
 
-The question this suite answers is the one the operator asked: when someone subscribes on OKX
+The question this suite answers is the one the operator asked: when an A2A job is accepted on OKX
 while nobody is watching, does a working tenant exist at the end of it, and is it safe at every
 point in between?
 
@@ -29,9 +29,13 @@ class RecordingTransport:
 
     def __init__(self) -> None:
         self.sent: list[str] = []
+        self.delivered: list[str] = []
 
     def send(self, job_id: str, content: str, *, to_agent_id: str | None = None) -> None:
         self.sent.append(content)
+
+    def deliver(self, job_id: str, content: str, *, provider_agent_id: str = "9274") -> None:
+        self.delivered.append(content)
 
     @property
     def last(self) -> str:
@@ -132,31 +136,89 @@ def run(r) -> None:
 
     transport = RecordingTransport()
     real_send = a2a.send
+    real_deliver = a2a.deliver
+    real_participants = a2a.task_participants
     a2a.send = transport.send                      # the one seam, as in the email suite
+    a2a.deliver = transport.deliver
+    a2a.task_participants = lambda job_id: ("9630", "9274")
     try:
         _run(r, transport)
     finally:
         a2a.send = real_send
+        a2a.deliver = real_deliver
+        a2a.task_participants = real_participants
 
 
 def _run(r, transport: RecordingTransport) -> None:
+    # The measured live event is a platform-authored notification: job id present, sender absent.
+    # It must resolve the buyer from the task record and provision rather than becoming
+    # ``unaddressable``.
+    accepted_job = f"job-{uuid.uuid4().hex[:12]}"
+    accepted = a2a.Event(
+        todo_id=f"todo-{uuid.uuid4().hex[:8]}",
+        kind="notification",
+        job_id=accepted_job,
+        from_agent_id=None,
+        content=f"[Job Accepted] Job {accepted_job} has been accepted.",
+        raw={},
+    )
+    accepted_tenant = provision.on_subscription(accepted)
+    r.check(
+        "A real sender-less Job Accepted notification provisions the correct buyer",
+        (accepted.starts_tenant_engagement()
+         and accepted.from_agent_id == "9630"
+         and db.resolve_tenant_by_a2a_job(accepted_job) == accepted_tenant
+         and _stage(accepted_tenant).get("buyer_agent_id") == "9630"
+         and "1 of 4" in transport.last),
+        "The live one-off A2A path emits a platform notification with a job id and no sender.\n"
+        "Previously that was consumed as `unaddressable`, so an escrow-funded business never\n"
+        "became a tenant. The worker now resolves user/ASP identities from the task record,\n"
+        "checks that ASP #9274 owns it, creates the tenant, and sends the first interview question.",
+        f"| job: {accepted_job}\n"
+        f"| resolved buyer: {accepted.from_agent_id}\n"
+        f"| tenant: {accepted_tenant}",
+    )
+    transport.sent.clear()
+
+    # Platform lifecycle prose can mention an owned job but carry no sender. It is not an
+    # onboarding answer and must never be allowed to become tenant data.
+    chrome = a2a.Event(
+        todo_id=f"todo-{uuid.uuid4().hex[:8]}",
+        kind="notification",
+        job_id=accepted_job,
+        from_agent_id=None,
+        content="[Buyer message received] Job metadata changed.",
+        raw={},
+    )
+    before_chrome = _stage(accepted_tenant)
+    r.check(
+        "Sender-less platform prose cannot advance an owned tenant interview",
+        (not chrome.starts_tenant_engagement()
+         and chrome.from_agent_id is None
+         and _stage(accepted_tenant) == before_chrome),
+        "The live queue emits lifecycle summaries on the same job id as buyer messages. Without\n"
+        "a received-peer header they are platform chrome, not answers. The dispatcher consumes\n"
+        "them as unaddressable instead of storing the prose as a business name or service rule.",
+        f"| content: {chrome.content}\n| stage unchanged: {before_chrome.get('stage')}",
+    )
+
     job_id = f"job-{uuid.uuid4().hex[:12]}"
 
-    # ---- 1. a subscription creates a tenant, with nobody watching
+    # ---- 1. the legacy subscription spelling remains backward compatible
     tenant_id = provision.on_subscription(_event("sub_asp_selected", job_id))
     resolved = db.resolve_tenant_by_a2a_job(job_id)
     with db.tenant_session(tenant_id) as cur:
         fresh = store.get_tenant(cur)
 
     r.check(
-        "A subscription event alone creates a tenant and opens the interview — no human step",
+        "The legacy subscription event still creates a tenant — backward compatible",
         (resolved == tenant_id and fresh is not None and fresh.profile == {}
          and fresh.a2a_job_id == job_id
          and _stage(tenant_id).get("stage") == "awaiting_owner_email"
          and len(transport.sent) == 1 and "1 of 4" in transport.last),
-        "This is the gap the operator caught: before this module, a marketplace subscription\n"
-        "produced a notification and nothing else, and a person had to build the account by\n"
-        "hand. One `sub_asp_selected` event now yields a real tenant row and a first question\n"
+        "The supported live route is now `job_accepted`, but older platform versions emitted\n"
+        "`sub_asp_selected`. Keeping that spelling readable avoids stranding an engagement\n"
+        "during a platform rollout. It still yields a real tenant row and a first question\n"
         "sent back to the buying agent. The tenant is found again by the job id through\n"
         "`resolve_tenant_by_a2a_job` — the same SECURITY DEFINER shape as the inbound-address\n"
         "resolver, returning one opaque uuid, not a new isolation mechanism.",
@@ -201,7 +263,8 @@ def _run(r, transport: RecordingTransport) -> None:
 
     r.check(
         "The interview runs to completion autonomously and hands back a working inbox",
-        (state.get("stage") == "live" and live is not None and live.profile
+        (state.get("stage") == "live" and state.get("marketplace_delivered") is True
+         and len(transport.delivered) == 1 and live is not None and live.profile
          and live.business_name == BUYER_NAME and live.owner_email == BUYER_EMAIL
          and live.vertical == "generic"
          and live.inbound_address.split("@")[0].startswith("ashgrove-veterinary")
@@ -279,7 +342,7 @@ def _run(r, transport: RecordingTransport) -> None:
         f"| response: {transport.last.splitlines()[0][:100]}",
     )
 
-    # ---- 6. a replayed subscription event does not create a second tenant
+    # ---- 6. a replayed engagement event does not create a second tenant
     replay = provision.on_subscription(_event("sub_asp_selected", job_id))
     still_resolves_to = db.resolve_tenant_by_a2a_job(job_id)
 
@@ -298,7 +361,7 @@ def _run(r, transport: RecordingTransport) -> None:
         duplicate_rejected = f"{type(exc).__name__}: {str(exc).splitlines()[0][:120]}"
 
     r.check(
-        "A replayed subscription event re-greets the same tenant instead of duplicating it",
+        "A replayed engagement event re-greets the same tenant instead of duplicating it",
         (replay == tenant_id and still_resolves_to == tenant_id
          and "NOT REJECTED" not in duplicate_rejected),
         "Events are consumed only after the database transaction commits, so a crash between\n"
@@ -422,6 +485,15 @@ def _run(r, transport: RecordingTransport) -> None:
             "「This is an AI agent, not a person.」\n"
             "────────────"),
     }
+    received_by_local_user = {
+        "id": "todo_local_user", "kind": "notification", "status": "pending",
+        "jobId": real_inbound["jobId"],
+        "userContent": (
+            "📥 [Received] CONCIERGE#9274 → Meridian Test Client#9630 (you)\n"
+            "Job: 0x4cb7...5b30\n────────────\n"
+            "「What is the business called?」\n────────────"
+        ),
+    }
     real_decision = {
         "id": "todo_1785004841636_54e817c9", "kind": "decision_request", "status": "pending",
         "jobId": "0x4cb7dc24769104f13fd11dd406cbe77ce3102998cd6d3e954359dddfbbc25b30",
@@ -434,6 +506,7 @@ def _run(r, transport: RecordingTransport) -> None:
 
     ev_in = a2a.Event.from_payload(real_inbound)
     ev_echo = a2a.Event.from_payload(real_echo)
+    ev_local_user = a2a.Event.from_payload(received_by_local_user)
     ev_dec = a2a.Event.from_payload(real_decision)
 
     r.check(
@@ -460,7 +533,7 @@ def _run(r, transport: RecordingTransport) -> None:
         "job_asp_selected" in ev_dec.platform_events()
         and a2a.Event.from_payload({"type": "sub_asp_selected"}).platform_events() == {"sub_asp_selected"},
         "The real event name arrives as JSON inside a shell command inside a JSON string, so it\n"
-        "reads `\\\\\\\"event\\\\\\\":\\\\\\\"…` by the time it lands. A subscription check looking for a\n"
+        "reads `\\\\\\\"event\\\\\\\":\\\\\\\"…` by the time it lands. A lifecycle check looking for a\n"
         "top-level `sub_asp_selected` would never have fired on live traffic — auto-provisioning\n"
         "would have been silently dead on arrival for the first real buyer, and this suite could\n"
         "not have caught it, because this suite hands it the documented shape. Both are now read:\n"
@@ -473,6 +546,8 @@ def _run(r, transport: RecordingTransport) -> None:
     r.check(
         "CONCIERGE never answers its own message, and never answers the platform's",
         ev_echo.is_own_outbound() and ev_dec.is_platform_internal()
+        and ev_in.receiving_agent_id() == "9274"
+        and ev_local_user.receiving_agent_id() == "9630"
         and not ev_in.is_own_outbound() and not ev_in.is_platform_internal(),
         "Two ways to talk to yourself forever, both live on this box. The daemon echoes our own\n"
         "sent messages back through the same queue that carries inbound ones, distinguished only\n"
@@ -482,6 +557,7 @@ def _run(r, transport: RecordingTransport) -> None:
         "'retry / don't retry'); answering one outward delivers our internal plumbing to a\n"
         "customer. Neither is prevented by a missing field or a lucky failure — both are named.",
         f"| our own echo    : is_own_outbound={ev_echo.is_own_outbound()}  (never answered)\n"
+        f"| local User inbox: receiving_agent={ev_local_user.receiving_agent_id()}  (never answered by ASP)\n"
         f"| platform prompt : is_platform_internal={ev_dec.is_platform_internal()}  (never answered)\n"
         f"| a real buyer    : answered normally",
     )
@@ -511,9 +587,9 @@ def _run(r, transport: RecordingTransport) -> None:
         "Every check above runs against the real database, the real RLS policies and the real\n"
         "engine; only the CLI subprocess is stood in for, at the `a2a.send` seam, exactly as the\n"
         "email suite stands in for Postmark. What that leaves unproven is the wire format of the\n"
-        "live daemon's own event payloads, which cannot be proven until a real buyer subscribes\n"
-        "— the listing is still under review. `a2a.Event.from_payload` therefore reads several\n"
-        "spellings of each field and keeps the whole payload in `raw` rather than assuming one.",
+        "live daemon subprocess. The accepted-job payload itself has now been captured from a real\n"
+        "paid private job. `a2a.Event.from_payload` still reads several spellings of each field\n"
+        "and keeps the whole payload in `raw` rather than assuming one.",
         f"| messages the buyer would have received: {len(transport.sent)}\n"
         f"| transport binary expected at: {a2a.binary()}\n"
         f"| CLI present on this machine: {a2a.available()}",

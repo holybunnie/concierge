@@ -47,7 +47,7 @@ current. Summary:
 | 3b-3 Decaying floor (addendum Feature 5) | done | 4 pass / 1 info |
 | 3b-4 Safe Follow-Up (addendum) | done | 3 pass / 1 info |
 | 6b Public receipt verification (addendum Feature 3) | done | 6 pass / 1 info |
-| 10 A2A auto-provisioning | done | 9 pass / 0 fail / 1 info |
+| 10 A2A auto-provisioning | done | 15 pass / 0 fail / 1 info |
 
 Feature addendum (Product-Gap Intelligence, Confidence-Scored Autonomy, Public Receipt
 Verification, Cross-Tenant Benchmarking, Decaying Floor, Safe Follow-Up) attaches to the phases

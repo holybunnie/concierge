@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(onchainos *)",
+      "Bash(okx-a2a *)"
+    ]
+  }
+}

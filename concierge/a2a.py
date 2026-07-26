@@ -50,7 +50,7 @@ class A2AUnavailable(RuntimeError):
 # traffic on 2026-07-25 — see `platform_events`.
 KNOWN_EVENTS = (
     "sub_asp_selected", "sub_trial_into_active", "sub_failed_notify", "sub_cancelled",
-    "job_asp_selected", "job_delivered", "job_confirmed", "job_cancelled",
+    "job_asp_selected", "job_accepted", "job_delivered", "job_confirmed", "job_cancelled",
 )
 
 # Where the top-level `kind` is a *category* rather than an event name. Learned from live traffic:
@@ -70,6 +70,8 @@ _QUOTED = re.compile(r"「(.+?)」", re.S)
 # The daemon echoes our own sent messages back into the same notification queue. Matched on the
 # bracketed word rather than the emoji, which is decoration and may not survive every renderer.
 _SENT_MARKER = re.compile(r"\[Sent\]")
+_JOB_ACCEPTED_MARKER = re.compile(r"\[Job Accepted\].+?\bhas been accepted\b", re.I | re.S)
+_RECEIVER_IN_HEADER = re.compile(r"\[Received\].+?→[^#\n]*#(\d+)\s+\(you\)", re.S)
 
 
 @dataclass
@@ -133,6 +135,15 @@ class Event:
         """
         return bool(_SENT_MARKER.search(self.content))
 
+    def receiving_agent_id(self) -> str | None:
+        """Which local agent received this item, when the rendered header names one.
+
+        One daemon can own both a User and ASP identity. A message received by the local User is
+        still ``[Received]`` but must not be interpreted as input to the local ASP's tenant.
+        """
+        match = _RECEIVER_IN_HEADER.search(self.content)
+        return match.group(1) if match else None
+
     def is_platform_internal(self) -> bool:
         """Is this the platform talking to US, rather than a buyer talking to us?
 
@@ -141,6 +152,19 @@ class Event:
         prose to the buyer would deliver our internal plumbing to a customer.
         """
         return self.kind == "decision_request" or bool(self.raw.get("choices"))
+
+    def starts_tenant_engagement(self) -> bool:
+        """Did the marketplace say this provider's one-off job is funded and accepted?
+
+        OKX currently exposes this A2A service as per-job escrow, not as an Agent Seller
+        subscription. The original provisioning path listened only for the older
+        ``sub_asp_selected`` event and consequently ignored the real ``job_accepted`` wire event.
+
+        The daemon's operator notification does not retain the event as a top-level field, so the
+        rendered ``[Job Accepted]`` line is also a measured wire format, not a guessed fallback.
+        """
+        return ("job_accepted" in self.platform_events()
+                or bool(_JOB_ACCEPTED_MARKER.search(self.content)))
 
     def message_text(self) -> str:
         """What the buyer actually wrote, with the platform's rendering stripped off.
@@ -368,3 +392,70 @@ def send(job_id: str, content: str, *, to_agent_id: str | None = None) -> None:
             f"--to-agent-id, and a message with no addressee is not a message."
         )
     _run(args)
+
+
+def deliver(job_id: str, content: str, *, provider_agent_id: str = "9274") -> None:
+    """Submit completed onboarding; argv is direct so tenant text is never executable."""
+    binary = config.get("ONCHAINOS_BIN") or "/usr/local/bin/onchainos"
+    try:
+        proc = subprocess.run(
+            [binary, "agent", "deliver", job_id, "--file", "",
+             "--agent-id", provider_agent_id, "--deliverable-text", content],
+            capture_output=True, text=True, timeout=TIMEOUT_S,
+            env={**os.environ, "HOME": os.environ.get("HOME", "/opt/concierge")},
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        raise A2AUnavailable(f"Could not deliver job {job_id!r}: {exc}") from exc
+    if proc.returncode != 0:
+        # A remote success followed by a local crash replays here. Treat a task the platform
+        # already calls submitted/completed as success rather than attempting a second delivery.
+        if _task_status(job_id, provider_agent_id) in {"submitted", "completed"}:
+            return
+        raise A2AUnavailable(
+            f"onchainos agent deliver failed for job {job_id!r}: "
+            f"{(proc.stderr or proc.stdout).strip()[:400]}"
+        )
+
+
+def _task_status(job_id: str, provider_agent_id: str) -> str | None:
+    binary = config.get("ONCHAINOS_BIN") or "/usr/local/bin/onchainos"
+    try:
+        proc = subprocess.run(
+            [binary, "agent", "status", job_id, "--agent-id", provider_agent_id],
+            capture_output=True, text=True, timeout=TIMEOUT_S,
+            env={**os.environ, "HOME": os.environ.get("HOME", "/opt/concierge")},
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    match = re.search(r"^Task status:\s*([a-z_]+)\s*$", proc.stdout, re.M | re.I)
+    return match.group(1).lower() if proc.returncode == 0 and match else None
+
+
+def task_participants(job_id: str, *, provider_agent_id: str = "9274") -> tuple[str, str]:
+    """Return ``(buyer_agent_id, provider_agent_id)`` from the marketplace task record.
+
+    System-generated lifecycle notifications carry a job id but no sender. Guessing the buyer
+    would cross tenant boundaries; dropping the event leaves a paid customer unprovisioned.
+    ``onchainos agent status`` is the supported source of truth and prints stable ``user``/``asp``
+    fields even when the notification omitted both.
+    """
+    binary = config.get("ONCHAINOS_BIN") or "/usr/local/bin/onchainos"
+    try:
+        proc = subprocess.run(
+            [binary, "agent", "status", job_id, "--agent-id", provider_agent_id],
+            capture_output=True, text=True, timeout=TIMEOUT_S,
+            env={**os.environ, "HOME": os.environ.get("HOME", "/opt/concierge")},
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        raise A2AUnavailable(f"Could not resolve participants for job {job_id!r}: {exc}") from exc
+    if proc.returncode != 0:
+        raise A2AUnavailable(
+            f"onchainos agent status failed for job {job_id!r}: {proc.stderr.strip()[:400]}"
+        )
+    buyer = re.search(r"^\s*user:\s*(\d+)\s*$", proc.stdout, re.M)
+    provider = re.search(r"^\s*asp:\s*(\d+)\s*$", proc.stdout, re.M)
+    if not buyer or not provider:
+        raise A2AUnavailable(
+            f"Task status for job {job_id!r} omitted user/asp participants: {proc.stdout[:400]!r}"
+        )
+    return buyer.group(1), provider.group(1)

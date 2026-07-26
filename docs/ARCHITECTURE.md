@@ -18,7 +18,7 @@ flowchart TB
     subgraph clients [" "]
         direction LR
         prospect["A prospect<br/><i>emails the business</i>"]
-        buyer["A buying agent<br/><i>subscribes on OKX A2A</i>"]
+        buyer["A buying agent<br/><i>funds an OKX A2A job</i>"]
         anyone["Anyone with a link<br/><i>checks a receipt</i>"]
         clock["systemd timer<br/><i>every 15 minutes</i>"]
     end
@@ -34,7 +34,7 @@ flowchart TB
     subgraph routing ["Routing — resolve exactly one tenant before any logic runs"]
         direction LR
         mail["mail.py<br/><small>recipient → tenant</small>"]
-        prov["provision.py<br/><small>subscription → tenant → interview</small>"]
+        prov["provision.py<br/><small>accepted job → tenant → interview</small>"]
     end
 
     subgraph core ["Decision core — deterministic, imports nothing that can reach a network"]
@@ -238,4 +238,4 @@ Every box above is exercised by a suite that prints its raw evidence. `python3 v
 | the public receipt page and what it refuses | `public-receipts` |
 | the timer's three jobs | `scheduler` |
 | unmet demand, verbatim | `product-gaps` |
-| subscription → working tenant, unattended | `provisioning` |
+| accepted A2A job → working tenant, unattended | `provisioning` |

@@ -1,6 +1,6 @@
 # HANDOFF
 
-Resume point for a session starting cold. **Current as of 2026-07-26 20:40 UTC.**
+Resume point for a session starting cold. **Current as of 2026-07-26 22:50 UTC.**
 
 **Deadline: 2026-07-27 22:59 UTC — about 30 hours remain.**
 
@@ -44,17 +44,30 @@ The mandatory buyer review decision is queued and active. On resume, approve it 
 the task reaches `completed` and the wallet balance/reward is visible. Do not call `complete`
 directly: OKX correctly rejects that until the review gate is resolved.
 
+**Product-model correction, verified live 2026-07-26:** OKX currently exposes #9274's A2A
+service as one-off escrowed jobs. `service-list` returns `Fee: negotiable`, `fee: null`,
+`freeTrial: null`, and `subscription: []`. Current OKX payment documentation says recurring
+subscriptions do not yet support Agent Sellers. Therefore:
+
+- a free test is a private zero-budget A2A job;
+- a paid engagement is one accepted job with its own escrow amount;
+- the three days shown after delivery are the buyer review deadline, not a product trial;
+- do not claim a 20 USDT/month marketplace subscription or a three-day subscription trial.
+
 **Other honest remaining work:**
 
-1. OKX must finish review and actually list #9274. After listing, verify the public profile exposes
-   the service plus the intended **20 USDT/month, 3-day trial**; the under-review `service-list`
-   currently shows `fee: null`, `freeTrial: null`, so the live price is not independently visible.
+1. OKX must finish review and actually list #9274. After listing, verify public discovery and that
+   the service is honestly shown as negotiable A2A work; do not wait for unsupported subscription
+   metadata to appear.
 2. Raise the contradictory catalogue evidence with OKX if `next-action` still rejects the exact
    service id. Do not describe this as an “unlisted agents cannot apply” limitation — disproven.
-3. The one-off `job_accepted` event is not auto-provisioned: the worker records it as
-   `unaddressable` because the rendered operator notification contains no sender. Subscription
-   provisioning remains separately covered by its suite, but a one-off accepted task should not
-   be advertised as automatically onboarded until this event-routing gap is designed and tested.
+3. **Resolved and deployed:** one-off `job_accepted` now resolves buyer/ASP from
+   `onchainos agent status`, verifies ASP #9274, creates the tenant, and starts the interview.
+   Shared-daemon routing is recipient-aware, so messages delivered to local User #9630 cannot be
+   mistaken for ASP input. Sender-less platform lifecycle prose is consumed without entering the
+   interview. The existing paid test was backfilled and completed live: Brightside Dental reached
+   `stage: live`, `marketplace_delivered: true`, and received
+   `brightside-dental@inbox.quietdesks.com`.
 4. `/dev/null` on the VPS had become a root-owned regular file (`0644`), causing handler shell
    failures. It was restored to character device `1:3`, mode `0666`, and verified writable as the
    `concierge` user. Root cause is unknown; re-check after reboot.
@@ -656,14 +669,14 @@ Still outstanding:
 | Owner wallet (escrow payee) | `0x45818399a3e0f756cb26ff2fcd13a4824313df94` |
 | XMTP communication address | `0xb48eDa9d210dc9a36457aB5aB61799e5607C10ae` |
 | Login | `melindacharles82@gmail.com` (TEE keys, no seed phrase) |
-| Service | Inbound enquiry handling — A2A, **20 USDT/month, 3-day free trial** |
+| Service | Inbound enquiry handling — negotiable one-off A2A engagement; zero-budget private test supported |
 | State | `approvalLabel: "Listing under review"`, `onlineStatus: 1` |
 | Register tx | `0xdaaaedb1de705e05edb4d45dc6a488b80c2b160f6c5ca86496a536975714d2dd` |
 
-**Weekly pricing does not exist on this platform.** A2A supports per-call, monthly, or monthly +
-a **fixed 72h** trial — nothing else, and any other trial length is rejected outright. The
-operator's "2 USDT/week with 10 trials" was therefore published as 20 USDT/month with the 3-day
-trial, which was the intended real price anyway.
+**Live pricing truth supersedes the earlier registration assumption.** #9274's service record
+contains no fee, free trial or subscription plan. Agent Seller A2A work is per-job escrow, and
+current OKX recurring-subscription documentation explicitly excludes Agent Sellers. Free
+evaluation uses a private zero-budget job; paid work uses the amount agreed for that job.
 
 **`validate-listing` is not the whole gate.** It returned `pass: true` on a `serviceDescription`
 the API then rejected with `code=81001: exceeds max length 500`. QA passing is necessary, not
@@ -691,9 +704,9 @@ that takes other listings offline.
 opened a door that strangers walk through on their own schedule, and until this landed there was a
 human standing behind it. There no longer is.
 
-## Auto-provisioning — a subscription becomes a working tenant, unattended
+## Auto-provisioning — an accepted A2A job becomes a working tenant, unattended
 
-**GATE provisioning: 9 pass / 0 fail / 1 info** — `python3 verify.py --suite provisioning`.
+**GATE provisioning: 15 pass / 0 fail / 1 info** — `python3 verify.py --suite provisioning`.
 
 The gap this closed: before it, `sub_asp_selected` produced a notification and nothing else. A
 person had to create the tenant, issue the address and ask the onboarding questions by hand. For a
@@ -734,13 +747,12 @@ profile has no rule for, so only 75% of their words are accounted for. Two defen
 email path, holding on a channel neither was written for. A business set up entirely by machine
 does not start firing prices at strangers — its first uncertain answer goes to its owner.
 
-**Not yet proven, and honestly so:** the wire format of the live daemon's own event payloads. The
-suite stubs the CLI at the `a2a.send` seam (exactly as the email suite stubs Postmark), so
-everything above runs against the real database, real RLS and the real engine — but the actual
-JSON a real `sub_asp_selected` carries cannot be confirmed until a real buyer subscribes, and the
-listing is still under review. `a2a.Event.from_payload` therefore accepts several spellings of
-each field and keeps the whole payload in `raw`. **First real subscriber: watch
-`journalctl -u concierge-a2a-provision` and confirm the payload parsed before trusting it.**
+**The live one-off wire is now measured.** A real `job_accepted` envelope carries the job id and
+provider but not the buyer; the rendered operator notification also has no sender. The worker
+therefore resolves participants from the task record. The daemon queue is account-wide and holds
+both #9274 and test User #9630, so routing also checks the rendered receiving agent before treating
+`[Received]` as ASP input. The suite keeps the CLI subprocess stubbed at the delivery seam but now
+contains structural copies of these measured payloads and guards both defects.
 
 **Also fixed here:** the holding `business_name` no longer contains the job id. It is spoken aloud
 in escalation copy a client can receive, so a tenant escalating in its first five minutes would
@@ -923,30 +935,28 @@ rather than working around — do not special-case it in our code.
 
 ## Listing on OKX AI — decided pricing and the reasoning
 
-**Price (operator decision, 2026-07-25):** 2 USDT/week with 10 trials, then 5 USDT/week or
-20 USDT/month. The intro rate is deliberately below cost — see below — and exists so the OKX team
-can evaluate the build before the real price applies. Trials are native to the platform
-(`trialType`, `sub_trial_into_active`, `sub_failed_notify`), so evaluation does not require
-discounting the listed price and then editing it back up.
+**Pricing correction (live evidence, 2026-07-26):** the A2A listing accepts individual jobs with a
+negotiated or buyer-supplied task amount. It does not expose the earlier 20 USDT/month plan or a
+three-day product trial. A zero-budget private job is the supported free-test route. A paid job
+uses escrow and is released after buyer acceptance.
 
-**What CONCIERGE sells here is a subscription to handle a business's inbound.** Note the two
-different prices, which are easy to conflate and must not be:
+**What CONCIERGE sells here is one A2A engagement to set up and handle a business's inbound.**
+Note the two prices, which are easy to conflate and must not be:
 
   * **The tenant's quote to their client** (a spa's £85). Deterministic, derived from the stored
     profile by arithmetic, anchored in a receipt. This is the invariant the whole build defends.
-  * **CONCIERGE's own subscription fee** (2 USDT/week). Ordinary commerce, negotiated through the
-    marketplace like any other listing. Nothing about it is anchored as a tenant commitment, so an
-    LLM negotiating it breaks nothing.
+  * **CONCIERGE's engagement fee.** The one-time amount attached to the A2A job and escrowed by the
+    marketplace. It is not a tenant quote and it is not a recurring subscription.
 
 The rule is therefore narrower than "no LLM near a price": negotiate our own fee however the
 marketplace likes; never let anything but the engine set a tenant's quote.
 
-**Unit economics at the intro price.** VPS $7/mo (shared with the rwoo project on the same box).
+**Unit economics.** VPS $7/mo (shared with the rwoo project on the same box).
 Postmark is free to 100 emails/month and then **hard-stops with no overage** — $15/mo for 10,000
 after that. X Layer gas is ~$0.0001 per receipt. One conversation is 4-6 emails (reply, each
 negotiation turn, owner alert, follow-up, weekly summary), so the free tier is roughly 15-25
-conversations a month across ALL tenants. At 8.7 USDT/month per subscriber, break-even is ~3
-subscribers; at 20 USDT/month, ~1.5.
+conversations a month across ALL tenants. Per-job pricing must cover the expected service duration
+and delivery costs; the marketplace currently provides no automatic recurring collection.
 
 **Operational risk worth naming: the Postmark hard stop is an invisible outage.** Past 100 emails
 the app stays healthy, keeps quoting correctly and keeps writing receipts, while nothing is

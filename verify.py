@@ -656,9 +656,9 @@ def provisioning() -> int:
         "provisioning",
         "Auto-provisioning a marketplace buyer",
         preamble=(
-            "\nThe provisioning suite closes the gap between 'listed on the marketplace' and 'a buyer who\n"
-            "subscribes at 3am gets a working business'. Check 1 proves a subscription event alone\n"
-            "creates a tenant; check 2 attacks the half-provisioned window and proves an empty\n"
+            "\nThe provisioning suite closes the gap between 'listed on the marketplace' and 'a buyer whose\n"
+            "job is accepted at 3am gets a working business'. Check 1 proves the sender-less live\n"
+            "event resolves the correct buyer; check 2 attacks the half-provisioned window and proves an empty\n"
             "profile still cannot quote; check 3 runs the whole interview with no human step;\n"
             "check 4 proves every stored value came from the buyer's own bytes; check 5 proves a\n"
             "bad answer is refused rather than half-accepted; checks 6-7 are the replay and\n"

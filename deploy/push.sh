@@ -75,6 +75,18 @@ echo "==> fixing ownership and restarting the app"
 "${SSH[@]}" "
   set -e
   chown -R concierge:concierge $REMOTE/concierge $REMOTE/deploy $REMOTE/docs $REMOTE/verify.py 2>/dev/null || true
+  # The queue was once written by a root-run recovery command. A root-owned 0600 queue makes the
+  # real concierge service report Permission denied forever, so repair only these exact app-owned
+  # state files—not the shared box or another project's HOME.
+  chown concierge:concierge \
+    $REMOTE/.onchainos/task/pending-decisions-new.json \
+    $REMOTE/.onchainos/task/pending-decisions-new.lock 2>/dev/null || true
+  # Handler sessions must be able to run the two marketplace CLIs named in their role file.
+  # Install the narrow allow-list only when no operator-managed settings file already exists.
+  if [ ! -e $REMOTE/.claude/settings.json ]; then
+    install -o concierge -g concierge -m 600 \
+      $REMOTE/deploy/asp-handler/settings.json $REMOTE/.claude/settings.json
+  fi
   systemctl restart concierge
   $([[ $RESTART_A2A == 1 ]] && echo 'systemctl restart concierge-a2a; sleep 60' || true)
   sleep 4
