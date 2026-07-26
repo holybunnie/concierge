@@ -30,10 +30,11 @@ stranger's email — are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Status
 
-**Live.** CONCIERGE runs at `https://app.quietdesks.com` — a real email from a stranger reaches a
-real tenant, is answered from that tenant's own inbox, and the commitment is anchored on X Layer
-mainnet. It is listed on the OKX A2A marketplace as agent **#9274**, and a buying agent that
-subscribes gets a working business with nobody in the room.
+**Infrastructure live; marketplace review pending.** CONCIERGE runs at
+`https://app.quietdesks.com` — a real email from a stranger reaches a real tenant, is answered
+from that tenant's own inbox, and the commitment is anchored on X Layer mainnet. OKX agent
+**#9274** is online and its A2A service is registered, but the marketplace currently reports
+`Listing under review` / `not listed`; buyers cannot subscribe until OKX publishes it.
 
 Everything is built and verified except **A2A escrow**, which is blocked on a vendor API shape no
 document we can reach actually specifies (ledger U3) plus the OKX Agentic Wallet, and
@@ -74,6 +75,12 @@ okx-a2a CLI, stubbed at the `a2a.send` seam because the live daemon's own event 
 confirmed until a real buyer subscribes. The foundations suite makes real network calls and reports
 FAIL if the network is down rather than falling back to a cached answer. Every other suite runs
 real SQL against a real PostgreSQL 16 server as the real unprivileged application role.
+
+Customer understanding is hybrid. `concierge/intelligence.py` uses a model for a constrained
+semantic reading: exact stored service, intent, conversational act, and evidenced qualifiers.
+The reading is rejected unless it selects a verbatim catalogue item and cites words present in
+the inbound message. It cannot provide a number: pricing, floors, negotiation, and bookings
+remain deterministic, and provider failure falls back to the conservative lexical path.
 
 ### How isolation is actually enforced (the isolation suite)
 

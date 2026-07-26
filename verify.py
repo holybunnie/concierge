@@ -679,6 +679,40 @@ def provisioning() -> int:
     return r.render()
 
 
+def intelligence() -> int:
+    r = Report(
+        "intelligence",
+        "Bounded model-assisted understanding",
+        preamble=(
+            "\nEvery other suite proves CONCIERGE cannot invent a figure with no model anywhere near\n"
+            "the decision. This one is the awkward gate: a model IS in the path now, reading the\n"
+            "customer's meaning before the state machine runs. So the question is not whether the\n"
+            "model is good — it is what the model can change, and what it cannot touch.\n"
+            "\nChecks 1-4 are the attacks, and they run against a deliberately HOSTILE scripted\n"
+            "provider — invented services, fabricated quotes, false confidence, a dead provider —\n"
+            "because a real one can return all four. Check 5 is the invariant: the model picks the\n"
+            "service, the stored profile supplies the figure. Check 6 proves the build behaves\n"
+            "exactly as it did before the feature when the model is absent. Check 7 is the payoff.\n"
+            "Check 10 proves the strongest form of the claim structurally: the model is never\n"
+            "asked for a figure, because no field exists for one to arrive in.\n"
+            "\nThe provider is a declared fixture, exactly as the email suite's mailer and the\n"
+            "engine suite's calendar. Every database write, RLS boundary, price and state\n"
+            "transition below is real.\n"
+        ),
+    )
+    try:
+        from concierge import verify_intelligence
+        verify_intelligence.run(r)
+    except Exception as e:
+        import traceback
+        r.check("the intelligence harness completed", False,
+                f"The harness raised {type(e).__name__}: {e}\n"
+                f"Reported as a FAIL rather than swallowed. If this is a connection error, start\n"
+                f"Postgres with: docker compose up -d postgres",
+                traceback.format_exc())
+    return r.render()
+
+
 SUITES = {
     "foundations": foundations,
     "isolation": isolation,
@@ -688,6 +722,7 @@ SUITES = {
     "floor-curve": floor_curve,
     "follow-up": follow_up,
     "comprehension": comprehension,
+    "intelligence": intelligence,
     "email": email,
     "booking": booking,
     "receipts": receipts,

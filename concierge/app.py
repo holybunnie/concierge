@@ -18,7 +18,7 @@ import threading
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from . import config, db, mail, postmark, receipts
+from . import a2a, config, db, mail, postmark, receipts
 
 log = logging.getLogger("concierge.webhook")
 
@@ -44,14 +44,30 @@ app = FastAPI(title="CONCIERGE inbound", docs_url=None, redoc_url=None)
 
 @app.get("/healthz")
 def healthz() -> dict[str, object]:
-    """Liveness for the systemd/nginx layer. Reports which credentials are actually present —
-    truthfully, so 'up' never masks 'cannot send'."""
+    """Process liveness only. Dependency readiness lives at /readyz."""
     return {
         "status": "ok",
         "sending_configured": config.postmark_token() is not None,
         "inbound_auth_configured": config.inbound_webhook_secret() is not None,
         "inbound_domain": config.inbound_domain(),
     }
+
+
+@app.get("/readyz")
+def readyz() -> JSONResponse:
+    """Operational readiness: fail when a core delivery dependency is unavailable."""
+    checks = {
+        "database": db.healthy(),
+        "postmark_configured": config.postmark_token() is not None,
+        "inbound_auth_configured": config.inbound_webhook_secret() is not None,
+        "a2a_daemon": a2a.healthy(),
+        "xlayer_configured": bool(config.xlayer_private_key() and config.xlayer_contract()),
+    }
+    ready = all(checks.values())
+    return JSONResponse(
+        {"status": "ready" if ready else "not_ready", "checks": checks},
+        status_code=200 if ready else 503,
+    )
 
 
 @app.post("/inbound/postmark")

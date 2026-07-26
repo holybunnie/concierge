@@ -31,6 +31,35 @@ green on its 10-minute timer with `probe authenticated`.
 
 ---
 
+## 🛑 DEPLOY WITH `deploy/push.sh`. NEVER HAND-WRITE THE RSYNC.
+
+**2026-07-26, self-inflicted outage — read this before touching the VPS.** A hand-written
+`rsync -a --delete-excluded ...` was used to push code. `--delete-excluded` does not mean "skip
+these paths" — it means *skip them in the source AND delete them on the destination*. It removed:
+
+| Deleted | Consequence | Recovered by |
+|---|---|---|
+| `/opt/concierge/.env` | app dead, every production credential gone | reading `/proc/<a2a pid>/environ` of the still-running daemon |
+| `/opt/concierge/.venv` | app could not start | rebuilt from `requirements.txt` |
+| `/opt/concierge/a2a/` | transport daemon 203/EXEC, listing offline | `npm install --prefix /opt/concierge/a2a @okxweb3/a2a-node@0.1.10` |
+| `/opt/concierge/.onchainos/` | **OKX wallet session lost** — `loggedIn: false` | **a human had to log in through a browser.** Nothing on the box could do it |
+
+App down ~17:55–18:05 UTC; listing offline 17:55–18:19. The XMTP identity
+(`.okx-agent-task/xmtp/*.db3`) and `communicationAddress 0xb48e…10ae` survived, so the agent
+identity was never at risk — but the wallet session was recoverable **only** by the operator, and
+that is the part worth not repeating.
+
+**`deploy/push.sh` now exists and is the only supported deploy.** It never passes `--delete` in any
+form, refuses to run if a delete flag ever appears in its assembled command, backs up `.env`,
+`.onchainos` and `.okx-agent-task` to `/root/concierge-backups/<ts>/` (last 10 kept) before it
+touches anything, and afterwards verifies all six units, `/readyz` and a real answerability probe —
+exiting non-zero if any of them is not green. `deploy/push.sh --restart-a2a` also bounces the
+transport. A copy of the live `.env` is kept at `/root/concierge-env.bak`.
+
+**Also re-learned:** the AI-provider binding lives in the deleted state, so after the restore the
+listing was online (`onlineStatus: 1`) and **still could not answer** until
+`okx-a2a ai-provider set --provider claude` was re-run. Online ≠ answerable, again.
+
 ## Start here after a break
 
 ```bash
@@ -51,6 +80,7 @@ python3 verify.py --suite receipts        # expect 8 pass / 0 fail / 1 info — 
 python3 verify.py --suite public-receipts       # expect 6 pass / 0 fail / 1 info — anchors 2 more real receipts; public verify page
 python3 verify.py --suite scheduler        # expect 9 pass / 0 fail / 0 info — summary + scheduled worker, no new gas spent
 python3 verify.py --suite product-gaps     # expect 5 pass / 0 fail / 0 info — Feature 1, product-gap intelligence
+python3 verify.py --suite intelligence     # expect 10 pass / 0 fail / 1 info — bounded model-assisted understanding
 ```
 
 `--suite` now takes a string, so sub-gates from the feature addendum sit alongside the numbered
@@ -115,6 +145,7 @@ git config --local --add credential.helper \
 | 3b-4 Safe Follow-Up | **3 pass / 1 info** | real stalled thread nudged once from its own history, second stall marks it DEAD, a thread with no genuine prior contact never triggers one however far the clock is pushed |
 | 6b Public receipt verification (Feature 3) | **6 pass / 1 info** | real anchored receipt reads back correctly on the public page; nonexistent id, malformed id, and a real internal-only (floor-breach) receipt all render the identical clean 404; two tenants' pages never cross |
 | 8 Summary + scheduled actions | **9 pass / 0 fail** | worker entry point + enumeration-role split (checks 8-9, 2026-07-25); real conversation numbers counted exactly, escalation text carried verbatim, scheduler's anchor/follow-up/summary jobs all read+write the same real rows, no new mainnet gas spent proving it |
+| Bounded model-assisted understanding | **10 pass / 0 fail / 1 info** | `concierge/intelligence.py`. The model may name one stored service verbatim and classify intent/act/qualifiers; it may never supply or influence a figure. Checks 1-4 attack a deliberately hostile scripted provider (invented service, fabricated evidence, false confidence, a dead provider); check 10 proves the claim structurally — the schema on the wire has six properties, `additionalProperties: false`, and exactly one numeric field (`confidence`). **The gate caught a real defect on its first run:** `engine.decide` used `comprehension=max(read.comprehension, understanding.confidence)`, letting a model's self-reported certainty clear `confidence.COMPREHENSION_FLOOR` and SEND a reply the deterministic path held for the owner. Now the deterministic score carries through untouched; the model can only add to `uncovered`. Check 6 is the regression guard. |
 | 3c Comprehension (answering the question asked) | **6 pass / 0 fail / 1 info** | 103 generated questions per run across 3 tenants: 0 sent a price they should not have (was 70), 96% of answerable questions handled without a human; check 6 proves the four optional onboarding policy questions take the SAME tenant from 27.5% to 82.5% autonomy with no code change |
 
 **Local DB hygiene:** gates create tenants and never clean up, and the inbound-address allocator

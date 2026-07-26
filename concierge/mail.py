@@ -17,7 +17,7 @@ import hmac
 from dataclasses import dataclass
 from typing import Any
 
-from . import db, engine, postmark, store
+from . import db, engine, intelligence, postmark, store
 from .engine import Calendar, Outcome
 from .postmark import Mailer, OutboundEmail, ParsedInbound
 
@@ -110,10 +110,16 @@ def handle_inbound(payload: dict[str, Any], *, mailer: Mailer,
     tenant_id, recipient = resolve_recipient(parsed)
 
     inbound = parsed.to_inbound()
+    # Model I/O must not hold a database transaction open. It produces a constrained semantic
+    # reading only; the second transaction's deterministic engine remains the decision maker.
+    with db.tenant_session(tenant_id) as cur:
+        profile = store.get_tenant(cur).profile or {}
+    understanding = intelligence.interpret(profile, inbound.body)
     with db.tenant_session(tenant_id) as cur:
         tenant = store.get_tenant(cur)
         thread = engine.open_thread(cur, tenant, inbound)
-        outcome = engine.step(cur, tenant, thread, inbound, calendar)
+        outcome = engine.step(
+            cur, tenant, thread, inbound, calendar, understanding=understanding)
         owner_email = tenant.owner_email
         business_name = tenant.business_name
 

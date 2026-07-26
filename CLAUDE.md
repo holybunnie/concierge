@@ -115,6 +115,23 @@ section of `docs/HANDOFF.md` — the Codespaces `GITHUB_TOKEN` shadows real cred
   answerable questions — both directions, because escalating everything would pass the first
   trivially and be worthless.
 
+- **A model may identify meaning; it may never supply a business fact, and it may never raise
+  autonomy.** `intelligence.py` asks a provider for six fields — service name (which must match one
+  stored catalogue entry verbatim), intent, act, qualifier classes, evidence (verbatim substrings
+  of the client's own message) and confidence. There is no price field, and the whole reading is
+  discarded on any violation rather than partially trusted. Its confidence gates only whether the
+  reading is used at all: `engine.decide` carries `comprehension` over from the DETERMINISTIC read
+  untouched. It was briefly `max(read.comprehension, understanding.confidence)`, which let a
+  confident model clear `confidence.COMPREHENSION_FLOOR` and send a reply the deterministic path
+  held for the owner — do not reintroduce that, or anything else that lets a model-produced number
+  widen what may be sent. What the model may still do is add to `uncovered`: strictly more
+  escalation, never less. the intelligence suite proves all of it against a deliberately hostile
+  scripted provider, and check 6 is the regression guard.
+- **Deploy with `deploy/push.sh`. Never hand-write the rsync.** `--delete-excluded` deletes the
+  excluded paths on the DESTINATION; on 2026-07-26 it destroyed the live `.env`, `.venv`, the
+  pinned A2A CLI and the OKX wallet session, and only the operator could restore the last one. The
+  script never passes a delete flag, refuses to run if one appears, backs up live secrets and
+  identity state first, and verifies all six units + `/readyz` + a real answerability probe after.
 - **A decaying floor (`pricing_rules.floor_curve`) is OPTIONAL and never inferred.** Absent, a
   tenant negotiates on the flat floor exactly as before. Set, the curve only controls how fast
   CONCIERGE may move toward the absolute floor as rounds/days pass — the absolute floor itself is

@@ -27,6 +27,7 @@ import uuid
 from typing import Any
 
 from . import config, db, engine, mail, onboarding, postmark, store
+from .verify_onboarding import env_override
 from .postmark import OutboundEmail
 
 PROSPECT = "priya.raman@example.com"
@@ -301,16 +302,14 @@ def run(r) -> None:
     )
 
     # ---- 8. addresses are inbox.<domain> when a domain exists, and visibly-dead otherwise
-    prev = os.environ.get("CONCIERGE_DOMAIN")
-    os.environ["CONCIERGE_DOMAIN"] = "quietdesks.com"
-    config._loaded = True  # ensure get() reads os.environ, not a stale .env parse
-    live_domain = config.inbound_domain()
-    live_addr = onboarding.allocate_inbound_address("Halcyon Rooms")
-    if prev is None:
-        del os.environ["CONCIERGE_DOMAIN"]
-    else:
-        os.environ["CONCIERGE_DOMAIN"] = prev
-    pending_addr = spa_addr  # allocated earlier, with no domain configured
+    with env_override("CONCIERGE_DOMAIN", "quietdesks.com"):
+        live_domain = config.inbound_domain()
+        live_addr = onboarding.allocate_inbound_address("Halcyon Rooms")
+    # Allocated with the domain explicitly removed rather than reusing `spa_addr`, which was
+    # allocated under whatever the runner's own .env holds — on the VPS that is a real domain,
+    # so this check used to assert the pending behaviour while proving nothing about it.
+    with env_override("CONCIERGE_DOMAIN", None):
+        pending_addr = onboarding.allocate_inbound_address("Halcyon Rooms")
     r.check(
         "Tenant addresses are <slug>@inbox.<domain> once the domain lands, and never a fake-live "
         "placeholder before",

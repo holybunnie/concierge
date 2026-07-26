@@ -37,6 +37,13 @@ def get(name: str) -> str | None:
     return value or None
 
 
+def enabled(name: str, *, default: bool = False) -> bool:
+    value = get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def require(name: str, needed_for: str) -> str:
     """Raise loudly rather than proceeding with a fabricated value."""
     value = get(name)

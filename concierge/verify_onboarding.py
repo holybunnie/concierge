@@ -11,9 +11,46 @@ from __future__ import annotations
 
 import psycopg
 
-from . import db, onboarding, store
+import os
+
+from . import config, db, onboarding, store
 from .classify import classify
 from .verticals import LEGAL, REAL_ESTATE, SPA_BEAUTY, TEMPLATES
+
+
+class env_override:
+    """Hold one environment variable at a chosen value for the length of a check.
+
+    The honest-degradation checks (a missing domain must produce a visibly dead address) used
+    to read whatever the operator happened to have in `.env`, which meant they proved the
+    degradation only on a machine where the domain was genuinely absent — and silently asserted
+    the opposite of the truth on the VPS, where CONCIERGE_DOMAIN has been set since go-live. A
+    check whose result depends on the runner's own configuration is not evidence, so both
+    halves are now driven explicitly from here: `value=None` means "prove this with the value
+    removed".
+    """
+
+    def __init__(self, name: str, value: str | None):
+        self.name = name
+        self.value = value
+        self.previous: str | None = None
+
+    def __enter__(self) -> "env_override":
+        self.previous = os.environ.get(self.name)
+        if self.value is None:
+            os.environ.pop(self.name, None)
+        else:
+            os.environ[self.name] = self.value
+        # `config.get` calls `load_env`, which would re-inject the .env value on the next read.
+        # Marking it loaded is what makes the removal actually hold.
+        config._loaded = True
+        return self
+
+    def __exit__(self, *_exc) -> None:
+        if self.previous is None:
+            os.environ.pop(self.name, None)
+        else:
+            os.environ[self.name] = self.previous
 
 # Three descriptions written the way an owner actually writes them — rambling, partial, and
 # with the important things left out. None of them mentions the vertical by its template name.
@@ -193,19 +230,33 @@ def run(r) -> None:
         f"--- returned ---\ntenant_id: {tenant_id}\ninbound address: {address}",
     )
 
-    # ---- 8. ATTACK: the domain is not faked when the operator has not provided one
+    # ---- 8. ATTACK: the domain is not faked when the operator has not provided one.
+    # Both halves are driven explicitly (see `env_override`) rather than read from whatever the
+    # runner's .env happens to hold — the degradation is a property of the code, not of the box.
+    with env_override("CONCIERGE_DOMAIN", None):
+        pending_addr = onboarding.allocate_inbound_address("The Wilding Rooms")
+        pending_live = onboarding.address_is_live(pending_addr)
+    with env_override("CONCIERGE_DOMAIN", "quietdesks.com"):
+        real_addr = onboarding.allocate_inbound_address("The Wilding Rooms")
+        real_live = onboarding.address_is_live(real_addr)
     r.check(
         "A missing domain yields a visibly unusable address, not a plausible-looking one",
         # Case-insensitive: addresses are lowercased on storage, as mail addresses must be.
-        address.lower().endswith(onboarding.PENDING_DOMAIN.lower()) and not live,
-        "The operator has not provided a domain (item 2), so there is no real address to hand\n"
-        "back. The local part is real and permanently reserved; the domain half is\n"
-        "PENDING-DOMAIN.invalid — a TLD reserved by RFC 2606 precisely so it can never resolve.\n"
-        "Anyone who tries to use it gets an immediate hard failure instead of silence. A\n"
-        "placeholder that looks live is worse than no placeholder: it produces a demo that\n"
-        "appears to work and an inbox that never receives anything.",
-        f"returned address: {address}\naddress_is_live(): {live}\n"
-        f"CONCIERGE_DOMAIN in env: {db.config.get('CONCIERGE_DOMAIN') or 'NOT PROVIDED'}",
+        (pending_addr.lower().endswith(onboarding.PENDING_DOMAIN.lower()) and not pending_live
+         and real_addr.endswith("@inbox.quietdesks.com") and real_live),
+        "With no domain provided there is no real address to hand back. The local part is real\n"
+        "and permanently reserved; the domain half is PENDING-DOMAIN.invalid — a TLD reserved by\n"
+        "RFC 2606 precisely so it can never resolve. Anyone who tries to use it gets an immediate\n"
+        "hard failure instead of silence. A placeholder that looks live is worse than no\n"
+        "placeholder: it produces a demo that appears to work and an inbox that never receives\n"
+        "anything. The second half of the check is the one that stops this rotting: with a domain\n"
+        "configured the SAME call returns a real inbox.<domain> address, so the check proves a\n"
+        "behaviour rather than passing because the runner happened to be unconfigured.",
+        f"with CONCIERGE_DOMAIN removed  -> {pending_addr}  (address_is_live: {pending_live})\n"
+        f"with CONCIERGE_DOMAIN set      -> {real_addr}  (address_is_live: {real_live})\n"
+        f"address returned by this run's finalise(): {address}  (live: {live})\n"
+        f"CONCIERGE_DOMAIN actually in this environment: "
+        f"{config.get('CONCIERGE_DOMAIN') or 'NOT PROVIDED'}",
     )
 
     # ---- 9. ATTACK: could a template's example price become a real tenant's price?

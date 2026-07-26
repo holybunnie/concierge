@@ -42,14 +42,14 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone as dt_timezone
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo, available_timezones
 
 from psycopg import Cursor
 
-from . import comprehension, config, confidence, guardrails, lexicon, pricing, receipts, store
+from . import comprehension, config, confidence, guardrails, intelligence, lexicon, pricing, receipts, store
 from .models import Receipt, Tenant, Thread
 from .pricing import Quote, Unquotable
 
@@ -382,7 +382,8 @@ def notice_hours(profile: dict[str, Any]) -> int | None:
 
 def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
            calendar: Calendar | None = None,
-           precedent: list[Receipt] | None = None) -> Decision:
+           precedent: list[Receipt] | None = None,
+           understanding: intelligence.Understanding | None = None) -> Decision:
     """Work out what to do about one message. Pure: reads state, writes nothing.
 
     `precedent` is this tenant's own receipt history, already RLS-scoped — fetched by `step()`
@@ -428,13 +429,14 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
                         f"from {inbound.from_address}: {text.strip()}",
         )
 
-    if wants_human(text):
+    if wants_human(text) or (understanding and understanding.act == "human_request"):
         return escalate(
             "The prospect asked for a human. SB 243 requires that route always work, so this "
             "hands over immediately and unconditionally.",
             action="human_requested", rule="SB 243 — route to a human on request")
 
-    if is_spam(text):
+    if is_spam(text) or (understanding and understanding.act == "spam"
+                         and understanding.confidence >= 0.95):
         return Decision(
             state_after="IGNORED", action="ignored_spam",
             rule_checked="bulk-marketing markers", within_rules=True,
@@ -561,7 +563,11 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
 
     # ---- otherwise: treat it as a question about what this business sells
     try:
-        quote = pricing.quote_for(profile, text)
+        if understanding and understanding.service_name:
+            quote = pricing.quote_for_match(
+                profile, pricing.match_named_service(profile, understanding.service_name))
+        else:
+            quote = pricing.quote_for(profile, text)
     except Unquotable as e:
         return escalate(
             e.reason, action="unquotable", rule="profile.services + pricing_rules",
@@ -572,6 +578,36 @@ def decide(tenant: Tenant, thread: Thread, inbound: Inbound,
     # asking about it? Both reads are deterministic and both fail toward the owner.
     read = comprehension.assess(profile, text, service_name=quote.service_name,
                                 matched_on=quote.matched_on)
+    if understanding:
+        semantic_intent = (understanding.intent
+                           if understanding.intent in comprehension.INTENT_CUES else read.intent)
+        semantic_qualifiers = {
+            cls: understanding.evidence
+            for cls in understanding.qualifier_classes
+            if cls in comprehension.QUALIFIER_COVERAGE
+        }
+        found = {**read.qualifiers, **semantic_qualifiers}
+        covered = dict(read.covered)
+        uncovered = list(read.uncovered)
+        for cls in semantic_qualifiers:
+            policy = comprehension.covers(profile, cls)
+            if policy:
+                covered[cls] = policy
+            elif cls not in uncovered and not (
+                    cls == "duration" and semantic_intent == comprehension.DURATION):
+                uncovered.append(cls)
+        # `comprehension` is carried over from the deterministic read UNCHANGED, deliberately.
+        # It was briefly `max(read.comprehension, understanding.confidence)`, which let a
+        # model's self-reported certainty lift the score over `confidence.COMPREHENSION_FLOOR`
+        # and release a reply the deterministic path would have held for the owner — a
+        # confidence figure from a language model deciding an autonomous send, which is the one
+        # thing CLAUDE.md forbids by name. the intelligence suite check 6 fails if it comes back.
+        # What the model may still contribute here is `uncovered`: strictly more escalation,
+        # never less.
+        read = comprehension.Assessment(
+            intent=semantic_intent, qualifiers=found, uncovered=tuple(uncovered),
+            covered=covered, comprehension=read.comprehension,
+        )
 
     # A duration question the profile CAN answer — answer it, rather than escalating something
     # the owner already told us at onboarding. This is where layer 2 buys autonomy back.
@@ -844,11 +880,20 @@ def render(tenant: Tenant, decision: Decision, thread: Thread, *,
 
 
 def step(cur: Cursor, tenant: Tenant, thread: Thread, inbound: Inbound,
-         calendar: Calendar | None = None) -> Outcome:
+         calendar: Calendar | None = None,
+         understanding: intelligence.Understanding | None = None) -> Outcome:
     """Decide, reply, persist, and write the receipt. The cursor is already RLS-scoped."""
     before = thread.state
     precedent = store.list_receipts(cur)   # this tenant's own history, RLS-scoped — Feature 2
-    decision = decide(tenant, thread, inbound, calendar, precedent=precedent)
+    decision = decide(
+        tenant, thread, inbound, calendar, precedent=precedent,
+        understanding=understanding,
+    )
+    if understanding is not None:
+        decision.detail = {
+            **decision.detail,
+            "semantic_understanding": asdict(understanding),
+        }
     # Pre-generated so `render` can embed a verify link (Feature 3) pointing at the id this
     # exact decision's receipt will have — the row itself is written further down with this
     # same id, never a different one.

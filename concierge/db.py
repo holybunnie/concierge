@@ -26,6 +26,16 @@ class TenantUnresolved(Exception):
     """
 
 
+def healthy() -> bool:
+    """Cheap connectivity/readiness probe using the same unprivileged role as requests."""
+    try:
+        with psycopg.connect(config.app_database_url(), connect_timeout=3) as conn:
+            row = conn.execute("SELECT 1").fetchone()
+            return bool(row and row[0] == 1)
+    except Exception:
+        return False
+
+
 def migrate() -> str:
     """Apply schema.sql as the owning role. Returns the applied SQL's path."""
     path = config.ROOT / "concierge" / "sql" / "schema.sql"

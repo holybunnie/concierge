@@ -1,0 +1,11 @@
+[Unit]
+Description=Check CONCIERGE readiness every minute
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Persistent=true
+Unit=concierge-watchdog.service
+
+[Install]
+WantedBy=timers.target

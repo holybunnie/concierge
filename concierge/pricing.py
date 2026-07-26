@@ -352,6 +352,24 @@ def match_service(profile: dict[str, Any], inquiry: str) -> ServiceMatch:
 def quote_for(profile: dict[str, Any], inquiry: str) -> Quote:
     """Derive a quotable price for whatever this inquiry is about, or raise `Unquotable`."""
     match = match_service(profile, inquiry)
+    return quote_for_match(profile, match)
+
+
+def match_named_service(profile: dict[str, Any], service_name: str) -> ServiceMatch:
+    """Resolve one exact stored catalogue name. Similarity or model invention is not accepted."""
+    matches = [(item, _service_name(item)) for item in catalogue(profile)
+               if _service_name(item) == service_name]
+    if len(matches) != 1:
+        raise Unquotable(
+            f"{service_name!r} is not one unique exact service in the stored profile.",
+            considered=[name for _, name in matches],
+        )
+    item, name = matches[0]
+    return ServiceMatch(item, name, 1.0, tuple(_tokens(name)), None)
+
+
+def quote_for_match(profile: dict[str, Any], match: ServiceMatch) -> Quote:
+    """Derive a price from a validated catalogue match; callers cannot supply the figure."""
     rules = profile.get("pricing_rules") or {}
 
     # --- shape 1: a priced service. The price is on the item the tenant typed.

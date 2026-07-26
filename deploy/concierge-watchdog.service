@@ -1,0 +1,17 @@
+[Unit]
+Description=CONCIERGE end-to-end readiness watchdog
+After=concierge.service concierge-a2a.service
+
+[Service]
+Type=oneshot
+User=concierge
+Group=concierge
+WorkingDirectory=/opt/concierge
+ExecStart=/usr/bin/curl --fail --silent --show-error --max-time 15 http://127.0.0.1:8000/readyz
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
