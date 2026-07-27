@@ -19,6 +19,17 @@ at 0.05 USDT. A new deterministic provider worker polls that exact shape every 2
 independent of the AI session, and alerts `ALERT_EMAIL` on an apply failure. The provisioning gate
 proves exact-match acceptance plus seven fail-closed near-matches: **17 pass / 0 fail / 1 info**.
 
+**Second review shape fixed and proven on chain:** job
+`0xf80280cd4e7f713ce13bf7bc1ffc95f41805d78b502ba4103bf3c241cd459a53`
+changed the title to `Try concierge for my salon`, so title matching again skipped it and the AI
+handler wrongly ran the normal 2.5-USDT commercial price gate. Review recovery now keys on the
+stable route—OKX reviewer #6058 → #9274's sole service, status `created`, zero USDT initial
+offer—not mutable prose. The still-open failed job was recovered at 0.05 USDT; application
+transaction `0x25b65be07cb151c9486031b7bc8148e438fb87843bbd5d2086664f5804e66429`
+is mined successfully on X Layer in block 66377004 with receipt status 1. A durable per-job
+transaction ledger prevents another `apply` while OKX correctly leaves task status at `created`
+until the buyer confirms. Repeated live polls now report `already_submitted` with that same hash.
+
 Job
 `0x3646b7b21028eec33742c2dba81cc0d758597e674af7696773cc906f8282a608`
 completed the full private paid lifecycle on **2026-07-27 07:35 UTC**: buyer #9630 →
