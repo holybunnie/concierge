@@ -1,14 +1,27 @@
 """Restart-safe provider recovery for the exact OKX listing-review task shape.
 
-The marketplace's reviewer agent #6058 creates a private task designating #9274's sole service,
-with a zero initial offer and a one-USDT maximum. Titles vary between review attempts. The harness
-expects the provider to counter-apply on chain within a roughly three-minute polling window.
+The marketplace's reviewer agent #6058 creates a private task designating #9274's sole service.
+Titles AND budgets vary between review attempts — three measured attempts were published at 0,
+0.05 and 1 USDT. The harness expects the provider to apply on chain within a roughly three-minute
+polling window, and reports "never accepted designated task" when it does not.
 
 The normal daemon event handler remains the primary path. This worker polls authoritative active
 task state so a delayed, missed, or misclassified notification cannot leave that review job in
-``created``. Its scope is deliberately narrow: reviewer #6058 to ASP #9274, exact zero-USDT
-initial offer, and a fixed 0.05-USDT smoke-test counter. A buyer must still accept and fund that
-counter before any work begins.
+``created``. Its scope is deliberately narrow: reviewer #6058 to ASP #9274, USDT, any positive
+budget.
+
+Two rules learned from failed attempts bound it, and both are about `reject-apply` being
+irreversible on-chain:
+
+* **Apply at the task's own posted amount, never above it.** Attempt one was published at 0 and
+  applied to at 0.05; the buyer's ``next-action`` classified that as over budget and permanently
+  executed ``reject-apply``, which raising the budget later could not undo.
+* **Never apply at zero.** There is no amount at or below a zero budget that is worth winning.
+
+It deliberately does NOT price this route through ``marketplace_pricing``. That command prices the
+30-day commercial engagement at 2.5 USDT and declined review attempt three (posted at 1 USDT) on
+amount mismatch — a correct commercial decision that reads to the marketplace as an ASP that never
+answers. A buyer must still accept and fund the application before any work begins.
 """
 
 from __future__ import annotations
@@ -17,6 +30,7 @@ import json
 import os
 import re
 import subprocess
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -27,9 +41,17 @@ PROVIDER_ID = "9274"
 # title changed between attempts. #9274 exposes exactly one service, so the authoritative stable
 # route is reviewer -> designated provider, not title prose.
 REVIEW_BUYER_ID = "6058"
-INITIAL_AMOUNT = "0"
-COUNTER_AMOUNT = "0.05"
+# The price the service is REGISTERED at. It is what we advertise, not what we demand of a review
+# task: the reviewer publishes whatever budget it likes and an application above that budget is
+# irreversibly rejected, so `apply_amount` follows the task and this stays documentation.
+SERVICE_AMOUNT = "0.05"
 CURRENCY = "USDT"
+# This task was published at zero, applied to at 0.05, and irreversibly rejected before the
+# reviewer raised its displayed amount to 0.05. Active-task state now looks eligible but another
+# application can never succeed (code 1001). Keep the measured poisoned job out of the retry loop.
+IRREVERSIBLY_REJECTED_JOB_IDS = frozenset({
+    "0x1805b3e6ade54278289d35a78ea154ae755b533d1a620fb8cd32dd640ad9a480",
+})
 STATE_PATH = Path(os.environ.get("A2A_PROVIDER_STATE")
                   or (config.ROOT / ".a2a_provider_applied.json"))
 _TX_HASH = re.compile(r'0x[a-fA-F0-9]{64}')
@@ -45,15 +67,34 @@ def _run(*args: str, timeout: int = 90) -> subprocess.CompletedProcess[str]:
     )
 
 
+def apply_amount(task: dict[str, Any]) -> str | None:
+    """The task's own posted budget, or None when it is absent, unparseable or not positive.
+
+    Applying at anything ABOVE the posted budget is what got attempt one irreversibly rejected,
+    so the amount we ask for is the amount already on chain — never a policy price of our own.
+    """
+    try:
+        posted = Decimal(str(task.get("tokenAmount")))
+    except (InvalidOperation, TypeError):
+        return None
+    if not posted.is_finite() or posted <= 0:
+        return None
+    return format(posted, "f")
+
+
 def eligible(task: dict[str, Any]) -> bool:
-    """Match only the measured OKX review shape; near-matches fail closed."""
+    """Match the OKX review route by stable identity; near-matches fail closed.
+
+    Identity — reviewer #6058 designating ASP #9274 — is stable across attempts. The budget is
+    not, so it is checked for being fundable (positive USDT), not for equalling a fixed price.
+    """
     return (
         str(task.get("myAgentId")) == PROVIDER_ID
         and task.get("myRole") == "asp"
         and str(task.get("status")).lower() == "created"
         and str(task.get("counterpartyAgentId")) == REVIEW_BUYER_ID
-        and str(task.get("tokenAmount")) == INITIAL_AMOUNT
         and str(task.get("tokenSymbol")).upper() == CURRENCY
+        and apply_amount(task) is not None
     )
 
 
@@ -110,15 +151,21 @@ def run() -> dict[str, Any]:
     results: list[dict[str, str]] = []
     for task in candidates:
         job_id = str(task["jobId"])
+        if job_id in IRREVERSIBLY_REJECTED_JOB_IDS:
+            results.append({"job_id": job_id, "action": "irreversibly_rejected"})
+            continue
         if job_id in submitted:
             results.append({
                 "job_id": job_id, "action": "already_submitted", "tx_hash": submitted[job_id],
             })
             continue
+        amount = apply_amount(task)
+        if amount is None:  # unreachable via eligible(); fail closed rather than guess a price
+            continue
         applied = _run(
             "apply", job_id,
             "--agent-id", PROVIDER_ID,
-            "--token-amount", COUNTER_AMOUNT,
+            "--token-amount", amount,
             "--token-symbol", CURRENCY,
         )
         combined = f"{applied.stdout}\n{applied.stderr}".strip()
@@ -127,7 +174,7 @@ def run() -> dict[str, Any]:
             submitted[job_id] = tx_match.group(0)
             _record_applied(submitted)
             results.append({
-                "job_id": job_id, "action": "applied", "price": COUNTER_AMOUNT,
+                "job_id": job_id, "action": "applied", "price": amount,
                 "tx_hash": tx_match.group(0),
             })
             continue

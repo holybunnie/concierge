@@ -3,7 +3,7 @@ Description=Poll for time-limited OKX designated review tasks
 
 [Timer]
 OnBootSec=15s
-OnUnitActiveSec=20s
+OnUnitActiveSec=8s
 AccuracySec=2s
 Persistent=true
 Unit=concierge-a2a-provider.service

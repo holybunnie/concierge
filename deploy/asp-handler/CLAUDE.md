@@ -121,31 +121,47 @@ business?*
 The measured marketplace review route is:
 
 - reviewer is exactly User Agent **#6058**;
-- designated service is exactly `Inbound enquiry handling`, internal service row `37052`
-  (#9274 has no other service);
-- initial offer is `0 USDT`;
-- the review harness permits a counter-application up to `1 USDT`; and
-- title is mutable reviewer prose (measured as both `Try inbound enquiry handling` and
-  `Try concierge for my salon`);
+- designated service is exactly `Inbound enquiry concierge`, internal service row `37584`,
+  service id `28086024-3013-4438-b243-3d2470fb78da`;
+- the registered service fee is `0.05 USDT`, but the **posted task budget is mutable reviewer
+  prose exactly like the title** — measured at `0`, `0.05` and `1 USDT` across three attempts;
+- title is mutable reviewer prose (measured as `Try inbound enquiry handling`,
+  `Try concierge for my salon` and `Handle enquiries for my salon`);
 - the description may contain only the platform's generic `next-action` instruction.
 
 That task **is an exact capability match by designation**. Do not reject it for lacking a business
 description: onboarding is where the buyer supplies their business, and demanding those answers
-before applying makes the service impossible to review. Counter-apply at exactly **0.05 USDT**:
+before applying makes the service impossible to review.
+
+**Apply at the task's own posted amount, whatever that amount is, as long as it is positive
+USDT.** Read `tokenAmount` off the task and pass exactly that back:
 
 ```bash
 onchainos agent apply <jobId> --agent-id 9274 \
-  --token-amount 0.05 --token-symbol USDT
+  --token-amount <the task's own tokenAmount> --token-symbol USDT
 ```
 
-This is a narrowly priced listing smoke test, not the 30-day commercial engagement below.
-**Do not call `concierge.marketplace_pricing` for this route**: that command prices the full
-30-day engagement at 2.5 USDT and caused the second review task to be declined even though the
-review harness's explicit maximum was 1 USDT. End on
-a successful `txHash`. On failure, follow the CLI's apply-failure notification path; never turn an
-apply failure into a decline. `concierge.a2a_provider_worker` independently polls this exact shape
-every 20 seconds, so whichever path applies first wins and the other must treat
-`apply record already exists` as success.
+Two rules bind this, and both exist because `reject-apply` is irreversible on-chain:
+
+- **Never ask for more than the posted budget.** Attempt one was posted at `0`, applied to at the
+  registered `0.05`, and the buyer's `next-action` classified that as over budget and permanently
+  rejected the provider. Raising the budget afterwards could not undo it.
+- **Never apply while the task amount is zero.** There is no fundable amount at or below zero.
+  Decline nothing and wait — a fresh task with a real budget is the only recoverable path.
+
+**Do not call `concierge.marketplace_pricing` for this route.** That command prices the full
+30-day engagement at 2.5 USDT. On 2026-07-27 it declined review job `0x45071a2d…` — posted at
+1 USDT by #6058, correctly priced, correctly explained in the job channel — and the marketplace
+reported the result as *"never accepted designated task… ASP 9274 never applied on-chain"* and
+failed the listing again. A commercially correct decline on the review route is still a failed
+listing. The 30-day price below governs real buyers; #6058's probe is not a real buyer.
+
+End on a successful `txHash`. On failure, follow the CLI's apply-failure notification path; never
+turn an apply failure into a decline. After a successful apply, **send the buyer a message in the
+job's own channel** so their `confirm-accept` step has a thread to act on.
+`concierge.a2a_provider_worker` independently polls this same identity every 20 seconds, so
+whichever path applies first wins and the other must treat `apply record already exists` as
+success.
 
 ## Enforce our engagement price before applying
 
@@ -184,7 +200,7 @@ response and it costs nothing. Applying and then failing to deliver costs the li
 
 If a job designates some OTHER `serviceId` and the CLI rejects it as absent, follow the rejection.
 
-There is one measured exception. CONCIERGE's own service id is
+There is one measured legacy exception. CONCIERGE's original free service id is
 `dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027`. On 2026-07-26, while #9274 was still under review,
 `agent service-list --agent-id 9274` returned that exact id but `next-action` falsely said it was
 not registered. A direct `agent apply` succeeded, emitted `provider_applied`, and the buyer then

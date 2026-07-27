@@ -314,31 +314,43 @@ def _run(r, transport: RecordingTransport) -> None:
     review_task = {
         "myAgentId": "9274", "myRole": "asp", "counterpartyAgentId": "6058",
         "status": "created", "title": "Try concierge for my salon",
-        "tokenAmount": "0", "tokenSymbol": "USDT",
+        "tokenAmount": "0.05", "tokenSymbol": "USDT",
     }
+    # Three measured review attempts were published at three different budgets. Identity is the
+    # stable route; the budget is the reviewer's to choose.
+    review_budgets = [
+        {**review_task, "tokenAmount": budget} for budget in ("0.05", "1", "2.5", "0.5")
+    ]
     review_near_matches = [
         {**review_task, "myAgentId": "9630"},
         {**review_task, "myRole": "user"},
         {**review_task, "status": "accepted"},
         {**review_task, "counterpartyAgentId": "1791"},
-        {**review_task, "tokenAmount": "1"},
+        {**review_task, "tokenAmount": "0"},
+        {**review_task, "tokenAmount": "-1"},
+        {**review_task, "tokenAmount": "free"},
         {**review_task, "tokenSymbol": "ETH"},
         {**review_task, "counterpartyAgentId": ""},
     ]
+    applied_amounts = [a2a_provider_worker.apply_amount(t) for t in review_budgets]
     r.check(
-        "The provider recovery worker applies only to the measured OKX review shape",
-        (a2a_provider_worker.eligible(review_task)
+        "The provider recovery worker applies at the reviewer's own posted budget, never above it",
+        (all(a2a_provider_worker.eligible(task) for task in review_budgets)
          and not any(a2a_provider_worker.eligible(task) for task in review_near_matches)
-         and a2a_provider_worker.COUNTER_AMOUNT == "0.05"),
-        "The listing harness starts with a zero offer and a one-USDT maximum, then waits roughly\n"
-        "twelve minutes for an on-chain application. The daemon event handler once rejected that\n"
-        "exact capability probe as ambiguous. A 20-second polling worker now recognizes only\n"
-        "the stable reviewer/provider/status/currency/amount route and counter-applies at 0.05\n"
-        "USDT; identity, role, status, reviewer, amount and currency near-matches fail closed.",
-        f"| exact review task eligible: {a2a_provider_worker.eligible(review_task)}\n"
+         and applied_amounts == ["0.05", "1", "2.5", "0.5"]),
+        "Attempt one was published at 0 and applied to at the registered 0.05; the buyer's\n"
+        "next-action classified that as over budget and executed an irreversible reject-apply.\n"
+        "Attempt three was published at 1 and declined by the 2.5 commercial price. Both read to\n"
+        "the marketplace as an ASP that never answers, so the amount asked for is now the amount\n"
+        "already on chain, whatever it is. Zero, negative and unparseable budgets still fail\n"
+        "closed — there is no fundable application at or below zero — as do identity, role,\n"
+        "status, reviewer and currency mismatches.",
+        f"| eligible across posted budgets: "
+        f"{[a2a_provider_worker.eligible(t) for t in review_budgets]}\n"
+        f"| applied amount tracks the task: {applied_amounts}\n"
         f"| rejected near-matches: "
         f"{[not a2a_provider_worker.eligible(t) for t in review_near_matches]}\n"
-        f"| deterministic counter: {a2a_provider_worker.COUNTER_AMOUNT} USDT",
+        f"| registered (advertised) service price: {a2a_provider_worker.SERVICE_AMOUNT} USDT",
     )
 
     # ---- 4. provenance: nothing in the profile came from anywhere but the buyer

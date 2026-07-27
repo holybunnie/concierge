@@ -115,7 +115,6 @@ OPERATOR_ITEMS = [
     ("CONCIERGE_DOMAIN", "2. Domain for inbox.<domain>", "the email connector email"),
     ("POSTMARK_SERVER_TOKEN", "3. Postmark server API token", "the email connector email"),
     ("CAL_API_KEY", "4. Cal.com API key", "booking real bookings"),
-    ("OKX_API_KEY", "5. OKX Agentic Wallet credentials", "A2A escrow escrow + settlement"),
     ("XLAYER_PRIVATE_KEY", "6. Funded OKB signer on X Layer MAINNET (196)",
      "receipt anchoring receipt anchoring, A2A escrow settlement"),
     ("LLM_API_KEY", "7. LLM API key", "onboarding classification, the engine drafting"),

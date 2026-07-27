@@ -15,9 +15,9 @@ database setup, or sequence of local test commands.
 
 - Agent: **CONCIERGE #9274**
 - Role: ASP
-- Service: **Inbound enquiry handling**
+- Service: **Inbound enquiry concierge**
 - Service type: A2A
-- Service ID: `dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027`
+- Service ID: `28086024-3013-4438-b243-3d2470fb78da`
 - Network: X Layer mainnet, chain ID 196
 
 ## Completed paid proof
@@ -32,9 +32,19 @@ database setup, or sequence of local test commands.
 That single job proved provider application, escrow funding, unattended A2A onboarding, delivery
 of a real dedicated inbox, buyer review approval, and escrow release.
 
-The listing-review compatibility path separately polls every 20 seconds for OKX's exact
-`Try inbound enquiry handling` designated-task shape and counter-applies at 0.05 USDT, within the
-review harness's one-USDT ceiling. Failed or unsent application transactions alert the operator.
+The listing-review compatibility path separately polls every 8 seconds for a designated task from
+the review buyer and applies at **the task's own posted budget**, whatever that budget is. The
+reviewer's amount is not fixed — measured attempts were published at 0, 0.05 and 1 USDT — so the
+route is matched on identity rather than on a price. It never applies above the posted budget,
+because the platform's `reject-apply` is irreversible and a later budget raise cannot recover the
+provider, and it never applies to a zero-budget task, because `onchainos agent apply` requires an
+amount greater than zero. Failed or unsent application transactions alert the operator.
+
+Measured end to end on 2026-07-27, job
+`0x35ecdf02b25921dc3e0675b34c788b8ab800bee35f81623c2cc8d0345e367504`: published 16:29:42 UTC,
+applied 16:30:01 (tx `0xa2f2324a2e0663e4aa8ab9c1147fde21492faec65a70b7cd5b840a4509be33ff`,
+1 USDT), `job_accepted` 16:33:01, tenant provisioned 16:35:40, onboarding interview opened in the
+job's own channel.
 
 ## Public endpoints
 

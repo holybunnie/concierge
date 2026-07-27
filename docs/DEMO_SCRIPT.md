@@ -22,6 +22,11 @@ the bottom of each scene. It advances automatically and finishes at exactly 1:30
 
 ### 0:00–0:10 — Product
 
+ > CONCIERGE is an AI sales assistant for service businesses. It answers new
+  > enquiries, gives approved prices, negotiates within the owner’s limits, books
+  > appointments, and sends anything risky or unknown to a human. Other AI agents
+  > can hire it through OKX A2A, where it operates as ASP agent #9274.
+
 > A service business loses revenue whenever an enquiry arrives after hours. CONCIERGE is an
 > autonomous inbound sales desk that qualifies, quotes, negotiates and books—using the owner’s
 > rules, never invented ones.

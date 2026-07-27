@@ -1,12 +1,36 @@
 # HANDOFF
 
-Resume point for a session starting cold. **Current as of 2026-07-27 07:38 UTC.**
+Resume point for a session starting cold. **Current as of 2026-07-27 13:28 UTC.**
 
 **Deadline: 2026-07-27 22:59 UTC.**
 
 ---
 
 ## 🛑 RESUME HERE — paid lifecycle proven; OKX listing review is the only blocker
+
+**2026-07-27 13:28 UTC — irreversible zero-budget rejection fixed for future reviews.**
+The latest review task was published with on-chain budget 0, then provider #9274 applied at
+0.05 USDT. The reviewer's `next-action` permanently ran `reject-apply` because 0.05 exceeded the
+on-chain zero, and five later `confirm-accept` attempts still returned code 1001 after the task
+amount was raised. There is no provider-side un-reject operation.
+
+The durable replacement is live:
+
+- new A2A service `Inbound enquiry concierge`, row `37584`, service id
+  `28086024-3013-4438-b243-3d2470fb78da`, advertises `0.05 USDT`;
+- the original in-use free row remains because OKX refuses fee changes with
+  `service in use, only name/description can be modified`;
+- the provider worker applies only when the task's on-chain amount already equals 0.05 and
+  refuses zero-budget tasks;
+- poisoned job `0x1805…a480` is explicitly quarantined from retries;
+- production worker output reports `action: irreversibly_rejected`, all timers are active,
+  `/readyz` is green, provider auth passes, and `onlineStatus` is 1.
+
+OKX currently labels #9274 **Listing rejected** and also says x402 validation failed. The
+official registration documentation distinguishes the models: x402 is the pay-per-call protocol
+for A2MCP endpoints, while A2A uses negotiated X Layer escrow. CONCIERGE is A2A. Do not bolt on a
+fictional A2MCP endpoint to satisfy that message; ask OKX to re-run the review against the new
+priced A2A service and correct the x402 service-type misclassification.
 
 **2026-07-27 review rejection diagnosed and fixed:** OKX job
 `0x6ccffba3a667bdca25446fcf8e5195781282b7be7d8467c03e86dedcdb91c7ad`
@@ -980,9 +1004,9 @@ onchainos agent create --role user --name "<client agent name>"
 onchainos agent create-task \
   --title "Concierge - test enquiry" \
   --description "<the enquiry text>" \
-  --budget 0 --max-budget 0 --currency USDT \
+  --budget 0.05 --max-budget 1 --currency USDT \
   --provider 9274 \
-  --service-id dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027 \
+  --service-id 28086024-3013-4438-b243-3d2470fb78da \
   --visibility 1                                   # 1 = private; requires --provider
 ```
 
@@ -1000,8 +1024,10 @@ a 401, or nothing at all is a fail no matter what the other units report.
 
 **Costs and cautions for Route A.** It creates a real second agent identity on the owner wallet and
 a real task on the marketplace, during a review cycle. `--visibility 1` keeps the task private to
-the designated provider rather than publicly listed. Budget 0 mirrors what the platform's own
-tester sent. It cannot be un-created, so it is an operator decision, not a harness step.
+the designated provider rather than publicly listed. The on-chain budget must already cover the
+registered 0.05-USDT fee before the provider applies. A zero-budget application is auto-rejected
+by the buyer flow and cannot be recovered by raising the budget later. It cannot be un-created,
+so it is an operator decision, not a harness step.
 
 **Route B — the manual test OKX themselves asked for.** From the rejection notice verbatim:
 

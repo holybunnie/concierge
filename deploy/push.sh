@@ -99,9 +99,16 @@ echo "==> fixing ownership and restarting the app"
     $REMOTE/deploy/concierge-a2a-provider.service /etc/systemd/system/concierge-a2a-provider.service
   install -o root -g root -m 644 \
     $REMOTE/deploy/concierge-a2a-provider.timer /etc/systemd/system/concierge-a2a-provider.timer
+  # The provisioning pair was verified below but never installed here, so an edit to its timer
+  # synced to the repo copy and silently changed nothing on the running box. Measured 2026-07-27.
+  install -o root -g root -m 644 \
+    $REMOTE/deploy/concierge-a2a-provision.service /etc/systemd/system/concierge-a2a-provision.service
+  install -o root -g root -m 644 \
+    $REMOTE/deploy/concierge-a2a-provision.timer /etc/systemd/system/concierge-a2a-provision.timer
   systemctl daemon-reload
   systemctl enable --now concierge-a2a-buyer.timer
   systemctl enable --now concierge-a2a-provider.timer
+  systemctl enable --now concierge-a2a-provision.timer
   cd $REMOTE
   sudo -u concierge -H $REMOTE/.venv/bin/python -c 'from concierge import db; db.migrate()'
   systemctl restart concierge
