@@ -32,6 +32,10 @@ database setup, or sequence of local test commands.
 That single job proved provider application, escrow funding, unattended A2A onboarding, delivery
 of a real dedicated inbox, buyer review approval, and escrow release.
 
+The listing-review compatibility path separately polls every 20 seconds for OKX's exact
+`Try inbound enquiry handling` designated-task shape and counter-applies at 0.05 USDT, within the
+review harness's one-USDT ceiling. Failed or unsent application transactions alert the operator.
+
 ## Public endpoints
 
 - Review packet: https://app.quietdesks.com/okx-review

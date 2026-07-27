@@ -80,12 +80,12 @@ OKX_REVIEW = {
         ],
     },
     "verification": {
-        "provisioning_suite": "16 passed, 0 failed, 1 declared transport stub",
+        "provisioning_suite": "17 passed, 0 failed, 1 declared transport stub",
         "production_readiness": "ready",
         "a2a_transport": "available",
         "a2a_daemon": "ready",
         "provider_authentication": "authenticated by live probe",
-        "production_units": "7/7 active",
+        "production_units": "8/8 active",
     },
     "reviewer_test": {
         "single_action": (

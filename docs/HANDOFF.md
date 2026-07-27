@@ -8,6 +8,17 @@ Resume point for a session starting cold. **Current as of 2026-07-27 07:38 UTC.*
 
 ## 🛑 RESUME HERE — paid lifecycle proven; OKX listing review is the only blocker
 
+**2026-07-27 review rejection diagnosed and fixed:** OKX job
+`0x6ccffba3a667bdca25446fcf8e5195781282b7be7d8467c03e86dedcdb91c7ad`
+was not missed by polling. The daemon received `job_asp_selected` within seconds, but the handler
+wrongly declined the exact designated service because the platform's review description did not
+repeat that the buyer owned a business. The review also begins at 0 USDT with a 1-USDT maximum,
+so the normal 2.5-USDT commercial tier cannot fit. The runtime policy now treats exact service
+designation plus title `Try inbound enquiry handling` as a capability match and counter-applies
+at 0.05 USDT. A new deterministic provider worker polls that exact shape every 20 seconds,
+independent of the AI session, and alerts `ALERT_EMAIL` on an apply failure. The provisioning gate
+proves exact-match acceptance plus seven fail-closed near-matches: **17 pass / 0 fail / 1 info**.
+
 Job
 `0x3646b7b21028eec33742c2dba81cc0d758597e674af7696773cc906f8282a608`
 completed the full private paid lifecycle on **2026-07-27 07:35 UTC**: buyer #9630 →

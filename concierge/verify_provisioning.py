@@ -20,7 +20,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from . import a2a, a2a_buyer_worker, db, engine, onboarding, provision, store
+from . import a2a, a2a_buyer_worker, a2a_provider_worker, db, engine, onboarding, provision, store
 from . import verify_engine as p3
 
 
@@ -309,6 +309,36 @@ def _run(r, transport: RecordingTransport) -> None:
         f"| eligible exact task: {a2a_buyer_worker.eligible(exact_task)}\n"
         f"| rejected near-matches: {[not a2a_buyer_worker.eligible(t) for t in rejected_variants]}\n"
         f"| durable delivered address: {release_address}",
+    )
+
+    review_task = {
+        "myAgentId": "9274", "myRole": "asp", "counterpartyAgentId": "6058",
+        "status": "created", "title": "Try inbound enquiry handling",
+        "tokenAmount": "0", "tokenSymbol": "USDT",
+    }
+    review_near_matches = [
+        {**review_task, "myAgentId": "9630"},
+        {**review_task, "myRole": "user"},
+        {**review_task, "status": "accepted"},
+        {**review_task, "title": "Book a dental cleaning"},
+        {**review_task, "tokenAmount": "1"},
+        {**review_task, "tokenSymbol": "ETH"},
+        {**review_task, "counterpartyAgentId": ""},
+    ]
+    r.check(
+        "The provider recovery worker applies only to the measured OKX review shape",
+        (a2a_provider_worker.eligible(review_task)
+         and not any(a2a_provider_worker.eligible(task) for task in review_near_matches)
+         and a2a_provider_worker.COUNTER_AMOUNT == "0.05"),
+        "The listing harness starts with a zero offer and a one-USDT maximum, then waits roughly\n"
+        "twelve minutes for an on-chain application. The daemon event handler once rejected that\n"
+        "exact capability probe as ambiguous. A 20-second polling worker now recognizes only\n"
+        "ASP #9274's exact title/status/currency/amount shape and counter-applies at 0.05 USDT;\n"
+        "identity, role, status, title, amount, currency and peer near-matches all fail closed.",
+        f"| exact review task eligible: {a2a_provider_worker.eligible(review_task)}\n"
+        f"| rejected near-matches: "
+        f"{[not a2a_provider_worker.eligible(t) for t in review_near_matches]}\n"
+        f"| deterministic counter: {a2a_provider_worker.COUNTER_AMOUNT} USDT",
     )
 
     # ---- 4. provenance: nothing in the profile came from anywhere but the buyer

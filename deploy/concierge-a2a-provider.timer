@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll for time-limited OKX designated review tasks
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=20s
+AccuracySec=2s
+Persistent=true
+Unit=concierge-a2a-provider.service
+
+[Install]
+WantedBy=timers.target
