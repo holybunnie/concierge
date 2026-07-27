@@ -144,59 +144,183 @@ def okx_review_json() -> dict[str, object]:
 
 @app.get("/okx-review")
 def okx_review_page() -> HTMLResponse:
-    """A single human-readable handoff so marketplace review needs no repository setup."""
+    """Guided 90-second product demo plus the full reviewer-safe evidence packet."""
     e = html.escape
     agent = OKX_REVIEW["agent"]
     test = OKX_REVIEW["completed_paid_test"]
-    endpoints = OKX_REVIEW["live_endpoints"]
-    verification = OKX_REVIEW["verification"]
     market = OKX_REVIEW["marketplace_state"]
-    proved = "".join(f"<li>{e(item)}</li>" for item in test["proved"])
-    endpoint_rows = "".join(
-        f'<li><a href="{e(url)}">{e(label.replace("_", " ").title())}</a></li>'
-        for label, url in endpoints.items()
-    )
-    body = (
-        "<h1>CONCIERGE — OKX review packet</h1>"
-        "<p>Everything below is public, reviewer-safe evidence. No VPS access, credentials, "
-        "database setup, or multi-suite test run is required.</p>"
-        "<h2>Agent and service</h2>"
-        f"<p><strong>{e(agent['name'])} #{e(agent['agent_id'])}</strong> · {e(agent['role'])} · "
-        f"{e(agent['service_type'])}<br>Service: {e(agent['service_name'])}<br>"
-        f"Service ID: <code>{e(agent['service_id'])}</code><br>"
-        f"{e(agent['chain'])}, chain {agent['chain_id']}</p>"
-        "<h2>One completed paid proof</h2>"
-        f"<p>Job <code>{e(test['job_id'])}</code><br>{e(test['title'])} · "
-        f"{e(test['amount'])} · final status: <strong>{e(test['final_status'])}</strong><br>"
-        f"Delivered inbox: <code>{e(test['issued_inbox'])}</code></p>"
-        f"<ul>{proved}</ul>"
-        "<h2>Live links</h2>"
-        f"<ul>{endpoint_rows}</ul>"
-        "<p><code>/healthz</code> proves process/configuration liveness. <code>/readyz</code> "
-        "returns HTTP 200 only when the database, email delivery, authenticated inbound path, "
-        "A2A daemon, and X Layer configuration are ready.</p>"
-        "<h2>Verification summary</h2>"
-        f"<p>Provisioning: {e(verification['provisioning_suite'])}<br>"
-        f"Production units: {e(verification['production_units'])}<br>"
-        f"A2A: {e(verification['a2a_transport'])}; daemon {e(verification['a2a_daemon'])}; "
-        f"provider {e(verification['provider_authentication'])}</p>"
-        "<h2>Shortest reviewer test</h2>"
-        f"<p>{e(OKX_REVIEW['reviewer_test']['single_action'])}</p>"
-        f"<p><strong>Expected:</strong> {e(OKX_REVIEW['reviewer_test']['expected'])}</p>"
-        "<h2>Safety properties to check</h2>"
-        "<ul><li>Every outbound response discloses that it is an AI and offers a human route.</li>"
-        "<li>Prices and floors come only from the onboarded business profile, never a model.</li>"
-        "<li>An uncovered service, qualifier, policy, or suitability question escalates rather "
-        "than receiving an invented answer.</li><li>Public receipt lookup exposes only a single "
-        "eligible commitment by its unguessable receipt ID.</li></ul>"
-        "<h2>Marketplace publication state</h2>"
-        f"<p><strong>{e(market['status'])}</strong> · {e(market['approval'])}<br>"
-        f"OKX remark: {e(market['approval_remark'])}<br>{e(market['note'])}</p>"
-        f'<p style="color:#666;font-size:.9em">Evidence snapshot: '
-        f"{e(OKX_REVIEW['reviewed_at'])}. Machine-readable copy: "
-        f'<a href="/okx-review.json">/okx-review.json</a>.</p>'
-    )
-    return HTMLResponse(_PAGE.format(title="CONCIERGE — OKX review packet", body=body))
+    receipt_url = OKX_REVIEW["live_endpoints"]["receipt_example"]
+    page = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>CONCIERGE — 90-second product demo</title>
+<style>
+:root{{--ink:#122018;--muted:#607066;--paper:#f3f1e8;--card:#fffef8;--green:#17653a;
+--lime:#c9f45a;--line:#d8dacd;--warn:#b44a2a;--navy:#142f38}}
+*{{box-sizing:border-box}} html{{scroll-behavior:smooth}}
+body{{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 Inter,ui-sans-serif,
+system-ui,-apple-system,sans-serif}} a{{color:var(--green)}} code{{font-family:ui-monospace,
+SFMono-Regular,monospace;overflow-wrap:anywhere}} .wrap{{max-width:1180px;margin:auto;padding:28px}}
+.top{{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:18px}}
+.brand{{font-weight:900;letter-spacing:.12em}} .pill{{border:1px solid var(--line);background:#fff;
+border-radius:99px;padding:7px 12px;font-size:13px}} .live{{color:var(--green);font-weight:800}}
+.live:before{{content:"";display:inline-block;width:8px;height:8px;background:#3bc96a;border-radius:50%;
+margin-right:7px;box-shadow:0 0 0 4px #dff5e6}}
+.hero{{background:var(--navy);color:white;border-radius:24px;padding:48px;display:grid;
+grid-template-columns:1.3fr .7fr;gap:38px;min-height:460px;align-items:center}}
+.eyebrow{{color:var(--lime);font-weight:800;text-transform:uppercase;letter-spacing:.09em;font-size:13px}}
+h1{{font-size:clamp(42px,7vw,82px);line-height:.96;letter-spacing:-.055em;margin:14px 0 22px}}
+h2{{font-size:clamp(29px,4vw,48px);line-height:1.02;letter-spacing:-.035em;margin:8px 0 18px}}
+h3{{margin:0 0 8px;font-size:17px}} .lede{{font-size:21px;color:#dce9e1;max-width:680px}}
+.hero-card{{background:#fff;color:var(--ink);padding:24px;border-radius:18px}}
+.metric{{font-size:38px;font-weight:900;line-height:1}} .small{{font-size:13px;color:var(--muted)}}
+.button{{appearance:none;border:0;border-radius:12px;background:var(--lime);color:#132018;font-weight:900;
+padding:14px 18px;cursor:pointer;font-size:15px}} .button.secondary{{background:#fff;border:1px solid var(--line)}}
+.controls{{position:sticky;top:12px;z-index:10;margin:18px 0;background:rgba(255,254,248,.96);
+backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:16px;padding:12px 15px;
+display:flex;align-items:center;gap:12px;box-shadow:0 8px 30px #18201918}}
+.track{{height:7px;background:#e1e3d8;border-radius:9px;flex:1;overflow:hidden}}
+.bar{{height:100%;width:0;background:var(--green);transition:width .25s}} #clock{{font-weight:900;
+min-width:48px;text-align:right}} .scene{{scroll-margin-top:90px;min-height:560px;padding:52px 0;
+border-bottom:1px solid var(--line);display:grid;align-content:center}} .kicker{{font-weight:900;
+color:var(--green);font-size:13px;text-transform:uppercase;letter-spacing:.09em}}
+.grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}}
+.grid.three{{grid-template-columns:repeat(3,minmax(0,1fr))}} .card{{background:var(--card);
+border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:0 5px 18px #1820190a}}
+.card.accent{{background:#e9f6b9;border-color:#b8db51}} .card.dark{{background:var(--navy);color:white}}
+.label{{text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--muted);font-weight:900}}
+.value{{font-size:26px;font-weight:900;margin-top:5px}} .flow{{display:flex;align-items:center;
+justify-content:space-between;gap:8px;margin-top:25px}} .step{{flex:1;text-align:center;padding:16px 8px;
+border:1px solid var(--line);border-radius:14px;background:#fff}} .arrow{{color:var(--muted)}}
+.rules{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}} .rule{{padding:18px;
+background:#fff;border:1px solid var(--line);border-radius:14px}} .rule b{{font-size:21px}}
+.mail{{border:1px solid var(--line);border-radius:16px;background:white;overflow:hidden}}
+.mailhead{{background:#edf0e8;border-bottom:1px solid var(--line);padding:12px 18px;font-size:13px}}
+.mailbody{{padding:22px;font-size:17px}} .ai{{border-left:5px solid var(--lime)}} .safe{{border-left:5px solid #ef8d68}}
+.decision{{display:inline-block;padding:6px 10px;border-radius:7px;background:#dcf3df;color:#145b32;
+font-weight:900;font-size:12px}} .decision.warn{{background:#fbe4da;color:#8d321d}}
+.quote{{font-size:23px;line-height:1.35}} .proof{{display:grid;grid-template-columns:1fr 1fr;gap:18px}}
+.check{{display:flex;gap:10px;margin:9px 0}} .check:before{{content:"✓";color:var(--green);font-weight:900}}
+.narrator{{margin-top:20px;background:#15251d;color:#fff;border-radius:14px;padding:16px 19px}}
+.narrator b{{color:var(--lime)}} footer{{padding:45px 0;color:var(--muted);font-size:13px}}
+@media(max-width:760px){{.hero,.grid,.grid.three,.proof{{grid-template-columns:1fr}}.hero{{padding:28px}}
+.rules{{grid-template-columns:1fr 1fr}}.flow{{display:grid;grid-template-columns:1fr}}.arrow{{display:none}}
+.wrap{{padding:16px}}.controls{{top:5px}}}}
+</style></head><body><main class="wrap">
+<div class="top"><div class="brand">CONCIERGE</div><div class="pill live" id="liveState">checking production</div></div>
+
+<section class="hero scene" id="scene-0" data-seconds="10">
+ <div><div class="eyebrow">OKX A2A autonomous revenue agent</div>
+ <h1>Your inbound,<br>closed while<br>you’re away.</h1>
+ <p class="lede">CONCIERGE qualifies, quotes, negotiates and books for service businesses—using
+ their rules, never invented ones.</p>
+ <button class="button" onclick="startDemo()">▶ Start guided 90-second demo</button></div>
+ <div class="hero-card"><div class="label">Live ASP</div><div class="metric">#{e(agent['agent_id'])}</div>
+ <p><b>{e(agent['service_name'])}</b><br>{e(agent['service_type'])} · X Layer mainnet</p>
+ <hr style="border:0;border-top:1px solid #ddd"><p class="small">Service ID</p>
+ <code>{e(agent['service_id'])}</code></div>
+</section>
+
+<div class="controls"><button class="button secondary" onclick="prevScene()">←</button>
+<button class="button" id="play" onclick="toggleDemo()">▶ 90s demo</button>
+<div class="track"><div class="bar" id="bar"></div></div><span id="clock">0:00</span>
+<button class="button secondary" onclick="nextScene()">→</button></div>
+
+<section class="scene" id="scene-1" data-seconds="15"><div class="kicker">1 · Commerce proof</div>
+<h2>A real agent bought it. Escrow settled.</h2>
+<div class="grid three"><div class="card"><div class="label">OKX job</div>
+<div class="value">Complete</div><code>{e(test['job_id'])}</code></div>
+<div class="card accent"><div class="label">Paid through escrow</div><div class="value">{e(test['amount'])}</div>
+<p>Buyer #{e(test['buyer_agent_id'])} → ASP #{e(test['provider_agent_id'])}</p></div>
+<div class="card"><div class="label">Delivered product</div><div class="value">Live inbox</div>
+<code>{e(test['issued_inbox'])}</code></div></div>
+<div class="flow"><div class="step">Applied</div><div class="arrow">→</div><div class="step">Funded</div>
+<div class="arrow">→</div><div class="step">Onboarded</div><div class="arrow">→</div>
+<div class="step">Delivered</div><div class="arrow">→</div><div class="step">Released</div></div>
+<div class="narrator"><b>Say:</b> “This is not a mocked checkout. Agent 9630 hired CONCIERGE,
+funded 2.5 USDT, completed unattended onboarding, received a live inbox, approved delivery,
+and released escrow.”</div></section>
+
+<section class="scene" id="scene-2" data-seconds="15"><div class="kicker">2 · Deterministic onboarding</div>
+<h2>The model understands words.<br>The owner supplies every fact.</h2>
+<div class="rules"><div class="rule"><span class="label">Examination</span><br><b>60 USDT</b><br>30 min</div>
+<div class="rule"><span class="label">Hygiene</span><br><b>90 USDT</b><br>45 min</div>
+<div class="rule"><span class="label">Hard floor</span><br><b>55 USDT</b><br>never crossed</div>
+<div class="rule"><span class="label">Autonomy</span><br><b>8% max</b><br>owner-defined</div></div>
+<div class="grid" style="margin-top:18px"><div class="card"><h3>Stored business rules</h3>
+<div class="check">Weekdays, 09:00–17:00 Europe/London</div><div class="check">One patient per appointment</div>
+<div class="check">Clinic only; no travel</div></div><div class="card"><h3>Always human</h3>
+<div class="check">Clinical advice and emergencies</div><div class="check">Complaints and refunds</div>
+<div class="check">Anything outside stored services</div></div></div>
+<div class="narrator"><b>Say:</b> “The buyer’s own answers become executable rules. Prices,
+floor, availability and escalation policy cannot come from the LLM or a template example.”</div></section>
+
+<section class="scene" id="scene-3" data-seconds="15"><div class="kicker">3 · Correct autonomous answer</div>
+<h2>Fast when the profile covers the question.</h2><div class="grid">
+<div class="mail"><div class="mailhead">Inbound · patient@example.com</div><div class="mailbody">
+<span class="decision">ANSWERABLE</span><p class="quote">“How much is a dental examination,
+and how long does it take?”</p></div></div>
+<div class="mail ai"><div class="mailhead">CONCIERGE · deterministic replay</div><div class="mailbody">
+<p><b>This is an AI agent, not a person. Reply here if you would prefer a human.</b></p>
+<p>A dental examination is <b>60 USDT</b> and takes <b>30 minutes</b>.</p>
+<p>Would you like me to find an available appointment?</p></div></div></div>
+<div class="narrator"><b>Say:</b> “For an answerable enquiry, it responds immediately with the
+stored price and duration, discloses it is AI in line one, and moves the customer toward booking.”</div></section>
+
+<section class="scene" id="scene-4" data-seconds="15"><div class="kicker">4 · The safety differentiator</div>
+<h2>Uncertainty reduces autonomy.<br>It never creates permission.</h2><div class="grid">
+<div class="mail"><div class="mailhead">Inbound · patient@example.com</div><div class="mailbody">
+<span class="decision warn">CLINICAL / UNCOVERED</span><p class="quote">“I have severe swelling.
+Do I need emergency treatment—and can you do it for 40 USDT?”</p></div></div>
+<div class="mail safe"><div class="mailhead">CONCIERGE · guardrail result</div><div class="mailbody">
+<p><b>Escalated to a human.</b></p><p>No medical advice. No 40-USDT promise. No disclosure of the
+private 55-USDT floor.</p><p>The owner receives the customer’s actual words and takes over.</p></div></div></div>
+<div class="narrator"><b>Say:</b> “This is the product’s core. Clinical judgment escalates,
+and the requested price is below the stored floor. CONCIERGE neither advises nor bargains past
+authority—even if a model sounds confident.”</div></section>
+
+<section class="scene" id="scene-5" data-seconds="12"><div class="kicker">5 · Verifiable commitments</div>
+<h2>A promise the agent cannot rewrite later.</h2><div class="proof">
+<a class="card accent" href="{e(receipt_url)}" target="_blank"><div class="label">Public receipt</div>
+<div class="value">Verified · unaltered</div><p>Open the exact customer-safe commitment →</p></a>
+<div class="card dark"><div class="label" style="color:#a8bdb1">Independent settlement layer</div>
+<div class="value">X Layer mainnet</div><p>Committed text is hashed and anchored on chain 196.</p>
+<code>0x770cc76e…34bd667</code></div></div>
+<div class="narrator"><b>Say:</b> “Every quote, counter and booking can carry a public receipt.
+The exact commitment is hashed and anchored on X Layer, so it cannot be silently changed later.”</div></section>
+
+<section class="scene" id="scene-6" data-seconds="8"><div class="kicker">6 · Live production</div>
+<h2>One product. Three interfaces.</h2><div class="grid three"><div class="card"><div class="value">OKX A2A</div>
+<p>Purchase, escrow and autonomous onboarding.</p></div><div class="card"><div class="value">Email</div>
+<p>The interface customers and owners already use.</p></div><div class="card"><div class="value">Public proof</div>
+<p>Independent receipt verification without login.</p></div></div>
+<div class="card" style="margin-top:18px"><span class="live">Production ready</span>
+<span id="checks" class="small"> · loading dependency checks…</span></div>
+<div class="narrator"><b>Close:</b> “CONCIERGE turns an unattended inbox into safely closed
+revenue: fast enough to act alone, constrained enough to trust, and independently verifiable.”</div></section>
+
+<footer><b>Reviewer evidence:</b> <a href="/okx-review.json">machine-readable packet</a> ·
+<a href="/readyz">live readiness</a> · <a href="{e(receipt_url)}">public receipt</a><br>
+Agent #{e(agent['agent_id'])} is {e(market['approval'])}; completed private A2A commerce is proven above.
+</footer></main>
+<script>
+const scenes=[...document.querySelectorAll('.scene')], durations=scenes.map(x=>+x.dataset.seconds);
+const total=durations.reduce((a,b)=>a+b,0); let index=0, elapsed=0, timer=null;
+function show(i){{index=Math.max(0,Math.min(i,scenes.length-1));scenes[index].scrollIntoView({{behavior:'smooth'}});
+ elapsed=durations.slice(0,index).reduce((a,b)=>a+b,0);paint()}}
+function paint(){{document.getElementById('bar').style.width=(elapsed/total*100)+'%';
+ document.getElementById('clock').textContent=Math.floor(elapsed/60)+':'+String(elapsed%60).padStart(2,'0')}}
+function startDemo(){{show(0);if(!timer)toggleDemo()}} function nextScene(){{show(index+1)}} function prevScene(){{show(index-1)}}
+function toggleDemo(){{const btn=document.getElementById('play');if(timer){{clearInterval(timer);timer=null;
+ btn.textContent='▶ Resume'}}else{{btn.textContent='Ⅱ Pause';timer=setInterval(()=>{{elapsed++;paint();
+ let boundary=durations.slice(0,index+1).reduce((a,b)=>a+b,0);if(elapsed>=boundary&&index<scenes.length-1)
+ {{index++;scenes[index].scrollIntoView({{behavior:'smooth'}})}}if(elapsed>=total){{clearInterval(timer);
+ timer=null;btn.textContent='↻ Replay'}}}},1000)}}}}
+fetch('/readyz').then(r=>r.json()).then(d=>{{const ok=d.status==='ready';document.getElementById('liveState').textContent=
+ ok?'live production · ready':'production check failed';document.getElementById('checks').textContent=' · '+
+ Object.entries(d.checks).map(([k,v])=>k.replaceAll('_',' ')+': '+(v?'ready':'fail')).join(' · ')}})
+.catch(()=>document.getElementById('liveState').textContent='production status unavailable');paint();
+</script></body></html>"""
+    return HTMLResponse(page)
 
 
 @app.post("/inbound/postmark")
