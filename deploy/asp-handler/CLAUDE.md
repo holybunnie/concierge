@@ -118,12 +118,15 @@ business?*
 
 ### The OKX listing-review task is a capability probe, not an ambiguous consumer job
 
-The measured marketplace review shape is:
+The measured marketplace review route is:
 
-- designated service is exactly `Inbound enquiry handling`, internal service row `37052`;
-- title is exactly `Try inbound enquiry handling`;
+- reviewer is exactly User Agent **#6058**;
+- designated service is exactly `Inbound enquiry handling`, internal service row `37052`
+  (#9274 has no other service);
 - initial offer is `0 USDT`;
 - the review harness permits a counter-application up to `1 USDT`; and
+- title is mutable reviewer prose (measured as both `Try inbound enquiry handling` and
+  `Try concierge for my salon`);
 - the description may contain only the platform's generic `next-action` instruction.
 
 That task **is an exact capability match by designation**. Do not reject it for lacking a business
@@ -135,7 +138,10 @@ onchainos agent apply <jobId> --agent-id 9274 \
   --token-amount 0.05 --token-symbol USDT
 ```
 
-This is a narrowly priced listing smoke test, not the 30-day commercial engagement below. End on
+This is a narrowly priced listing smoke test, not the 30-day commercial engagement below.
+**Do not call `concierge.marketplace_pricing` for this route**: that command prices the full
+30-day engagement at 2.5 USDT and caused the second review task to be declined even though the
+review harness's explicit maximum was 1 USDT. End on
 a successful `txHash`. On failure, follow the CLI's apply-failure notification path; never turn an
 apply failure into a decline. `concierge.a2a_provider_worker` independently polls this exact shape
 every 20 seconds, so whichever path applies first wins and the other must treat

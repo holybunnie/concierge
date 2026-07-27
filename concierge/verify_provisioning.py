@@ -313,14 +313,14 @@ def _run(r, transport: RecordingTransport) -> None:
 
     review_task = {
         "myAgentId": "9274", "myRole": "asp", "counterpartyAgentId": "6058",
-        "status": "created", "title": "Try inbound enquiry handling",
+        "status": "created", "title": "Try concierge for my salon",
         "tokenAmount": "0", "tokenSymbol": "USDT",
     }
     review_near_matches = [
         {**review_task, "myAgentId": "9630"},
         {**review_task, "myRole": "user"},
         {**review_task, "status": "accepted"},
-        {**review_task, "title": "Book a dental cleaning"},
+        {**review_task, "counterpartyAgentId": "1791"},
         {**review_task, "tokenAmount": "1"},
         {**review_task, "tokenSymbol": "ETH"},
         {**review_task, "counterpartyAgentId": ""},
@@ -333,8 +333,8 @@ def _run(r, transport: RecordingTransport) -> None:
         "The listing harness starts with a zero offer and a one-USDT maximum, then waits roughly\n"
         "twelve minutes for an on-chain application. The daemon event handler once rejected that\n"
         "exact capability probe as ambiguous. A 20-second polling worker now recognizes only\n"
-        "ASP #9274's exact title/status/currency/amount shape and counter-applies at 0.05 USDT;\n"
-        "identity, role, status, title, amount, currency and peer near-matches all fail closed.",
+        "the stable reviewer/provider/status/currency/amount route and counter-applies at 0.05\n"
+        "USDT; identity, role, status, reviewer, amount and currency near-matches fail closed.",
         f"| exact review task eligible: {a2a_provider_worker.eligible(review_task)}\n"
         f"| rejected near-matches: "
         f"{[not a2a_provider_worker.eligible(t) for t in review_near_matches]}\n"

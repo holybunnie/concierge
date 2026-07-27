@@ -1,14 +1,14 @@
 """Restart-safe provider recovery for the exact OKX listing-review task shape.
 
-The marketplace's listing harness creates a private designated task titled
-``Try inbound enquiry handling`` with a zero initial offer and a one-USDT maximum. It expects the
-provider to counter-apply on chain before its roughly 12-minute acceptance window closes.
+The marketplace's reviewer agent #6058 creates a private task designating #9274's sole service,
+with a zero initial offer and a one-USDT maximum. Titles vary between review attempts. The harness
+expects the provider to counter-apply on chain within a roughly three-minute polling window.
 
 The normal daemon event handler remains the primary path. This worker polls authoritative active
 task state so a delayed, missed, or misclassified notification cannot leave that review job in
-``created``. Its scope is deliberately narrow: ASP #9274, exact title, exact zero-USDT initial
-offer, and a fixed 0.05-USDT smoke-test counter. A buyer must still accept and fund that counter
-before any work begins.
+``created``. Its scope is deliberately narrow: reviewer #6058 to ASP #9274, exact zero-USDT
+initial offer, and a fixed 0.05-USDT smoke-test counter. A buyer must still accept and fund that
+counter before any work begins.
 """
 
 from __future__ import annotations
@@ -20,7 +20,10 @@ from typing import Any
 from . import config, postmark
 
 PROVIDER_ID = "9274"
-REVIEW_TITLE = "Try inbound enquiry handling"
+# Both measured listing attempts came from OKX's reviewer agent #6058, while the human-readable
+# title changed between attempts. #9274 exposes exactly one service, so the authoritative stable
+# route is reviewer -> designated provider, not title prose.
+REVIEW_BUYER_ID = "6058"
 INITIAL_AMOUNT = "0"
 COUNTER_AMOUNT = "0.05"
 CURRENCY = "USDT"
@@ -42,10 +45,9 @@ def eligible(task: dict[str, Any]) -> bool:
         str(task.get("myAgentId")) == PROVIDER_ID
         and task.get("myRole") == "asp"
         and str(task.get("status")).lower() == "created"
-        and task.get("title") == REVIEW_TITLE
+        and str(task.get("counterpartyAgentId")) == REVIEW_BUYER_ID
         and str(task.get("tokenAmount")) == INITIAL_AMOUNT
         and str(task.get("tokenSymbol")).upper() == CURRENCY
-        and bool(str(task.get("counterpartyAgentId") or "").strip())
     )
 
 
