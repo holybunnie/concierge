@@ -1,0 +1,24 @@
+[Unit]
+Description=CONCIERGE deterministic A2A test-buyer recovery worker
+After=network-online.target concierge-a2a.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=concierge
+Group=concierge
+WorkingDirectory=/opt/concierge
+Environment=HOME=/opt/concierge
+Environment=PATH=/opt/concierge/a2a/node_modules/.bin:/opt/concierge/.venv/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/opt/concierge/.env
+ExecStart=/opt/concierge/.venv/bin/python -m concierge.a2a_buyer_worker
+StandardOutput=journal
+StandardError=journal
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/opt/concierge
+
+[Install]
+WantedBy=multi-user.target

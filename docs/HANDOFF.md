@@ -1,12 +1,62 @@
 # HANDOFF
 
-Resume point for a session starting cold. **Current as of 2026-07-26 22:50 UTC.**
+Resume point for a session starting cold. **Current as of 2026-07-27 07:38 UTC.**
 
-**Deadline: 2026-07-27 22:59 UTC — about 30 hours remain.**
+**Deadline: 2026-07-27 22:59 UTC.**
 
 ---
 
-## 🛑 RESUME HERE — paid private path proven; one review decision remains
+## 🛑 RESUME HERE — paid lifecycle proven; OKX listing review is the only blocker
+
+Job
+`0x3646b7b21028eec33742c2dba81cc0d758597e674af7696773cc906f8282a608`
+completed the full private paid lifecycle on **2026-07-27 07:35 UTC**: buyer #9630 →
+ASP #9274, exact 2.5 USDT, application, escrow funding, unattended onboarding, delivery,
+review approval, and escrow release. The platform's final read is `Task status: complete`.
+The delivered tenant is live at `brightside-dental-2@inbox.quietdesks.com`.
+
+Both timers and the A2A daemon run on the VPS and continue when the operator's PC is off:
+`concierge-a2a-buyer.timer`, `concierge-a2a-provision.timer`, and `concierge-a2a.service`.
+The buyer worker is deliberately narrow: only buyer #9630, provider #9274, exact title
+`CONCIERGE 30-day test`, and exact 2.5 USDT match. It cannot touch the older 0.02-USDT review or
+any other task. The provisioning gate now reports **16 pass / 0 fail / 1 declared transport
+stub**, including an explicit proof that near-match tasks cannot enter the completion path.
+
+**Only OKX review remains.** `agent profile 9274` still reports `Status: not listed` and
+`Approval status: Listing under review`; public search does not return #9274. The service record
+exists, the agent is online, `soldCount` is 1, and its approval remark says
+`AI quality review timed out, automatically passed`, but publication has not followed. There is
+no remaining repository or VPS transition that can honestly change that marketplace review
+state. Do not claim the agent is listed until `agent profile 9274` says so and public search
+returns #9274.
+
+**Defects found and fixed during this fresh test:**
+
+- `deploy/push.sh` previously updated the source handler but never installed it to
+  `/opt/concierge-asp/CLAUDE.md`; it now installs and md5-matches the runtime copy.
+- One handler directory serves both local agents. The runtime policy now routes receiving #9274
+  as ASP and #9630 as User instead of treating both as ASP.
+- A system notification can be missed before a restart. New `concierge.a2a_buyer_worker` polls
+  authoritative active-task state and performs the exact authorized buyer transition.
+- Shared-daemon `xmtp-send` could not infer #9630. The worker now mirrors the marketplace's
+  existing group id into an explicit `my:9630:to:9274` peer session and sends through that key.
+- `confirm-accept` prints prose, not JSON. The worker's result parsing now treats it accordingly;
+  the earlier logged JSON parse failure occurred after the transaction succeeded.
+- Clinic classification asks `service_menu`, `booking_lead_time`, and `cancellation_policy`
+  rather than the generic aliases. The deterministic buyer now carries the same approved facts
+  under both field-name sets; cancellation explicitly escalates instead of inventing a fee.
+- OKX refuses `complete` until its review gate is resolved. Submitted-state recovery now checks
+  the exact authorized task plus the RLS-scoped live tenant, persisted delivery flag, and real
+  inbox domain before entering that review path.
+
+The old job `0xbf71…fb53` remains submitted with 0.02 USDT in escrow. Restart recovery woke it,
+and the new policy correctly refused to touch it because its amount/title do not match the
+authorized autonomous test. Leave it alone unless the operator separately gives an explicit
+decision.
+
+---
+
+## Historical paid-path proof — one older review decision remains
 
 **The original rejection cause is fixed and now proven over the real wire.** Agent #9274 receives
 events, runs authenticated handler sessions, and puts a buyer-visible message in the job thread.

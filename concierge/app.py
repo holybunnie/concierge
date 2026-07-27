@@ -41,6 +41,72 @@ def _anchor_in_background(tenant_id, receipt) -> None:
 
 app = FastAPI(title="CONCIERGE inbound", docs_url=None, redoc_url=None)
 
+OKX_REVIEW = {
+    "reviewed_at": "2026-07-27T07:38:00Z",
+    "agent": {
+        "name": "CONCIERGE",
+        "agent_id": "9274",
+        "role": "ASP",
+        "chain": "X Layer mainnet",
+        "chain_id": 196,
+        "service_id": "dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027",
+        "service_name": "Inbound enquiry handling",
+        "service_type": "A2A",
+    },
+    "live_endpoints": {
+        "review_page": "https://app.quietdesks.com/okx-review",
+        "machine_readable": "https://app.quietdesks.com/okx-review.json",
+        "liveness": "https://app.quietdesks.com/healthz",
+        "readiness": "https://app.quietdesks.com/readyz",
+        "receipt_example": (
+            "https://app.quietdesks.com/r/ce573269-cf86-46b5-a682-6e614b48da47"
+        ),
+    },
+    "completed_paid_test": {
+        "job_id": "0x3646b7b21028eec33742c2dba81cc0d758597e674af7696773cc906f8282a608",
+        "title": "CONCIERGE 30-day test",
+        "buyer_agent_id": "9630",
+        "provider_agent_id": "9274",
+        "amount": "2.5 USDT",
+        "final_status": "complete",
+        "issued_inbox": "brightside-dental-2@inbox.quietdesks.com",
+        "proved": [
+            "provider application",
+            "buyer acceptance and escrow funding",
+            "unattended tenant onboarding over A2A",
+            "delivery of a real dedicated inbox",
+            "buyer review approval",
+            "escrow release",
+        ],
+    },
+    "verification": {
+        "provisioning_suite": "16 passed, 0 failed, 1 declared transport stub",
+        "production_readiness": "ready",
+        "a2a_transport": "available",
+        "a2a_daemon": "ready",
+        "provider_authentication": "authenticated by live probe",
+        "production_units": "7/7 active",
+    },
+    "reviewer_test": {
+        "single_action": (
+            "Create one private designated A2A job for Agent #9274 and service "
+            "dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027, asking CONCIERGE to set up inbound "
+            "enquiry handling for the buyer's own service business."
+        ),
+        "expected": (
+            "CONCIERGE responds in the job thread, validates the engagement price, and—after "
+            "acceptance—conducts deterministic onboarding. Unknown prices or policies are "
+            "escalated; they are never invented."
+        ),
+    },
+    "marketplace_state": {
+        "status": "not listed",
+        "approval": "Listing under review",
+        "approval_remark": "AI quality review timed out, automatically passed",
+        "note": "All operator-controlled tests pass; public listing is awaiting OKX publication.",
+    },
+}
+
 
 @app.get("/healthz")
 def healthz() -> dict[str, object]:
@@ -68,6 +134,69 @@ def readyz() -> JSONResponse:
         {"status": "ready" if ready else "not_ready", "checks": checks},
         status_code=200 if ready else 503,
     )
+
+
+@app.get("/okx-review.json")
+def okx_review_json() -> dict[str, object]:
+    """One reviewer-safe, machine-readable evidence bundle; contains no credentials."""
+    return OKX_REVIEW
+
+
+@app.get("/okx-review")
+def okx_review_page() -> HTMLResponse:
+    """A single human-readable handoff so marketplace review needs no repository setup."""
+    e = html.escape
+    agent = OKX_REVIEW["agent"]
+    test = OKX_REVIEW["completed_paid_test"]
+    endpoints = OKX_REVIEW["live_endpoints"]
+    verification = OKX_REVIEW["verification"]
+    market = OKX_REVIEW["marketplace_state"]
+    proved = "".join(f"<li>{e(item)}</li>" for item in test["proved"])
+    endpoint_rows = "".join(
+        f'<li><a href="{e(url)}">{e(label.replace("_", " ").title())}</a></li>'
+        for label, url in endpoints.items()
+    )
+    body = (
+        "<h1>CONCIERGE — OKX review packet</h1>"
+        "<p>Everything below is public, reviewer-safe evidence. No VPS access, credentials, "
+        "database setup, or multi-suite test run is required.</p>"
+        "<h2>Agent and service</h2>"
+        f"<p><strong>{e(agent['name'])} #{e(agent['agent_id'])}</strong> · {e(agent['role'])} · "
+        f"{e(agent['service_type'])}<br>Service: {e(agent['service_name'])}<br>"
+        f"Service ID: <code>{e(agent['service_id'])}</code><br>"
+        f"{e(agent['chain'])}, chain {agent['chain_id']}</p>"
+        "<h2>One completed paid proof</h2>"
+        f"<p>Job <code>{e(test['job_id'])}</code><br>{e(test['title'])} · "
+        f"{e(test['amount'])} · final status: <strong>{e(test['final_status'])}</strong><br>"
+        f"Delivered inbox: <code>{e(test['issued_inbox'])}</code></p>"
+        f"<ul>{proved}</ul>"
+        "<h2>Live links</h2>"
+        f"<ul>{endpoint_rows}</ul>"
+        "<p><code>/healthz</code> proves process/configuration liveness. <code>/readyz</code> "
+        "returns HTTP 200 only when the database, email delivery, authenticated inbound path, "
+        "A2A daemon, and X Layer configuration are ready.</p>"
+        "<h2>Verification summary</h2>"
+        f"<p>Provisioning: {e(verification['provisioning_suite'])}<br>"
+        f"Production units: {e(verification['production_units'])}<br>"
+        f"A2A: {e(verification['a2a_transport'])}; daemon {e(verification['a2a_daemon'])}; "
+        f"provider {e(verification['provider_authentication'])}</p>"
+        "<h2>Shortest reviewer test</h2>"
+        f"<p>{e(OKX_REVIEW['reviewer_test']['single_action'])}</p>"
+        f"<p><strong>Expected:</strong> {e(OKX_REVIEW['reviewer_test']['expected'])}</p>"
+        "<h2>Safety properties to check</h2>"
+        "<ul><li>Every outbound response discloses that it is an AI and offers a human route.</li>"
+        "<li>Prices and floors come only from the onboarded business profile, never a model.</li>"
+        "<li>An uncovered service, qualifier, policy, or suitability question escalates rather "
+        "than receiving an invented answer.</li><li>Public receipt lookup exposes only a single "
+        "eligible commitment by its unguessable receipt ID.</li></ul>"
+        "<h2>Marketplace publication state</h2>"
+        f"<p><strong>{e(market['status'])}</strong> · {e(market['approval'])}<br>"
+        f"OKX remark: {e(market['approval_remark'])}<br>{e(market['note'])}</p>"
+        f'<p style="color:#666;font-size:.9em">Evidence snapshot: '
+        f"{e(OKX_REVIEW['reviewed_at'])}. Machine-readable copy: "
+        f'<a href="/okx-review.json">/okx-review.json</a>.</p>'
+    )
+    return HTMLResponse(_PAGE.format(title="CONCIERGE — OKX review packet", body=body))
 
 
 @app.post("/inbound/postmark")

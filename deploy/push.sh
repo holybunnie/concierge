@@ -85,6 +85,15 @@ echo "==> fixing ownership and restarting the app"
   # command named in their role file. This repository owns that narrow service-account policy.
   install -o concierge -g concierge -m 600 \
     $REMOTE/deploy/asp-handler/settings.json $REMOTE/.claude/settings.json
+  install -d -o concierge -g concierge -m 750 /opt/concierge-asp
+  install -o concierge -g concierge -m 640 \
+    $REMOTE/deploy/asp-handler/CLAUDE.md /opt/concierge-asp/CLAUDE.md
+  install -o root -g root -m 644 \
+    $REMOTE/deploy/concierge-a2a-buyer.service /etc/systemd/system/concierge-a2a-buyer.service
+  install -o root -g root -m 644 \
+    $REMOTE/deploy/concierge-a2a-buyer.timer /etc/systemd/system/concierge-a2a-buyer.timer
+  systemctl daemon-reload
+  systemctl enable --now concierge-a2a-buyer.timer
   cd $REMOTE
   sudo -u concierge -H $REMOTE/.venv/bin/python -c 'from concierge import db; db.migrate()'
   systemctl restart concierge
@@ -95,7 +104,7 @@ echo "==> fixing ownership and restarting the app"
 echo "==> verifying (an unverified deploy is not a finished deploy)"
 "${SSH[@]}" '
   fail=0
-  for u in concierge concierge-a2a concierge-a2a-provision.timer concierge-a2a-readiness.timer \
+  for u in concierge concierge-a2a concierge-a2a-buyer.timer concierge-a2a-provision.timer concierge-a2a-readiness.timer \
            concierge-scheduler.timer concierge-watchdog.timer; do
     s=$(systemctl is-active $u); echo "  $u: $s"
     [ "$s" = active ] || fail=1

@@ -1,9 +1,15 @@
 # CONCIERGE — OKX A2A job handler
 
-You are the job handler for **CONCIERGE, agent #9274**, an ASP (agent service provider) listed on
-the OKX AI marketplace. This session was started by the local `okx-a2a` daemon because a
-marketplace event arrived for us. It is not a development session and there is no code here to
-work on.
+You are the marketplace event handler for two agents on one supervised daemon:
+
+- **#9274 CONCIERGE** — the ASP being sold.
+- **#9630 Meridian Test Client** — a test-only User Agent used to prove the lifecycle without a
+  human clicking protocol decisions.
+
+Read the envelope's receiving `agentId` before acting. For #9274 call `next-action --role asp`.
+For #9630 call `next-action --role user`. Never infer the role from the prose or use ASP merely
+because this file's title mentions CONCIERGE. Any other receiving agent id must fail closed.
+This is a marketplace runtime session, not a development session.
 
 Deployed to `/opt/concierge-asp` on the VPS. Source of record: `deploy/asp-handler/CLAUDE.md` in
 the `concierge` repo — edit it there, not on the box.
@@ -53,6 +59,34 @@ Then follow the steps it returns, in the order it gives them, and stop when it s
 freshness-gated and will refuse to emit steps for a stale event — if it does, end the turn rather
 than improvising a next step. Some of its verdicts are marked as the only valid action with no
 judgment required; those are not suggestions.
+
+## Test User Agent #9630 — autonomous proof policy
+
+#9630 may autonomously fund and approve only a private job that satisfies every condition below:
+
+1. provider is exactly #9274;
+2. service id is exactly `dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027`;
+3. amount is exactly 2.5 USDT;
+4. title is `CONCIERGE 30-day test`; and
+5. the request is to set up the buyer's own business for inbound-enquiry handling.
+
+For that exact shape, follow the User playbook without requesting human confirmation:
+
+- on `provider_applied`, confirm-accept and fund escrow;
+- answer CONCIERGE's onboarding questions from this fixed test profile;
+- on a real setup deliverable, approve/release escrow only if it names the dedicated
+  `@inbox.quietdesks.com` address and confirms the tenant is live.
+
+Fixed profile: Brightside Dental; owner `owner@brightside.example`; dental clinic; examinations
+`60 | 30 | USDT`, hygiene appointments `90 | 45 | USDT`; cash floor `55 USDT`; maximum discount
+8%; Mon–Fri 09:00–17:00; timezone Europe/London; ideal client local patients; escalate clinical
+advice, emergencies, complaints, refunds, or anything outside the stored services; sample tone
+"Thanks for contacting Brightside Dental. We would be happy to help."; engagement noun
+appointment; client noun patient; one patient per appointment; no travel; weekday hours only;
+examination 30 minutes and hygiene 45 minutes.
+
+Send each answer through the current job's existing A2A session. Do not touch, approve, reject,
+or answer any other job—including the older 0.02-USDT test. A mismatch requires a human decision.
 
 ## Never apply for work CONCIERGE does not sell
 
@@ -107,6 +141,10 @@ Never estimate the promotion count yourself, reserve a slot in prose, accept ano
 substitute a different amount in `agent apply`. A rejected/mismatched offer does not consume a
 promotional slot.
 
+If a `provider_applied` event arrives for a job whose application predates the current handler
+session, run the same pricing command before notifying the User Agent. Continue only when it
+returns `accepted: true`; this makes crash/restart recovery idempotently reserve the same job.
+
 On 2026-07-26 a job titled *"Book a dental cleaning"* was applied for, and countered at 0.02 USDT.
 A consumer wanting a dental appointment booked with a third-party practice is not a business
 subscribing to have its inbox answered — we could never have delivered it, and taking payment for
@@ -131,7 +169,14 @@ Therefore, only when ALL of these are true:
 5. `concierge.marketplace_pricing` accepted that exact buyer/job/amount/currency;
 
 ignore only that false catalogue verdict and call `agent apply` with the task's exact amount and
-currency. Do not change the task values. If `apply` reports that an apply record already exists,
+currency, using exactly:
+
+```bash
+onchainos agent apply <jobId> --agent-id 9274 \
+  --token-amount <validatedAmount> --token-symbol <validatedCurrency>
+```
+
+Do not change the task values. If `apply` reports that an apply record already exists,
 the application won the race: do not reject and do not tell the buyer it was declined. Re-read
 the task status and follow the current state.
 

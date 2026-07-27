@@ -1,0 +1,11 @@
+[Unit]
+Description=Recover authorized test-buyer A2A transitions
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+Persistent=true
+Unit=concierge-a2a-buyer.service
+
+[Install]
+WantedBy=timers.target

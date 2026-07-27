@@ -364,7 +364,14 @@ def consume(todo_id: str) -> None:
     _run(["user", "check", "--todo-ids", todo_id])
 
 
-def send(job_id: str, content: str, *, to_agent_id: str | None = None) -> None:
+def send(
+    job_id: str,
+    content: str,
+    *,
+    to_agent_id: str | None = None,
+    session_agent_id: str | None = None,
+    session_key: str | None = None,
+) -> None:
     """Deliver a message back to the buying agent over XMTP.
 
     The content is produced by our own code and passed through verbatim. There is no model in
@@ -381,16 +388,23 @@ def send(job_id: str, content: str, *, to_agent_id: str | None = None) -> None:
     prose sitting in `~/.okx-agent-task/logs/llm.log` while the provider 401'd. An exit code is not
     a delivery. `xmtp-send` is the one that queues a message through the daemon to the peer.
     """
-    args = ["xmtp-send", "--job-id", job_id, "--message", content]
-    if to_agent_id:
-        args += ["--to-agent-id", to_agent_id]
+    args = ["xmtp-send"]
+    if session_key:
+        args += ["--session-key", session_key]
     else:
+        args += ["--job-id", job_id]
+    args += ["--message", content]
+    if to_agent_id and not session_key:
+        args += ["--to-agent-id", to_agent_id]
+    elif not session_key:
         # xmtp-send addresses a peer, not a job: without a recipient there is nobody to deliver
         # to. Raising beats letting the CLI fail in a way a caller might read as "nothing to do".
         raise A2AUnavailable(
             f"Refusing to send on job {job_id!r} with no recipient agent id — xmtp-send requires "
             f"--to-agent-id, and a message with no addressee is not a message."
         )
+    if session_agent_id:
+        args += ["--session-agent-id", session_agent_id]
     _run(args)
 
 

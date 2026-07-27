@@ -20,7 +20,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from . import a2a, db, engine, onboarding, provision, store
+from . import a2a, a2a_buyer_worker, db, engine, onboarding, provision, store
 from . import verify_engine as p3
 
 
@@ -284,6 +284,31 @@ def _run(r, transport: RecordingTransport) -> None:
         f"| vertical: {live.vertical}\n"
         f"| inbound_address: {live.inbound_address}\n"
         f"| address deliverable here: {onboarding.address_is_live(live.inbound_address)}",
+    )
+
+    exact_task = {
+        "myAgentId": "9630", "myRole": "user", "counterpartyAgentId": "9274",
+        "title": "CONCIERGE 30-day test", "tokenAmount": "2.5", "tokenSymbol": "USDT",
+    }
+    rejected_variants = [
+        {**exact_task, "myAgentId": "9274"},
+        {**exact_task, "counterpartyAgentId": "9999"},
+        {**exact_task, "title": "Paid CONCIERGE test"},
+        {**exact_task, "tokenAmount": "0.02"},
+    ]
+    release_address = a2a_buyer_worker._delivered_live_tenant(job_id)
+    r.check(
+        "The test buyer can release only the exact authorized task after durable delivery",
+        (a2a_buyer_worker.eligible(exact_task)
+         and not any(a2a_buyer_worker.eligible(task) for task in rejected_variants)
+         and release_address == live.inbound_address),
+        "Autonomous completion releases escrow, so both halves are gated: marketplace identity,\n"
+        "provider, title and exact amount must match the one approved test shape, and the\n"
+        "provider-side tenant must already be live with marketplace delivery persisted. The\n"
+        "address is read back from the RLS-scoped tenant rather than trusted from a message.",
+        f"| eligible exact task: {a2a_buyer_worker.eligible(exact_task)}\n"
+        f"| rejected near-matches: {[not a2a_buyer_worker.eligible(t) for t in rejected_variants]}\n"
+        f"| durable delivered address: {release_address}",
     )
 
     # ---- 4. provenance: nothing in the profile came from anywhere but the buyer
