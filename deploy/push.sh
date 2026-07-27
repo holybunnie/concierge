@@ -38,6 +38,7 @@ EXCLUDES=(
   --exclude '.okx-agent-task'      # XMTP identity + daemon state
   --exclude 'a2a'                  # our pinned copy of the marketplace CLI (never the global one)
   --exclude '.a2a_readiness_state.json'
+  --exclude '.a2a_provider_applied.json'
 )
 
 RESTART_A2A=0
@@ -60,6 +61,8 @@ echo "==> backing up live state on $HOST"
   dir=/root/concierge-backups/$ts
   mkdir -p "$dir"
   cp -a /opt/concierge/.env "$dir/env" 2>/dev/null || echo "  (no .env to back up)"
+  cp -a /opt/concierge/.a2a_provider_applied.json "$dir/a2a-provider-applied.json" \
+    2>/dev/null || true
   tar -czf "$dir/onchainos.tar.gz" -C /opt/concierge .onchainos 2>/dev/null || true
   tar -czf "$dir/okx-agent-task.tar.gz" -C /opt/concierge .okx-agent-task 2>/dev/null || true
   chmod -R go-rwx /root/concierge-backups

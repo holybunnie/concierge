@@ -14,7 +14,10 @@ counter before any work begins.
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from . import config, postmark
@@ -27,6 +30,9 @@ REVIEW_BUYER_ID = "6058"
 INITIAL_AMOUNT = "0"
 COUNTER_AMOUNT = "0.05"
 CURRENCY = "USDT"
+STATE_PATH = Path(os.environ.get("A2A_PROVIDER_STATE")
+                  or (config.ROOT / ".a2a_provider_applied.json"))
+_TX_HASH = re.compile(r'0x[a-fA-F0-9]{64}')
 
 
 def _run(*args: str, timeout: int = 90) -> subprocess.CompletedProcess[str]:
@@ -49,6 +55,22 @@ def eligible(task: dict[str, Any]) -> bool:
         and str(task.get("tokenAmount")) == INITIAL_AMOUNT
         and str(task.get("tokenSymbol")).upper() == CURRENCY
     )
+
+
+def _read_applied() -> dict[str, str]:
+    try:
+        value = json.loads(STATE_PATH.read_text())
+        return {str(k): str(v) for k, v in value.items()} if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _record_applied(applied: dict[str, str]) -> None:
+    """Atomically persist successful submissions so ``created`` does not mean ``not applied``."""
+    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = STATE_PATH.with_suffix(".tmp")
+    temporary.write_text(json.dumps(applied, sort_keys=True))
+    temporary.replace(STATE_PATH)
 
 
 def _alert(job_id: str, detail: str) -> str:
@@ -84,9 +106,15 @@ def run() -> dict[str, Any]:
         raise RuntimeError(f"active-tasks returned non-JSON: {active.stdout[:200]!r}") from exc
     tasks = (payload.get("data") or {}).get("tasks") or []
     candidates = [task for task in tasks if eligible(task)]
+    submitted = _read_applied()
     results: list[dict[str, str]] = []
     for task in candidates:
         job_id = str(task["jobId"])
+        if job_id in submitted:
+            results.append({
+                "job_id": job_id, "action": "already_submitted", "tx_hash": submitted[job_id],
+            })
+            continue
         applied = _run(
             "apply", job_id,
             "--agent-id", PROVIDER_ID,
@@ -94,8 +122,14 @@ def run() -> dict[str, Any]:
             "--token-symbol", CURRENCY,
         )
         combined = f"{applied.stdout}\n{applied.stderr}".strip()
-        if applied.returncode == 0 and "txHash" in combined:
-            results.append({"job_id": job_id, "action": "applied", "price": COUNTER_AMOUNT})
+        tx_match = _TX_HASH.search(combined)
+        if applied.returncode == 0 and tx_match:
+            submitted[job_id] = tx_match.group(0)
+            _record_applied(submitted)
+            results.append({
+                "job_id": job_id, "action": "applied", "price": COUNTER_AMOUNT,
+                "tx_hash": tx_match.group(0),
+            })
             continue
         if "apply record already exists" in combined.lower():
             results.append({"job_id": job_id, "action": "already_applied"})
