@@ -154,57 +154,69 @@ def okx_review_page() -> HTMLResponse:
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>CONCIERGE — 90-second product demo</title>
 <style>
-:root{{--ink:#122018;--muted:#607066;--paper:#f3f1e8;--card:#fffef8;--green:#17653a;
---lime:#c9f45a;--line:#d8dacd;--warn:#b44a2a;--navy:#142f38}}
+:root{{--ink:#171916;--muted:#686d67;--paper:#f5f4ef;--card:#fbfaf6;--green:#0d6247;
+--pale:#e2eee8;--line:#d3d3cb;--warn:#a5422d;--navy:#1c2521}}
 *{{box-sizing:border-box}} html{{scroll-behavior:smooth}}
-body{{margin:0;background:var(--paper);color:var(--ink);font:16px/1.45 Inter,ui-sans-serif,
-system-ui,-apple-system,sans-serif}} a{{color:var(--green)}} code{{font-family:ui-monospace,
-SFMono-Regular,monospace;overflow-wrap:anywhere}} .wrap{{max-width:1180px;margin:auto;padding:28px}}
-.top{{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:18px}}
-.brand{{font-weight:900;letter-spacing:.12em}} .pill{{border:1px solid var(--line);background:#fff;
-border-radius:99px;padding:7px 12px;font-size:13px}} .live{{color:var(--green);font-weight:800}}
+body{{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 Inter,ui-sans-serif,
+system-ui,-apple-system,sans-serif}} a{{color:var(--green);text-underline-offset:3px}} code{{font-family:
+ui-monospace,SFMono-Regular,monospace;overflow-wrap:anywhere;font-size:.88em}} .wrap{{max-width:1120px;
+margin:auto;padding:24px 32px}} .top{{display:flex;align-items:center;justify-content:space-between;
+gap:20px;padding:8px 0 24px;border-bottom:1px solid var(--ink)}} .brand{{font-weight:850;
+letter-spacing:.18em;font-size:13px}} .pill{{border:1px solid var(--line);background:transparent;
+padding:6px 10px;font-size:12px}} .live{{color:var(--green);font-weight:750}}
 .live:before{{content:"";display:inline-block;width:8px;height:8px;background:#3bc96a;border-radius:50%;
-margin-right:7px;box-shadow:0 0 0 4px #dff5e6}}
-.hero{{background:var(--navy);color:white;border-radius:24px;padding:48px;display:grid;
-grid-template-columns:1.3fr .7fr;gap:38px;min-height:460px;align-items:center}}
-.eyebrow{{color:var(--lime);font-weight:800;text-transform:uppercase;letter-spacing:.09em;font-size:13px}}
-h1{{font-size:clamp(42px,7vw,82px);line-height:.96;letter-spacing:-.055em;margin:14px 0 22px}}
-h2{{font-size:clamp(29px,4vw,48px);line-height:1.02;letter-spacing:-.035em;margin:8px 0 18px}}
-h3{{margin:0 0 8px;font-size:17px}} .lede{{font-size:21px;color:#dce9e1;max-width:680px}}
-.hero-card{{background:#fff;color:var(--ink);padding:24px;border-radius:18px}}
-.metric{{font-size:38px;font-weight:900;line-height:1}} .small{{font-size:13px;color:var(--muted)}}
-.button{{appearance:none;border:0;border-radius:12px;background:var(--lime);color:#132018;font-weight:900;
-padding:14px 18px;cursor:pointer;font-size:15px}} .button.secondary{{background:#fff;border:1px solid var(--line)}}
-.controls{{position:sticky;top:12px;z-index:10;margin:18px 0;background:rgba(255,254,248,.96);
-backdrop-filter:blur(12px);border:1px solid var(--line);border-radius:16px;padding:12px 15px;
-display:flex;align-items:center;gap:12px;box-shadow:0 8px 30px #18201918}}
-.track{{height:7px;background:#e1e3d8;border-radius:9px;flex:1;overflow:hidden}}
-.bar{{height:100%;width:0;background:var(--green);transition:width .25s}} #clock{{font-weight:900;
-min-width:48px;text-align:right}} .scene{{scroll-margin-top:90px;min-height:560px;padding:52px 0;
-border-bottom:1px solid var(--line);display:grid;align-content:center}} .kicker{{font-weight:900;
-color:var(--green);font-size:13px;text-transform:uppercase;letter-spacing:.09em}}
-.grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}}
-.grid.three{{grid-template-columns:repeat(3,minmax(0,1fr))}} .card{{background:var(--card);
-border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:0 5px 18px #1820190a}}
-.card.accent{{background:#e9f6b9;border-color:#b8db51}} .card.dark{{background:var(--navy);color:white}}
-.label{{text-transform:uppercase;letter-spacing:.08em;font-size:11px;color:var(--muted);font-weight:900}}
-.value{{font-size:26px;font-weight:900;margin-top:5px}} .flow{{display:flex;align-items:center;
-justify-content:space-between;gap:8px;margin-top:25px}} .step{{flex:1;text-align:center;padding:16px 8px;
-border:1px solid var(--line);border-radius:14px;background:#fff}} .arrow{{color:var(--muted)}}
-.rules{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}} .rule{{padding:18px;
-background:#fff;border:1px solid var(--line);border-radius:14px}} .rule b{{font-size:21px}}
-.mail{{border:1px solid var(--line);border-radius:16px;background:white;overflow:hidden}}
-.mailhead{{background:#edf0e8;border-bottom:1px solid var(--line);padding:12px 18px;font-size:13px}}
-.mailbody{{padding:22px;font-size:17px}} .ai{{border-left:5px solid var(--lime)}} .safe{{border-left:5px solid #ef8d68}}
-.decision{{display:inline-block;padding:6px 10px;border-radius:7px;background:#dcf3df;color:#145b32;
-font-weight:900;font-size:12px}} .decision.warn{{background:#fbe4da;color:#8d321d}}
-.quote{{font-size:23px;line-height:1.35}} .proof{{display:grid;grid-template-columns:1fr 1fr;gap:18px}}
-.check{{display:flex;gap:10px;margin:9px 0}} .check:before{{content:"✓";color:var(--green);font-weight:900}}
-.narrator{{margin-top:20px;background:#15251d;color:#fff;border-radius:14px;padding:16px 19px}}
-.narrator b{{color:var(--lime)}} footer{{padding:45px 0;color:var(--muted);font-size:13px}}
-@media(max-width:760px){{.hero,.grid,.grid.three,.proof{{grid-template-columns:1fr}}.hero{{padding:28px}}
+margin-right:7px;box-shadow:0 0 0 3px #dcebe2}}
+.hero{{padding:70px 0 58px;display:grid;grid-template-columns:1.45fr .55fr;gap:72px;min-height:570px;
+align-items:center;border-bottom:1px solid var(--ink)}} .eyebrow{{color:var(--green);font-weight:750;
+text-transform:uppercase;letter-spacing:.13em;font-size:11px}} h1{{font-family:Georgia,'Times New Roman',
+serif;font-weight:400;font-size:clamp(52px,7vw,78px);line-height:.98;letter-spacing:-.045em;
+margin:18px 0 24px}} h2{{font-family:Georgia,'Times New Roman',serif;font-weight:400;
+font-size:clamp(34px,4.4vw,52px);line-height:1.04;letter-spacing:-.035em;margin:10px 0 30px}}
+h3{{margin:0 0 10px;font-size:16px}} .lede{{font-size:19px;color:#414640;max-width:650px}}
+.hero-card{{background:transparent;color:var(--ink);padding:26px 0 26px 26px;border-left:1px solid var(--ink)}}
+.metric{{font-family:Georgia,serif;font-size:52px;line-height:1;margin:6px 0}} .small{{font-size:12px;
+color:var(--muted)}} .button{{appearance:none;border:1px solid var(--ink);border-radius:2px;
+background:var(--ink);color:white;font-weight:750;padding:13px 18px;cursor:pointer;font-size:14px;
+transition:background .12s,color .12s,transform .12s}} .button:hover{{background:var(--green);
+border-color:var(--green)}} .button:active{{transform:translateY(1px)}} .button:disabled{{opacity:.65}}
+.button.secondary{{background:transparent;color:var(--ink);border-color:var(--line)}}
+.button.secondary:hover{{background:white;border-color:var(--ink)}} .controls{{position:sticky;top:8px;
+z-index:10;margin:16px 0;background:rgba(245,244,239,.96);backdrop-filter:blur(14px);
+border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);padding:9px 0;display:flex;
+align-items:center;gap:10px}} .controls .button{{padding:8px 11px}} .track{{height:2px;
+background:#d7d8d2;flex:1;overflow:hidden}} .bar{{height:100%;width:0;background:var(--green);
+transition:width .2s}} #clock{{font-variant-numeric:tabular-nums;font-weight:750;min-width:45px;
+text-align:right;font-size:13px}} .scene{{scroll-margin-top:72px;min-height:590px;padding:68px 0;
+border-bottom:1px solid var(--line);display:grid;align-content:center}} .kicker{{font-weight:750;
+color:var(--green);font-size:11px;text-transform:uppercase;letter-spacing:.13em;margin-bottom:4px}}
+.grid{{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}}
+.grid.three{{grid-template-columns:repeat(3,minmax(0,1fr))}} .card{{background:transparent;
+border:1px solid var(--line);border-radius:3px;padding:24px}} .card.accent{{background:var(--pale);
+border-color:#a9c5b7}} .card.dark{{background:var(--navy);color:white;border-color:var(--navy)}}
+.label{{text-transform:uppercase;letter-spacing:.11em;font-size:10px;color:var(--muted);font-weight:750}}
+.value{{font-family:Georgia,serif;font-size:29px;margin-top:7px}} .flow{{display:grid;
+grid-template-columns:repeat(5,1fr);gap:0;margin-top:18px;border:1px solid var(--line)}}
+.step{{text-align:center;padding:14px 6px;background:transparent;border-right:1px solid var(--line);
+font-size:12px;text-transform:uppercase;letter-spacing:.06em}} .step:last-child{{border:0}}
+.arrow{{display:none}} .rules{{display:grid;grid-template-columns:repeat(4,1fr);gap:0;
+border:1px solid var(--line)}} .rule{{padding:20px;background:transparent;border-right:1px solid var(--line)}}
+.rule:last-child{{border:0}} .rule b{{font-family:Georgia,serif;font-weight:400;font-size:25px}}
+.mail{{border:1px solid var(--line);border-radius:3px;background:var(--card);overflow:hidden}}
+.mailhead{{background:transparent;border-bottom:1px solid var(--line);padding:11px 18px;font-size:11px;
+text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}} .mailbody{{padding:25px;font-size:16px}}
+.ai{{border-top:3px solid var(--green)}} .safe{{border-top:3px solid var(--warn)}}
+.decision{{display:inline-block;padding:4px 7px;border:1px solid #9dbbab;color:var(--green);
+font-weight:750;font-size:10px;letter-spacing:.08em}} .decision.warn{{border-color:#d8a492;color:#91351f;
+background:transparent}} .quote{{font-family:Georgia,serif;font-size:24px;line-height:1.35}}
+.proof{{display:grid;grid-template-columns:1fr 1fr;gap:14px}} .check{{display:flex;gap:10px;margin:9px 0}}
+.check:before{{content:"—";color:var(--green);font-weight:750}} .narrator{{margin-top:20px;
+border-left:2px solid var(--green);padding:10px 0 10px 17px;color:#383d38;font-size:14px}}
+.narrator b{{color:var(--green);text-transform:uppercase;letter-spacing:.08em;font-size:10px}}
+footer{{padding:45px 0;color:var(--muted);font-size:12px}}
+@media(max-width:760px){{.hero,.grid,.grid.three,.proof{{grid-template-columns:1fr}}.hero{{padding:44px 0;
+gap:28px;min-height:auto}}.hero-card{{border-left:0;border-top:1px solid var(--line);padding:22px 0}}
 .rules{{grid-template-columns:1fr 1fr}}.flow{{display:grid;grid-template-columns:1fr}}.arrow{{display:none}}
-.wrap{{padding:16px}}.controls{{top:5px}}}}
+.step{{border-right:0;border-bottom:1px solid var(--line)}}.wrap{{padding:14px 18px}}.controls{{top:4px}}}}
 </style></head><body><main class="wrap">
 <div class="top"><div class="brand">CONCIERGE</div><div class="pill live" id="liveState">checking production</div></div>
 
@@ -213,7 +225,7 @@ font-weight:900;font-size:12px}} .decision.warn{{background:#fbe4da;color:#8d321
  <h1>Your inbound,<br>closed while<br>you’re away.</h1>
  <p class="lede">CONCIERGE qualifies, quotes, negotiates and books for service businesses—using
  their rules, never invented ones.</p>
- <button class="button" onclick="startDemo()">▶ Start guided 90-second demo</button></div>
+ <button class="button" id="startButton" onclick="startDemo()">Start guided demo&nbsp; →</button></div>
  <div class="hero-card"><div class="label">Live ASP</div><div class="metric">#{e(agent['agent_id'])}</div>
  <p><b>{e(agent['service_name'])}</b><br>{e(agent['service_type'])} · X Layer mainnet</p>
  <hr style="border:0;border-top:1px solid #ddd"><p class="small">Service ID</p>
@@ -305,13 +317,18 @@ Agent #{e(agent['agent_id'])} is {e(market['approval'])}; completed private A2A 
 <script>
 const scenes=[...document.querySelectorAll('.scene')], durations=scenes.map(x=>+x.dataset.seconds);
 const total=durations.reduce((a,b)=>a+b,0); let index=0, elapsed=0, timer=null;
-function show(i){{index=Math.max(0,Math.min(i,scenes.length-1));scenes[index].scrollIntoView({{behavior:'smooth'}});
+function show(i,behavior='smooth'){{index=Math.max(0,Math.min(i,scenes.length-1));
+ scenes[index].scrollIntoView({{behavior,block:'start'}});
  elapsed=durations.slice(0,index).reduce((a,b)=>a+b,0);paint()}}
 function paint(){{document.getElementById('bar').style.width=(elapsed/total*100)+'%';
  document.getElementById('clock').textContent=Math.floor(elapsed/60)+':'+String(elapsed%60).padStart(2,'0')}}
-function startDemo(){{show(0);if(!timer)toggleDemo()}} function nextScene(){{show(index+1)}} function prevScene(){{show(index-1)}}
+function startDemo(){{const start=document.getElementById('startButton');start.disabled=true;
+ start.textContent='Opening demo…';show(1,'auto');if(!timer)toggleDemo();
+ requestAnimationFrame(()=>{{start.disabled=false;start.textContent='Restart guided demo →'}})}}
+function nextScene(){{show(index+1)}} function prevScene(){{show(index-1)}}
 function toggleDemo(){{const btn=document.getElementById('play');if(timer){{clearInterval(timer);timer=null;
- btn.textContent='▶ Resume'}}else{{btn.textContent='Ⅱ Pause';timer=setInterval(()=>{{elapsed++;paint();
+ btn.textContent='▶ Resume'}}else{{if(elapsed>=total)show(1,'auto');btn.textContent='Ⅱ Pause';
+ timer=setInterval(()=>{{elapsed++;paint();
  let boundary=durations.slice(0,index+1).reduce((a,b)=>a+b,0);if(elapsed>=boundary&&index<scenes.length-1)
  {{index++;scenes[index].scrollIntoView({{behavior:'smooth'}})}}if(elapsed>=total){{clearInterval(timer);
  timer=null;btn.textContent='↻ Replay'}}}},1000)}}}}

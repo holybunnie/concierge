@@ -13,8 +13,10 @@ the bottom of each scene. It advances automatically and finishes at exactly 1:30
 2. Open the public receipt link once in a second tab so it is already loaded.
 3. Return to the dashboard and refresh. Confirm the top-right indicator says
    `live production · ready`.
-4. Start recording, wait one second, then click the demo button.
-5. Read naturally. Do not add architecture commentary or open a terminal.
+4. Start recording and deliver the 10-second product opening while the hero is visible.
+5. At `0:10`, click **Start guided demo**. It moves to Commerce Proof immediately, sets the
+   timeline to `0:10`, and automatically advances the remaining scenes through `1:30`.
+6. Read naturally. Do not add architecture commentary or open a terminal.
 
 ## Exact narration
 
