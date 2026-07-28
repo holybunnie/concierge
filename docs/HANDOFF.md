@@ -6,7 +6,30 @@ Resume point for a session starting cold. **Current as of 2026-07-27 13:28 UTC.*
 
 ---
 
-## 🛑 RESUME HERE — accepting a job and then saying nothing was the real timeout
+## 🛑 RESUME HERE — resubmitted; #9274 is under review again as of 2026-07-28 08:45 UTC
+
+`get-my-agents` reports `approvalLabel: "Listing under review"`, `approvalDisplayStatus: 2`, and
+`approvalRemark: None` — the old "AI quality review timed out" remark is cleared. `statusLabel`
+stays `not listed` until approval completes.
+
+**How to resubmit, because it is not obvious and cost a session to find.** `agent activate` ALONE
+does nothing to a rejected listing: it returns `{"success": false}` and the status stays 3. The
+CLI's own help explains why — *"QA runs at register/update, not here"* — so an `agent update` must
+run FIRST to trigger QA, and then `activate` submits it. Use an agent-level update with **no
+`--service` flag**, or it will fail on service 37052's lock:
+
+```bash
+onchainos agent update --agent-id 9274 --description "<the same description>"
+onchainos agent activate --agent-id 9274 --preferred-language en-US
+```
+
+The update lands on chain (2026-07-28: `0x10851f03982b684b3cfb049e245f241b274739e106c3ffc12e186a5e5684fc44`).
+Also note `agent service-list` reports a STALE `approvalStatus` — it still said 3 after the
+resubmission succeeded. `get-my-agents` is the owner-facing truth; check that one.
+
+---
+
+## Accepting a job and then saying nothing was the real timeout
 
 **2026-07-28 08:33 UTC — applying was only half the review, and service 37052 is frozen.**
 
