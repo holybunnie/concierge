@@ -122,15 +122,27 @@ is what failed the listing on 2026-07-28.
 
 ### The OKX listing-review task is a capability probe, not an ambiguous consumer job
 
-**There are TWO review buyers, and both must be answered with an on-chain `apply`.**
+**There are two review routes, and both must be answered with an on-chain `apply`.** Route A is
+matched on the platform's own group-name namespace so a NEW reviewer agent id cannot slip past
+it; Route B is the known reviewer. The deterministic worker
+(`concierge.a2a_provider_worker`) also covers the two ids measured so far, on a 20-second timer —
+it reads `active-tasks`, which carries no group name, so **Route A is yours alone to catch when
+the id is unfamiliar.** Do not assume the worker already applied.
 
-#### Route A — the automated conformance probe, User Agent #1791 `SandboxAgent`
+#### Route A — the automated conformance probe, identified by its GROUP NAME
 
 This is the one that failed the listing on 2026-07-28, and it is the harder one, because it is
-**deliberately shaped like a consumer job**. Its signature, measured six times:
+**deliberately shaped like a consumer job**.
 
-- buyer is exactly **#1791 `SandboxAgent`**;
-- it opens an XMTP group named **`DACS-Probe-<our service name>`**;
+**The identifying signal is the XMTP group name, NOT the buyer's agent id.** A probe arrives in a
+group named **`DACS-Probe-<our service name>`**. Every real buyer job — without exception across
+every measured job — arrives in a group named `a2a-<jobId>` instead. That is a clean partition
+owned by the platform, and it is the ONLY probe signal that survives OKX pointing a different
+agent at us. #1791 `SandboxAgent` is the id measured so far; **do not condition on it.** If a
+group name begins with `DACS-Probe-`, it is a probe no matter who sent it.
+
+The rest of its signature, measured six times, is corroboration — never the test on its own:
+
 - the posted budget is a dust amount, measured at **`0.00001 USDT`** every time — no real buyer
   posts that;
 - the title and body are a consumer quote request against a trade we do not have a profile for:
@@ -149,6 +161,9 @@ answer; the buyer must still fund escrow before anything happens. **Every pricin
 file still binds what you say afterwards** — if the funded job really does turn out to be a
 third-party asking us to invent a price we have no profile for, decline it *then*, in the thread,
 having first shown the marketplace that #9274 answers.
+
+If the group name says `DACS-Probe-` but the buyer id is one you have never seen, that is the
+expected case after a re-review, not an anomaly. Apply, then say so in the thread as normal.
 
 #### Route B — the reviewer, User Agent #6058
 

@@ -311,6 +311,40 @@ def _run(r, transport: RecordingTransport) -> None:
         f"| durable delivered address: {release_address}",
     )
 
+    probe_from_new_reviewer = {
+        "myAgentId": "9274", "myRole": "asp", "counterpartyAgentId": "4242",
+        "status": "created", "title": "Request a Quote for Roof Repair",
+        "tokenAmount": "0.00001", "tokenSymbol": "USDT", "jobId": "0xnew",
+    }
+    stranger = {**probe_from_new_reviewer, "title": "Demo: inbound sales desk test",
+                "tokenAmount": "0.01", "jobId": "0xstranger"}
+    already_routed = {**probe_from_new_reviewer, "counterpartyAgentId": "1791"}
+    r.check(
+        "An unrecognised buyer's unanswered task raises a human instead of being applied for",
+        (a2a_provider_worker.unknown_review_candidate(probe_from_new_reviewer)
+         and a2a_provider_worker.unknown_review_candidate(stranger)
+         and not a2a_provider_worker.unknown_review_candidate(already_routed)
+         and not a2a_provider_worker.eligible(probe_from_new_reviewer)
+         and not a2a_provider_worker.eligible(stranger)),
+        "The 2026-07-28 rejection cost a full review round because a probe from an agent nobody\n"
+        "had mapped went unanswered on chain and nothing said so. The durable identifier is the\n"
+        "`DACS-Probe-` XMTP group name, which this worker cannot see — `active-tasks` carries no\n"
+        "group name — so the handler owns that judgement and this layer owns noticing. A task\n"
+        "from an unrecognised buyer sitting in `created` past the threshold emails the operator\n"
+        "ONCE and is never applied for from here: a new reviewer's probe and an ordinary\n"
+        "stranger's job are the same shape without the group name, and guessing wrong means\n"
+        "applying for work CONCIERGE cannot deliver.",
+        f"| probe from an unmapped reviewer #4242 warns: "
+        f"{a2a_provider_worker.unknown_review_candidate(probe_from_new_reviewer)}, "
+        f"auto-applies: {a2a_provider_worker.eligible(probe_from_new_reviewer)}\n"
+        f"| ordinary stranger #4242 at 0.01 warns: "
+        f"{a2a_provider_worker.unknown_review_candidate(stranger)}, "
+        f"auto-applies: {a2a_provider_worker.eligible(stranger)}\n"
+        f"| an already-routed review buyer is not double-warned: "
+        f"{not a2a_provider_worker.unknown_review_candidate(already_routed)}\n"
+        f"| warn threshold: {a2a_provider_worker.UNKNOWN_ALERT_AFTER_SECONDS}s",
+    )
+
     review_task = {
         "myAgentId": "9274", "myRole": "asp", "counterpartyAgentId": "6058",
         "status": "created", "title": "Try concierge for my salon",
