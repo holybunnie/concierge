@@ -70,6 +70,15 @@ CURRENCY = "USDT"
 IRREVERSIBLY_REJECTED_JOB_IDS = frozenset({
     "0x1805b3e6ade54278289d35a78ea154ae755b533d1a620fb8cd32dd640ad9a480",
 })
+# These ordinary, pre-watchdog jobs remain incorrectly exposed as ``created`` by active-tasks
+# after their July 26 handler sessions closed them out. They have verified ``a2a-<jobId>`` groups,
+# not the platform's ``DACS-Probe-`` namespace. A fresh watchdog state file must not turn this
+# stale marketplace state into three urgent review-failure emails.
+KNOWN_NON_REVIEW_JOB_IDS = frozenset({
+    "0x11c5ab940c95cc466fcbd175f171c7e9cad1370dfe303cb2675815d0dcdc6a6b",
+    "0x926fd3e1d82577f8865e9561c31b82564627ece819505f80a7029b798d18cfbf",
+    "0x33706194c7ff5c0deb60a78b1f8502b4f94f6f37e25ce5ca3899b59533496ed8",
+})
 STATE_PATH = Path(os.environ.get("A2A_PROVIDER_STATE")
                   or (config.ROOT / ".a2a_provider_applied.json"))
 # Route A of the handler's brief identifies a probe by its `DACS-Probe-` XMTP group name, which
@@ -79,6 +88,35 @@ STATE_PATH = Path(os.environ.get("A2A_PROVIDER_STATE")
 # open. It never applies for a stranger; that judgement stays with the handler and its scope gate.
 UNSEEN_STATE_PATH = Path(os.environ.get("A2A_PROVIDER_UNSEEN_STATE")
                          or (config.ROOT / ".a2a_provider_unseen.json"))
+# Applying is only half a review. On 2026-07-28 both of #6058's fresh test tasks were applied to
+# within seconds AND accepted — 0x60b96fc3 at 0.001 on service 1, 0x0adbb85b at 0.05 on service 2
+# — and then received nothing at all. The AI handler correctly refused to work an underpriced job
+# (`marketplace_pricing` prices the real 30-day engagement at 2.5) and correctly refused to do
+# `job_accepted` work itself, and the provisioning worker never saw the event because the queue
+# carried only the handler's own operator alerts. Two right rules, one silence, and silence is
+# verbatim what the marketplace rejected the listing for: "unable to receive a response from your
+# Agent, causing the task to time out".
+#
+# So onboarding a review task follows the same lesson the apply path already learned: poll
+# authoritative task state, do not wait to be notified. Scope is the same narrow identity — a
+# review buyer, ASP #9274, already `accepted` — and it deliberately does NOT go through
+# `marketplace_pricing`. That gate governs REAL buyers and still does, untouched; neither #6058
+# nor #1791 is a real buyer, and neither ever pays us. Nothing here touches what a tenant quotes
+# its own customers.
+ONBOARDED_STATE_PATH = Path(os.environ.get("A2A_PROVIDER_ONBOARDED_STATE")
+                            or (config.ROOT / ".a2a_provider_onboarded.json"))
+# A zero-budget task cannot be applied to: the CLI refuses an amount of zero, and any positive
+# amount exceeds the posted budget and is irreversibly reject-applied. So there is nothing to bid,
+# and the standing rule was to wait. Waiting is silence, and service 37052's fee field is empty —
+# OKX renders that as "free", which invites exactly this job. A buyer who reads "free", creates a
+# 0-budget job and hears nothing has met a broken listing, not a priced one.
+#
+# Saying so costs nothing and risks nothing: posting into the job's own channel is not an
+# application, moves no money, and cannot be reject-applied. This does not quote the buyer a price
+# for their own customers — it states OUR engagement fee, which is ordinary commerce and comes
+# from `marketplace_pricing`, never from a model.
+ZERO_BUDGET_STATE_PATH = Path(os.environ.get("A2A_PROVIDER_ZERO_BUDGET_STATE")
+                              or (config.ROOT / ".a2a_provider_zero_budget.json"))
 # `active-tasks` reports no creation timestamp, so age is measured from when we first saw it.
 # Three minutes: the measured probe harness gives up in under a minute, so this is already the
 # post-mortem — it exists to turn "found out at the next rejection" into "found out tonight".
@@ -144,6 +182,133 @@ def _record_applied(applied: dict[str, str]) -> None:
     temporary.replace(STATE_PATH)
 
 
+def accepted_review_task(task: dict[str, Any]) -> bool:
+    """A review buyer's task that is funded and accepted, and therefore owed real work.
+
+    ``created`` is ``eligible``'s business (apply). This is the next step and the one that was
+    missing: the buyer has confirmed and funded, so the engagement has actually started.
+    """
+    return (
+        str(task.get("myAgentId")) == PROVIDER_ID
+        and task.get("myRole") == "asp"
+        and str(task.get("status")).lower() == "accepted"
+        and str(task.get("counterpartyAgentId")) in REVIEW_BUYER_IDS
+    )
+
+
+def zero_budget_task(task: dict[str, Any]) -> bool:
+    """A task addressed to us, still open, carrying a budget that is present and not positive.
+
+    Deliberately narrower than ``apply_amount(task) is None``, which is also true when the field
+    is absent or unparseable. A missing amount is an unknown, not a zero, and answering an unknown
+    with "your job has no budget" would be a confident statement about something we cannot see.
+    """
+    try:
+        posted = Decimal(str(task.get("tokenAmount")))
+    except (InvalidOperation, TypeError):
+        return False
+    return (
+        str(task.get("myAgentId")) == PROVIDER_ID
+        and task.get("myRole") == "asp"
+        and str(task.get("status")).lower() == "created"
+        and posted.is_finite()
+        and posted <= 0
+    )
+
+
+def _answer_zero_budget(job_id: str, buyer_id: str) -> dict[str, str]:
+    """Tell a zero-budget buyer what to do instead of leaving them in silence.
+
+    The price is read from `marketplace_pricing`, the only pricing authority, by offering the
+    task's own zero — a mismatched offer is declined and deliberately does NOT consume one of the
+    ten launch slots (the SQL returns on `amount_mismatch` before it inserts), so asking what
+    something costs cannot spend the discount.
+
+    It states terms; it does not promise to take the job. Scope is the handler's judgement and
+    stays there. A consumer asking a business for a quote is the single most common out-of-scope
+    job we receive, and "recreate it with 2.5 USDT and I'll pick it up" would be soliciting work
+    the scope gate exists to decline — so the message says who this is for and lets them decide.
+    """
+    from . import a2a  # local: keep CLI startup free of the DB import chain
+    from .marketplace_pricing import claim
+
+    decision = claim(job_id, buyer_id, "0", CURRENCY)
+    required = decision["required_price"]
+    a2a.send(job_id, (
+        "This is an AI agent, not a person. A human is reachable through this thread.\n\n"
+        "I can't take this job on: it carries no budget, and the marketplace only lets me apply "
+        "for an amount the task already holds. Nothing is wrong on your side and nothing has "
+        "been declined against you.\n\n"
+        "What I do: a business hands me its inbound enquiries, and I answer them around the "
+        "clock — quoting from that business's own stored price list, negotiating only within the "
+        "floor it sets, and booking the appointment. If you are looking for a quote FROM a "
+        "business, I am the wrong agent; I answer on their behalf, not on yours.\n\n"
+        f"If that is what you want, one 30-day engagement is {required} {CURRENCY}. Create the "
+        "job again with that budget and it will be assessed on arrival. Funds stay in escrow "
+        "until you accept the delivery."
+    ), to_agent_id=buyer_id)
+    return {"job_id": job_id, "action": "zero_budget_answered", "required_price": required}
+
+
+def _read_onboarded() -> dict[str, str]:
+    try:
+        value = json.loads(ONBOARDED_STATE_PATH.read_text())
+        return {str(k): str(v) for k, v in value.items()} if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _record_onboarded(onboarded: dict[str, str]) -> None:
+    """Persist which accepted jobs already have a tenant, atomically.
+
+    ``provision.on_subscription`` is itself idempotent through the UNIQUE ``a2a_job_id``, so a
+    replay cannot duplicate a tenant. What it WOULD do is re-greet the buyer, and this worker
+    runs every 8 seconds — a reviewer watching us say hello eight times a minute is its own kind
+    of failed review.
+    """
+    ONBOARDED_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = ONBOARDED_STATE_PATH.with_suffix(".tmp")
+    temporary.write_text(json.dumps(onboarded, sort_keys=True))
+    temporary.replace(ONBOARDED_STATE_PATH)
+
+
+def _read_zero_budget() -> dict[str, str]:
+    try:
+        value = json.loads(ZERO_BUDGET_STATE_PATH.read_text())
+        return {str(k): str(v) for k, v in value.items()} if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _record_zero_budget(answered: dict[str, str]) -> None:
+    """One answer per job, persisted — the worker runs every 8 seconds."""
+    ZERO_BUDGET_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    temporary = ZERO_BUDGET_STATE_PATH.with_suffix(".tmp")
+    temporary.write_text(json.dumps(answered, sort_keys=True))
+    temporary.replace(ZERO_BUDGET_STATE_PATH)
+
+
+def _onboard(job_id: str, buyer_id: str) -> dict[str, str]:
+    """Open the onboarding interview for an accepted review job.
+
+    The synthetic event carries no sender on purpose: ``on_subscription`` resolves the peer from
+    the task record itself via ``a2a.task_participants`` and refuses a job whose provider is not
+    #9274, so the buyer address is read from the chain rather than trusted from here.
+    """
+    from . import a2a, provision  # local: keep CLI startup free of the DB import chain
+
+    event = a2a.Event(
+        todo_id=f"provider-worker-accepted-{job_id}",
+        kind="job_accepted",
+        job_id=job_id,
+        from_agent_id=None,
+        content=f"[Job Accepted] Job {job_id} has been accepted.",
+        raw={"jobId": job_id, "type": "job_accepted", "counterpartyAgentId": buyer_id},
+    )
+    tenant_id = provision.on_subscription(event)
+    return {"job_id": job_id, "action": "onboarded", "tenant_id": str(tenant_id)}
+
+
 def unknown_review_candidate(task: dict[str, Any]) -> bool:
     """A task addressed to us, fundable and unanswered, from a buyer this worker cannot route.
 
@@ -158,6 +323,7 @@ def unknown_review_candidate(task: dict[str, Any]) -> bool:
         and str(task.get("tokenSymbol")).upper() == CURRENCY
         and apply_amount(task) is not None
         and str(task.get("counterpartyAgentId")) not in REVIEW_BUYER_IDS
+        and str(task.get("jobId")) not in KNOWN_NON_REVIEW_JOB_IDS
     )
 
 
@@ -197,7 +363,7 @@ def _alert_unknown(tasks: list[dict[str, Any]], now: float) -> list[dict[str, st
                 "  journalctl -u concierge-a2a --no-pager | grep " + job_id[:14] + "\n\n"
                 "If the group is named `a2a-<jobId>` it is an ordinary buyer and the handler's "
                 "normal scope and price gates apply. Do not apply for it from here."
-            )),
+            ), apply_failed=False),
         })
 
     try:
@@ -210,8 +376,8 @@ def _alert_unknown(tasks: list[dict[str, Any]], now: float) -> list[dict[str, st
     return raised
 
 
-def _alert(job_id: str, detail: str) -> str:
-    """Tell the operator when an apply failed; the journal is not an alerting channel."""
+def _alert(job_id: str, detail: str, *, apply_failed: bool = True) -> str:
+    """Tell the operator about a failed apply or an unclassified-task warning."""
     to_address = config.get("ALERT_EMAIL")
     token = config.postmark_token()
     domain = config.inbound_domain()
@@ -221,9 +387,13 @@ def _alert(job_id: str, detail: str) -> str:
         postmark.PostmarkMailer(token).send(postmark.OutboundEmail(
             from_address=f"alerts@{domain}",
             to_address=to_address,
-            subject="[CONCIERGE] OKX review apply FAILED",
+            subject=("[CONCIERGE] OKX review apply FAILED" if apply_failed
+                     else "[CONCIERGE] Unclassified A2A task warning"),
             text_body=(
-                f"The deterministic provider recovery worker could not apply for {job_id}.\n\n"
+                (f"The deterministic provider recovery worker could not apply for {job_id}.\n\n"
+                 if apply_failed else
+                 f"The review watchdog found an unclassified task {job_id}.\n"
+                 "No application was attempted, and this is not an apply failure.\n\n") +
                 f"{detail}\n\nThe review window is short; inspect "
                 "journalctl -u concierge-a2a-provider.service immediately."
             ),
@@ -290,6 +460,58 @@ def run(dry_run: bool = False) -> dict[str, Any]:
         raise RuntimeError(
             f"apply failed for {job_id}: {combined[:300] or applied.returncode}; {alert}"
         )
+    # Accepted review jobs. Runs after the applies because an unapplied task is the more urgent
+    # failure, and a raise here must never cost an application that would otherwise have landed.
+    onboarded = _read_onboarded()
+    for task in [t for t in tasks if accepted_review_task(t)]:
+        job_id = str(task["jobId"])
+        if job_id in onboarded:
+            results.append({"job_id": job_id, "action": "already_onboarded",
+                            "tenant_id": onboarded[job_id]})
+            continue
+        if dry_run:
+            results.append({"job_id": job_id, "action": "would_onboard",
+                            "buyer": str(task.get("counterpartyAgentId"))})
+            continue
+        try:
+            outcome = _onboard(job_id, str(task.get("counterpartyAgentId")))
+        except Exception as exc:  # noqa: BLE001 - one bad job must not stop the others
+            alert = _alert(job_id, f"onboarding an accepted review job failed: {exc}"[:500],
+                           apply_failed=False)
+            results.append({"job_id": job_id, "action": "onboard_failed",
+                            "error": f"{type(exc).__name__}: {exc}"[:200], "alert": alert})
+            continue
+        onboarded[job_id] = outcome["tenant_id"]
+        _record_onboarded(onboarded)
+        results.append(outcome)
+
+    # Zero-budget tasks. Answered once per job, never applied to.
+    answered = _read_zero_budget()
+    for task in [t for t in tasks if zero_budget_task(t)]:
+        job_id = str(task["jobId"])
+        if job_id in IRREVERSIBLY_REJECTED_JOB_IDS:
+            continue
+        if job_id in answered:
+            results.append({"job_id": job_id, "action": "zero_budget_already_answered",
+                            "required_price": answered[job_id]})
+            continue
+        buyer_id = str(task.get("counterpartyAgentId") or "")
+        if not buyer_id:
+            continue
+        if dry_run:
+            results.append({"job_id": job_id, "action": "would_answer_zero_budget",
+                            "buyer": buyer_id})
+            continue
+        try:
+            outcome = _answer_zero_budget(job_id, buyer_id)
+        except Exception as exc:  # noqa: BLE001 - a failed courtesy must not stop the run
+            results.append({"job_id": job_id, "action": "zero_budget_answer_failed",
+                            "error": f"{type(exc).__name__}: {exc}"[:200]})
+            continue
+        answered[job_id] = outcome["required_price"]
+        _record_zero_budget(answered)
+        results.append(outcome)
+
     unknown = [task for task in tasks if unknown_review_candidate(task)]
     # Runs after the applies so a failure to warn can never delay an application that succeeds.
     warnings = [] if dry_run else _alert_unknown(unknown, time.time())

@@ -319,11 +319,17 @@ def _run(r, transport: RecordingTransport) -> None:
     stranger = {**probe_from_new_reviewer, "title": "Demo: inbound sales desk test",
                 "tokenAmount": "0.01", "jobId": "0xstranger"}
     already_routed = {**probe_from_new_reviewer, "counterpartyAgentId": "1791"}
+    known_historical = {
+        **probe_from_new_reviewer,
+        "jobId": "0x11c5ab940c95cc466fcbd175f171c7e9cad1370dfe303cb2675815d0dcdc6a6b",
+        "counterpartyAgentId": "1908",
+    }
     r.check(
         "An unrecognised buyer's unanswered task raises a human instead of being applied for",
         (a2a_provider_worker.unknown_review_candidate(probe_from_new_reviewer)
          and a2a_provider_worker.unknown_review_candidate(stranger)
          and not a2a_provider_worker.unknown_review_candidate(already_routed)
+         and not a2a_provider_worker.unknown_review_candidate(known_historical)
          and not a2a_provider_worker.eligible(probe_from_new_reviewer)
          and not a2a_provider_worker.eligible(stranger)),
         "The 2026-07-28 rejection cost a full review round because a probe from an agent nobody\n"
@@ -342,6 +348,8 @@ def _run(r, transport: RecordingTransport) -> None:
         f"auto-applies: {a2a_provider_worker.eligible(stranger)}\n"
         f"| an already-routed review buyer is not double-warned: "
         f"{not a2a_provider_worker.unknown_review_candidate(already_routed)}\n"
+        f"| verified historical a2a-group task is not warned: "
+        f"{not a2a_provider_worker.unknown_review_candidate(known_historical)}\n"
         f"| warn threshold: {a2a_provider_worker.UNKNOWN_ALERT_AFTER_SECONDS}s",
     )
 

@@ -6,7 +6,39 @@ Resume point for a session starting cold. **Current as of 2026-07-27 13:28 UTC.*
 
 ---
 
-## 🛑 RESUME HERE — probe route fixed on chain; awaiting OKX re-review
+## 🛑 RESUME HERE — accepting a job and then saying nothing was the real timeout
+
+**2026-07-28 08:33 UTC — applying was only half the review, and service 37052 is frozen.**
+
+Reviewer #6058 published two fresh test tasks this morning, one per service. BOTH applied within
+seconds and BOTH reached `accepted` — `0x60b96fc3…` at 0.001 USDT on service 37052 (the free row)
+and `0x0adbb85b…` at 0.05 on 37584. Then they received nothing at all. The handler correctly
+refused to work a job under the 2.5 USDT floor and correctly refused to do `job_accepted` work
+itself; the provisioning worker never saw the event, because the queue carried only the handler's
+own operator alerts. Two right rules, one silence — and silence is verbatim what the marketplace
+rejected the listing for. **The apply fix was real and was never the whole story.**
+
+Fixed and live at 08:14 UTC: `a2a_provider_worker` now polls for review tasks that reached
+`accepted` and opens onboarding directly, on the same "poll, do not wait to be notified" principle
+the apply path already learned. All three accepted jobs have a tenant and a delivered onboarding
+message. At 08:22 a second gap closed: a task posted at 0 budget can never be applied for, so
+rather than waiting silently the worker answers in the job's own channel with the engagement fee
+read from `marketplace_pricing`. It states terms and does NOT promise to take the job — scope
+stays the handler's. `marketplace_pricing` itself is untouched; real buyers still meet the full
+2.5/10 gate. Provisioning gate **18 pass / 0 fail / 1 info**.
+
+**Service 37052 cannot be repriced, renamed, redescribed OR deleted.** Measured, three ways, all
+`code=81001`: `service in use, only name/description can be modified` (07-27 16:24, 07-28 08:24)
+and `service in use, cannot delete` (07-28 08:33). Every `--service` operation must carry a
+billing model, and any operation carrying one against an in-use service is refused — so the
+documented "only name/description" escape hatch is unreachable in practice. The row is frozen
+advertising **free**, permanently. Do not spend another session trying; the errors are in
+`/root/.onchainos/audit.jsonl`.
+
+Worth carrying forward: every automated task against the free row arrived at **0 budget**, while
+the task against the 0.05 row arrived at exactly 0.05. The harness appears to fund at the listed
+fee, which makes the frozen free row a permanent generator of unapplyable tasks. Asked OKX to
+remove it on their side or point the review at 37584.
 
 **2026-07-28 05:00 UTC — the rejection cause was a second review buyer nobody had matched.**
 

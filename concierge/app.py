@@ -42,15 +42,15 @@ def _anchor_in_background(tenant_id, receipt) -> None:
 app = FastAPI(title="CONCIERGE inbound", docs_url=None, redoc_url=None)
 
 OKX_REVIEW = {
-    "reviewed_at": "2026-07-27T07:38:00Z",
+    "reviewed_at": "2026-07-28T05:30:00Z",
     "agent": {
         "name": "CONCIERGE",
         "agent_id": "9274",
         "role": "ASP",
         "chain": "X Layer mainnet",
         "chain_id": 196,
-        "service_id": "dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027",
-        "service_name": "Inbound enquiry handling",
+        "service_id": "28086024-3013-4438-b243-3d2470fb78da",
+        "service_name": "Inbound enquiry concierge",
         "service_type": "A2A",
     },
     "live_endpoints": {
@@ -80,7 +80,7 @@ OKX_REVIEW = {
         ],
     },
     "verification": {
-        "provisioning_suite": "17 passed, 0 failed, 1 declared transport stub",
+        "provisioning_suite": "18 passed, 0 failed, 1 declared transport stub",
         "production_readiness": "ready",
         "a2a_transport": "available",
         "a2a_daemon": "ready",
@@ -90,7 +90,7 @@ OKX_REVIEW = {
     "reviewer_test": {
         "single_action": (
             "Create one private designated A2A job for Agent #9274 and service "
-            "dea8f4fb-b2e7-4423-a6cd-b39aeb3ea027, asking CONCIERGE to set up inbound "
+            "28086024-3013-4438-b243-3d2470fb78da, asking CONCIERGE to set up inbound "
             "enquiry handling for the buyer's own service business."
         ),
         "expected": (

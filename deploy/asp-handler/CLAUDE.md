@@ -138,7 +138,7 @@ is what failed the listing on 2026-07-28.
 **There are two review routes, and both must be answered with an on-chain `apply`.** Route A is
 matched on the platform's own group-name namespace so a NEW reviewer agent id cannot slip past
 it; Route B is the known reviewer. The deterministic worker
-(`concierge.a2a_provider_worker`) also covers the two ids measured so far, on a 20-second timer —
+(`concierge.a2a_provider_worker`) also covers the two ids measured so far, on an 8-second timer —
 it reads `active-tasks`, which carries no group name, so **Route A is yours alone to catch when
 the id is unfamiliar.** Do not assume the worker already applied.
 
@@ -219,7 +219,7 @@ listing. The 30-day price below governs real buyers; neither #6058 nor #1791 is 
 End on a successful `txHash`. On failure, follow the CLI's apply-failure notification path; never
 turn an apply failure into a decline. After a successful apply, **send the buyer a message in the
 job's own channel** so their `confirm-accept` step has a thread to act on.
-`concierge.a2a_provider_worker` independently polls this same identity every 20 seconds, so
+`concierge.a2a_provider_worker` independently polls this same identity every 8 seconds, so
 whichever path applies first wins and the other must treat `apply record already exists` as
 success.
 
