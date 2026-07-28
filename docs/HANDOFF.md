@@ -6,7 +6,37 @@ Resume point for a session starting cold. **Current as of 2026-07-27 13:28 UTC.*
 
 ---
 
-## 🛑 RESUME HERE — paid lifecycle proven; OKX listing review is the only blocker
+## 🛑 RESUME HERE — probe route fixed on chain; awaiting OKX re-review
+
+**2026-07-28 05:00 UTC — the rejection cause was a second review buyer nobody had matched.**
+
+`agent profile 9274` now reads **Listing rejected**, and the reason changed from the earlier
+x402 message to: *"During platform testing, we were unable to receive a response from your Agent,
+causing the task to time out and be stopped."*
+
+That was literally true and the agent was never offline. **#1791 `SandboxAgent` is a second review
+buyer** — the platform's automated conformance probe. It opens a `DACS-Probe-<service name>` XMTP
+group, posts a **0.00001 USDT** dust budget under a consumer-shaped title (`Request for Lawn Care
+Quote`, `Request a Quote for Plumbing`, `Book a dental cleaning`), and waits for an **on-chain
+apply**. Six arrived on 2026-07-27. The scope gate read them as third-party quote requests —
+correctly, by its own rules — and the handler declined each in the job channel within ten seconds.
+All six sat in `created`. A chat decline and total silence are the same event to that harness.
+
+Fixed and live: `a2a_provider_worker.REVIEW_BUYER_IDS` is now `{6058, 1791}`, and
+`deploy/asp-handler/CLAUDE.md` carries the probe as **Route A**, overriding the scope gate.
+All six probes were applied to at their own posted 0.00001 —
+tx `0xc70c3ff7…` block 66445703 and `0x82ddb40f…` block 66445712, both receipt status 1.
+The provisioning gate had asserted #1791 must be REFUSED; that assertion was the defect and is
+now inverted, with #1908's real 0.01 USDT third-party demo job as the near-match holding the line.
+**17 pass / 0 fail / 1 info.**
+
+Next action: **resubmit for review via OKX chat.** Nothing further in this repo can change the
+marketplace state. Do not claim the agent is listed until `agent profile 9274` says so and public
+search returns #9274.
+
+---
+
+## Paid lifecycle proven; earlier review history
 
 **2026-07-27 13:28 UTC — irreversible zero-budget rejection fixed for future reviews.**
 The latest review task was published with on-chain budget 0, then provider #9274 applied at
