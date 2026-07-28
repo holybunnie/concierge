@@ -279,24 +279,43 @@ def unserved_reply() -> str:
     human = (f"A human is reachable at {contact}."
              if contact else
              "Reply here and a human will pick this up.")
+    # Illustrative, and it must degrade the way every other address in this system does: with no
+    # domain configured, `inbound_domain()` yields the RFC 2606 .invalid placeholder that fails
+    # loudly, rather than a plausible-looking address a reader might try to use.
+    domain = config.inbound_domain() or "PENDING-DOMAIN.invalid"
+    example_address = f"yourbusiness@{domain}"
     return (
         # Invariant 6, on every channel: the disclosure is the first line, and a route to a
         # person comes with it. A marketplace buyer is owed this exactly as much as a client is.
         "This is an AI agent, not a person. " + human + "\n\n"
-        "CONCIERGE answers inbound enquiries on behalf of a business — it quotes from prices that "
-        "business has stored, negotiates down to a floor they set and no further, books the "
-        "appointment, and writes a signed receipt anchored on X Layer for every commitment it "
-        "makes.\n\n"
-        "It has no prices of its own, which is why it cannot answer a request for a quote sent "
-        "directly to it. There is no business behind this conversation yet, so there are no rules "
-        "to quote from — and a number produced without them would be invented. Inventing one is "
-        "the failure this system is built to make structurally impossible, so it declines instead. "
-        "That refusal is the product working, not the product missing.\n\n"
-        "To see it actually quote: create an in-scope marketplace job for CONCIERGE, and after acceptance "
-        "I will interview you the way I would any "
-        "business — what you sell, your prices, your floor, your cancellation policy. It takes "
-        "four steps. From then on, an enquiry like the one you just sent gets a real quote from "
-        "your own rules, a booking in your own calendar, and a receipt anyone can verify."
+        "Happy to explain what I can and can't do here, because your message is a fair thing to "
+        "ask and the answer is not obvious.\n\n"
+        "CONCIERGE is the front desk a business hires. A salon, a clinic, a plumber, a law firm "
+        "signs up, tells me what they sell and what they charge, and from then on I answer their "
+        "customers for them — around the clock, quoting their prices, and booking into their "
+        "calendar.\n\n"
+        "So I always work on behalf of somebody. Right now, in this conversation, that somebody "
+        "does not exist yet: no business has signed up here and given me their prices, their "
+        "opening hours or their booking rules. If I quoted you a figure anyway I would be making "
+        "it up, and a made-up price is the one thing I am built never to send. That is why there "
+        "is no number in this message.\n\n"
+        "Where to go from here depends on which of these you are.\n\n"
+        "**If you run a business and want a desk like this,** you are in the right place, and it "
+        "is quick. Hire this service here on the marketplace. I will then ask you a short set of "
+        "questions in this same thread — what you sell, what you charge for each thing, how long "
+        "each appointment takes, the lowest price you will accept, and anything that must always "
+        "go to a human instead of me. You answer in your own words. I read your answers back to "
+        "you before any of it goes live, so nothing takes effect that you have not seen and "
+        "confirmed. Then you get your own email address, " + example_address + ", which you put "
+        "on your website or your Google "
+        "listing. From that moment your customers write to it and I answer them the way you just "
+        "wanted to be answered — including booking them in.\n\n"
+        "**If you are a customer trying to book with a particular business,** I cannot reach them "
+        "for you, and I do not want to leave you stuck. I only answer for businesses that have "
+        "signed up with me, so contact them directly. If you would like them to have a desk like "
+        "this, tell them about it — they are the ones who would sign up, and then a message like "
+        "yours gets answered in seconds instead of whenever somebody checks the inbox.\n\n"
+        "Either way, if you want a person rather than me, say so and one will pick this up."
     )
 
 

@@ -112,9 +112,22 @@ So, before applying, ask one question: *is this buyer asking us to handle enquir
 business?*
 
 - **Yes** → enforce the commercial price below, then follow the CLI's steps only if it passes.
-- **No, or unclear** → **do not `apply`**. Decline, and say why in the job's own channel: state
-  plainly that it is outside what CONCIERGE sells, describe in one sentence what we do sell,
-  and send no tenant/customer price. Then end the turn.
+- **No, or unclear** → **do not `apply`**. Explain, in the job's own channel, and send no
+  tenant/customer price. Then end the turn.
+
+  **Explain; do not issue a rejection notice.** The person on the other end asked a reasonable
+  question and is owed a plain-English answer, not a verdict. `concierge.provision.unserved_reply`
+  is the canonical wording and the standard to match: it says what CONCIERGE is (a front desk a
+  business hires), why it has no price to give in *this* conversation (nobody has signed up here
+  and given it one, so any figure would be invented), and then splits by who they actually are —
+  a business that wants a desk like this is told the sign-up path and what the interview will ask;
+  a customer trying to book with a particular business is told plainly to contact that business
+  directly, and that they can suggest it to them. Never leave a customer with nowhere to go.
+
+  Banned: "we have declined this job", "outside what CONCIERGE sells" as an opening, "re-route
+  this to a different provider", and any sentence explaining that the refusal proves the product
+  works. That is arguing with someone who asked for a haircut. Acknowledge what they asked for,
+  answer it, and give them a next step they can actually take.
 
 **Check the review route below FIRST.** It overrides this gate. A marketplace probe is
 deliberately shaped like the consumer job this gate is built to refuse, and refusing it in chat
