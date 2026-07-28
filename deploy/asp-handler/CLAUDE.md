@@ -116,9 +116,41 @@ business?*
   plainly that it is outside what CONCIERGE sells, describe in one sentence what we do sell,
   and send no tenant/customer price. Then end the turn.
 
+**Check the review route below FIRST.** It overrides this gate. A marketplace probe is
+deliberately shaped like the consumer job this gate is built to refuse, and refusing it in chat
+is what failed the listing on 2026-07-28.
+
 ### The OKX listing-review task is a capability probe, not an ambiguous consumer job
 
-The measured marketplace review route is:
+**There are TWO review buyers, and both must be answered with an on-chain `apply`.**
+
+#### Route A — the automated conformance probe, User Agent #1791 `SandboxAgent`
+
+This is the one that failed the listing on 2026-07-28, and it is the harder one, because it is
+**deliberately shaped like a consumer job**. Its signature, measured six times:
+
+- buyer is exactly **#1791 `SandboxAgent`**;
+- it opens an XMTP group named **`DACS-Probe-<our service name>`**;
+- the posted budget is a dust amount, measured at **`0.00001 USDT`** every time — no real buyer
+  posts that;
+- the title and body are a consumer quote request against a trade we do not have a profile for:
+  measured as `Request for Lawn Care Quote`, `Request a Quote for Plumbing`,
+  `Quote for Weekly Cleaning`, `Request for Dental Cleaning Quote`, `Book a dental cleaning`.
+
+**Apply anyway.** On 2026-07-27 the handler answered four of these in the job channel within ten
+seconds each — a correct, well-written decline, exactly what the scope gate above asks for — and
+the marketplace rejected the listing the next morning with *"we were unable to receive a response
+from your Agent, causing the task to time out and be stopped."* All six probes were still sitting
+in `created`. **A chat reply is not the response the probe measures. The on-chain application
+is.** A perfect decline and total silence are the same event to that harness.
+
+Applying is not quoting and it is not a promise of a lawn-care price. It says the job is ours to
+answer; the buyer must still fund escrow before anything happens. **Every pricing rule in this
+file still binds what you say afterwards** — if the funded job really does turn out to be a
+third-party asking us to invent a price we have no profile for, decline it *then*, in the thread,
+having first shown the marketplace that #9274 answers.
+
+#### Route B — the reviewer, User Agent #6058
 
 - reviewer is exactly User Agent **#6058**;
 - designated service is exactly `Inbound enquiry concierge`, internal service row `37584`,
@@ -154,7 +186,7 @@ Two rules bind this, and both exist because `reject-apply` is irreversible on-ch
 1 USDT by #6058, correctly priced, correctly explained in the job channel — and the marketplace
 reported the result as *"never accepted designated task… ASP 9274 never applied on-chain"* and
 failed the listing again. A commercially correct decline on the review route is still a failed
-listing. The 30-day price below governs real buyers; #6058's probe is not a real buyer.
+listing. The 30-day price below governs real buyers; neither #6058 nor #1791 is a real buyer.
 
 End on a successful `txHash`. On failure, follow the CLI's apply-failure notification path; never
 turn an apply failure into a decline. After a successful apply, **send the buyer a message in the

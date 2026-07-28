@@ -30,6 +30,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -40,7 +41,23 @@ PROVIDER_ID = "9274"
 # Both measured listing attempts came from OKX's reviewer agent #6058, while the human-readable
 # title changed between attempts. #9274 exposes exactly one service, so the authoritative stable
 # route is reviewer -> designated provider, not title prose.
-REVIEW_BUYER_ID = "6058"
+# Two distinct marketplace-side buyers publish review work, and BOTH must be answered on chain.
+#
+# #6058 is the human-ish reviewer that publishes one "try concierge for my salon"-shaped task.
+# #1791 "SandboxAgent" is the platform's automated conformance probe: it opens a `DACS-Probe-<our
+# service name>` XMTP group, publishes a consumer-shaped quote request ("Request for Lawn Care
+# Quote", "Request a Quote for Plumbing") at a 0.00001 USDT dust budget, and waits for the
+# provider to APPLY. It was the missing half. Six of its probes sat in `created` while the AI
+# handler answered every one of them in chat within ~10 seconds — correctly declining a
+# third-party quote as out of scope — and the marketplace still rejected the listing on
+# 2026-07-28 with "we were unable to receive a response from your Agent, causing the task to time
+# out". A chat reply is not the response it measures; the on-chain application is.
+#
+# Applying is not quoting. It says "this job is mine to answer", nothing about price — the buyer
+# must still fund escrow before any work starts, and what CONCIERGE then says in the thread is
+# unchanged and still bound by every pricing rule in the repo's CLAUDE.md. An out-of-scope probe
+# still gets an honest decline; it just gets one the marketplace can see.
+REVIEW_BUYER_IDS = frozenset({"6058", "1791"})
 # The price the service is REGISTERED at. It is what we advertise, not what we demand of a review
 # task: the reviewer publishes whatever budget it likes and an application above that budget is
 # irreversibly rejected, so `apply_amount` follows the task and this stays documentation.
@@ -85,14 +102,15 @@ def apply_amount(task: dict[str, Any]) -> str | None:
 def eligible(task: dict[str, Any]) -> bool:
     """Match the OKX review route by stable identity; near-matches fail closed.
 
-    Identity — reviewer #6058 designating ASP #9274 — is stable across attempts. The budget is
-    not, so it is checked for being fundable (positive USDT), not for equalling a fixed price.
+    Identity — a review buyer designating ASP #9274 — is stable across attempts. The budget is
+    not, so it is checked for being fundable (positive USDT), not for equalling a fixed price;
+    the automated probe posts 0.00001 USDT and the reviewer has posted 0, 0.05 and 1.
     """
     return (
         str(task.get("myAgentId")) == PROVIDER_ID
         and task.get("myRole") == "asp"
         and str(task.get("status")).lower() == "created"
-        and str(task.get("counterpartyAgentId")) == REVIEW_BUYER_ID
+        and str(task.get("counterpartyAgentId")) in REVIEW_BUYER_IDS
         and str(task.get("tokenSymbol")).upper() == CURRENCY
         and apply_amount(task) is not None
     )
@@ -137,7 +155,7 @@ def _alert(job_id: str, detail: str) -> str:
         return f"alert_failed:{type(exc).__name__}"
 
 
-def run() -> dict[str, Any]:
+def run(dry_run: bool = False) -> dict[str, Any]:
     active = _run("active-tasks", "--role", "asp")
     if active.returncode != 0:
         raise RuntimeError(f"active-tasks failed: {(active.stderr or active.stdout).strip()[:300]}")
@@ -161,6 +179,15 @@ def run() -> dict[str, Any]:
             continue
         amount = apply_amount(task)
         if amount is None:  # unreachable via eligible(); fail closed rather than guess a price
+            continue
+        if dry_run:
+            # `apply` is irreversible in one direction that matters: an application the buyer
+            # classifies as over budget is permanently reject-applied. Being able to read the
+            # exact set of jobs and amounts BEFORE spending them is worth one branch.
+            results.append({
+                "job_id": job_id, "action": "would_apply", "price": amount,
+                "buyer": str(task.get("counterpartyAgentId")), "title": str(task.get("title")),
+            })
             continue
         applied = _run(
             "apply", job_id,
@@ -188,9 +215,10 @@ def run() -> dict[str, Any]:
     return {"seen": len(tasks), "eligible": len(candidates), "results": results}
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    dry_run = "--dry-run" in (argv if argv is not None else sys.argv[1:])
     try:
-        print(json.dumps(run(), separators=(",", ":")))
+        print(json.dumps(run(dry_run=dry_run), separators=(",", ":")))
         return 0
     except Exception as exc:
         print(json.dumps({"eligible": 0, "error": str(exc)}, separators=(",", ":")))

@@ -321,11 +321,24 @@ def _run(r, transport: RecordingTransport) -> None:
     review_budgets = [
         {**review_task, "tokenAmount": budget} for budget in ("0.05", "1", "2.5", "0.5")
     ]
+    # #1791 SandboxAgent is the platform's automated conformance probe, and this check previously
+    # asserted it must be REFUSED. That assertion was the defect: six of its probes were declined
+    # in chat and left in `created`, and the marketplace rejected the listing on 2026-07-28 for
+    # "unable to receive a response". It posts consumer-shaped titles at a 0.00001 USDT dust
+    # budget, and it is a review buyer exactly like #6058.
+    probe_task = {
+        **review_task, "counterpartyAgentId": "1791",
+        "title": "Request for Lawn Care Quote", "tokenAmount": "0.00001",
+    }
+    review_budgets.append(probe_task)
     review_near_matches = [
         {**review_task, "myAgentId": "9630"},
         {**review_task, "myRole": "user"},
         {**review_task, "status": "accepted"},
-        {**review_task, "counterpartyAgentId": "1791"},
+        # A real third-party buyer is still not a review route: #1908 published a 0.01 USDT
+        # "Demo: inbound sales desk test" and it must still go through the commercial gate.
+        {**review_task, "counterpartyAgentId": "1908"},
+        {**probe_task, "counterpartyAgentId": "1908"},
         {**review_task, "tokenAmount": "0"},
         {**review_task, "tokenAmount": "-1"},
         {**review_task, "tokenAmount": "free"},
@@ -334,17 +347,19 @@ def _run(r, transport: RecordingTransport) -> None:
     ]
     applied_amounts = [a2a_provider_worker.apply_amount(t) for t in review_budgets]
     r.check(
-        "The provider recovery worker applies at the reviewer's own posted budget, never above it",
+        "The provider recovery worker applies for BOTH review buyers at their own posted budget",
         (all(a2a_provider_worker.eligible(task) for task in review_budgets)
          and not any(a2a_provider_worker.eligible(task) for task in review_near_matches)
-         and applied_amounts == ["0.05", "1", "2.5", "0.5"]),
+         and applied_amounts == ["0.05", "1", "2.5", "0.5", "0.00001"]),
         "Attempt one was published at 0 and applied to at the registered 0.05; the buyer's\n"
         "next-action classified that as over budget and executed an irreversible reject-apply.\n"
         "Attempt three was published at 1 and declined by the 2.5 commercial price. Both read to\n"
         "the marketplace as an ASP that never answers, so the amount asked for is now the amount\n"
-        "already on chain, whatever it is. Zero, negative and unparseable budgets still fail\n"
-        "closed — there is no fundable application at or below zero — as do identity, role,\n"
-        "status, reviewer and currency mismatches.",
+        "already on chain, whatever it is. The automated probe #1791 posts a 0.00001 dust budget\n"
+        "under a consumer-shaped title and is answered too: declining it in chat within ten\n"
+        "seconds still read to the marketplace as an agent that never responded. Zero, negative\n"
+        "and unparseable budgets still fail closed — there is no fundable application at or below\n"
+        "zero — as do identity, role, status, non-review-buyer and currency mismatches.",
         f"| eligible across posted budgets: "
         f"{[a2a_provider_worker.eligible(t) for t in review_budgets]}\n"
         f"| applied amount tracks the task: {applied_amounts}\n"
